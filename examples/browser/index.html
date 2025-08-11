@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agentary JS – Browser Demo</title>
+    <style>
+      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; margin: 24px; }
+      pre { background: #111; color: #0f0; padding: 12px; border-radius: 6px; min-height: 120px; white-space: pre-wrap; }
+      .row { margin-bottom: 12px; }
+      input, button { font-size: 14px; padding: 6px 10px; }
+      label { display: inline-block; min-width: 80px; }
+    </style>
+  </head>
+  <body>
+    <h1>Agentary JS – Browser Demo</h1>
+    <div class="row">
+      <label>Prompt</label>
+      <input id="prompt" size="60" value="Hello world" />
+      <button id="run">Run</button>
+    </div>
+    <pre id="out">Press Run…</pre>
+
+    <script type="module">
+      import { createSession, setLogLevel } from '../../dist/index.js';
+
+      setLogLevel('debug');
+
+      const out = document.getElementById('out');
+      const btn = document.getElementById('run');
+      const promptEl = document.getElementById('prompt');
+
+      btn.addEventListener('click', async () => {
+        out.textContent = '';
+        btn.disabled = true;
+        try {
+          const session = await createSession({ model: 'demo', ctx: 1024, engine: 'auto' });
+          const started = performance.now();
+          for await (const chunk of session.generate({ prompt: promptEl.value })) {
+            if (chunk.isFirst && chunk.ttfbMs) {
+              out.textContent += `TTFB: ${chunk.ttfbMs.toFixed(1)}ms\n`;
+            }
+            if (!chunk.isLast) {
+              out.textContent += chunk.token;
+            }
+          }
+          const total = performance.now() - started;
+          out.textContent += `\n\nDone in ${total.toFixed(1)}ms`;
+          await session.dispose();
+        } catch (err) {
+          out.textContent = 'Error: ' + (err?.message ?? String(err));
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+  </html>
+
+
