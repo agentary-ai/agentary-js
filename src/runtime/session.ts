@@ -5,7 +5,7 @@ import { recordMetric } from './metrics';
 import { createLogger } from './logger';
 import { SimpleWhitespaceTokenizer } from '../tokenizer';
 import { Sampler, type SamplerOptions } from '../sampler';
-
+import { downloadTokenizer } from '../tokenizer';
 
 export async function createSession(args: CreateSessionArgs): Promise<Session> {
   const log = createLogger('session');
@@ -57,24 +57,30 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
       version: '0.0.1-demo',
     };
   }
+  
+  log.info("Manifest shards size", { shardsSizeMB: (2 * manifest.shards.reduce((s, x) => s + x.bytes, 0)) / (1024 * 1024) });
+  log.info("Max memory budget", { maxMemoryBudgetMB: report.maxMemoryBudgetMB });
 
   // Cache budget ~ 2x model size or device budget
   const budget = Math.min(2 * manifest.shards.reduce((s, x) => s + x.bytes, 0), report.maxMemoryBudgetMB * 1024 * 1024);
   await ensureCacheBudget(budget);
   log.debug('budget ensured', { budget });
 
+  // const tokenizerJSON = await downloadTokenizer(manifest.tokenizerUrl, args.hfToken ? { token: args.hfToken } : {});
+  // log.info("tokenizer JSON", { tokenizerJSON });
+
   // Progressive shard loading
   const modelBuffers: ArrayBuffer[] = [];
-  // for (const shard of manifest.shards) {
-  //   const buf = await streamAndCache(
-  //     shard.url,
-  //     shard.sri,
-  //     args.hfToken ? { headers: { Authorization: `Bearer ${args.hfToken}` } } : undefined,
-  //   );
-  //   modelBuffers.push(buf);
-  //   log.debug('shard loaded', { url: shard.url, bytes: shard.bytes });
-  //   // Optional: early warm-up once N layers available — skipped in MVP
-  // }
+  for (const shard of manifest.shards) {
+    const buf = await streamAndCache(
+      shard.url,
+      shard.sri,
+      args.hfToken ? { headers: { Authorization: `Bearer ${args.hfToken}` } } : undefined,
+    );
+    modelBuffers.push(buf);
+    log.debug('shard loaded', { url: shard.url, bytes: shard.bytes });
+    // Optional: early warm-up once N layers available — skipped in MVP
+  }
 
   // Tokenizer — placeholder
   const tokenizer = new SimpleWhitespaceTokenizer();

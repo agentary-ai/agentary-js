@@ -55,7 +55,7 @@ export async function probeCapabilities(): Promise<CapabilityReport> {
 
   // Estimate memory budget conservatively
   const deviceMemoryGB = typeof dm === 'number' ? dm : undefined;
-  const maxMemoryBudgetMB = Math.floor((deviceMemoryGB ?? 4) * 1024 * 0.35);
+  const maxMemoryBudgetMB = Math.floor((deviceMemoryGB ?? 4) * 1024 * 0.45);
 
   const base = {
     webgpu,
