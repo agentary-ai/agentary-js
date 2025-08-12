@@ -4,6 +4,7 @@ interface CreateSessionArgs {
     adapters?: string[];
     ctx?: number;
     engine?: EngineKind;
+    hfToken?: string;
 }
 interface GenerateArgs {
     prompt?: string;

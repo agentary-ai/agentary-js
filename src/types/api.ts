@@ -5,6 +5,9 @@ export interface CreateSessionArgs {
   adapters?: string[];
   ctx?: number;
   engine?: EngineKind;
+  // Optional: Hugging Face access token for private models when using the
+  // `hf:` model scheme. Ignored otherwise.
+  hfToken?: string;
 }
 
 export interface GenerateArgs {

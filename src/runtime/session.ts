@@ -1,10 +1,11 @@
 import { type CreateSessionArgs, type GenerateArgs, type Session, type TokenStreamChunk } from '../types/api';
 import { probeCapabilities, planExecution } from './capabilities';
-import { loadManifest, streamAndCache, ensureCacheBudget, type Manifest } from './manifest';
+import { loadManifest, streamAndCache, ensureCacheBudget, type Manifest, loadHfManifest } from './manifest';
 import { recordMetric } from './metrics';
 import { createLogger } from './logger';
 import { SimpleWhitespaceTokenizer } from '../tokenizer';
 import { Sampler, type SamplerOptions } from '../sampler';
+
 
 export async function createSession(args: CreateSessionArgs): Promise<Session> {
   const log = createLogger('session');
@@ -18,21 +19,44 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
   const plan = planExecution(args.engine ?? 'auto', args.ctx, report);
   log.info('plan', { plan });
 
-  // TODO: Fetch manifest based on model id convention; allow direct URL
-  // const manifestUrl = args.model.includes('http') ? args.model : `https://cdn.example.com/models/${args.model}/manifest.json`;
-  // const manifest = await loadManifest(manifestUrl);
-
-const manifest: Manifest = {
-  modelId: 'gguf:q4_0/1.5B',
-  tokenizerUrl: 'https://cdn.example.com/models/q4_0/1.5B/tokenizer.json',
-  shards: [
-    { url: 'https://cdn.example.com/models/q4_0/1.5B/shard1.bin', bytes: 1024 * 1024 * 1024 },
-    { url: 'https://cdn.example.com/models/q4_0/1.5B/shard2.bin', bytes: 1024 * 1024 * 1024 },
-  ],
-  adapters: [],
-  params: { vocabSize: 32000, numLayers: 2, hiddenSize: 512 },
-  version: '0.0.1-demo',
-}
+  // Resolve manifest from:
+  // - hf:owner/repo[@rev][#subfolder]
+  // - absolute URL to a manifest.json
+  // - fallback to demo hardcoded manifest
+  let manifest: Manifest;
+  try {
+    if (args.model.startsWith('hf:')) {
+      manifest = await loadHfManifest(args.model, args.hfToken);
+    } else if (/^https?:\/\//i.test(args.model)) {
+      manifest = await loadManifest(args.model, args.hfToken ? { headers: { Authorization: `Bearer ${args.hfToken}` } } : undefined);
+    } else {
+      // Legacy/demo path
+      manifest = {
+        modelId: 'gguf:q4_0/1.5B',
+        tokenizerUrl: 'https://cdn.example.com/models/q4_0/1.5B/tokenizer.json',
+        shards: [
+          { url: 'https://cdn.example.com/models/q4_0/1.5B/shard1.bin', bytes: 1024 * 1024 * 1024 },
+          { url: 'https://cdn.example.com/models/q4_0/1.5B/shard2.bin', bytes: 1024 * 1024 * 1024 },
+        ],
+        adapters: [],
+        params: { vocabSize: 32000, numLayers: 2, hiddenSize: 512 },
+        version: '0.0.1-demo',
+      };
+    }
+  } catch (e) {
+    log.warn('manifest resolution failed, using demo manifest', { error: (e as any)?.message ?? String(e) });
+    manifest = {
+      modelId: 'gguf:q4_0/1.5B',
+      tokenizerUrl: 'https://cdn.example.com/models/q4_0/1.5B/tokenizer.json',
+      shards: [
+        { url: 'https://cdn.example.com/models/q4_0/1.5B/shard1.bin', bytes: 1024 * 1024 * 1024 },
+        { url: 'https://cdn.example.com/models/q4_0/1.5B/shard2.bin', bytes: 1024 * 1024 * 1024 },
+      ],
+      adapters: [],
+      params: { vocabSize: 32000, numLayers: 2, hiddenSize: 512 },
+      version: '0.0.1-demo',
+    };
+  }
 
   // Cache budget ~ 2x model size or device budget
   const budget = Math.min(2 * manifest.shards.reduce((s, x) => s + x.bytes, 0), report.maxMemoryBudgetMB * 1024 * 1024);
@@ -41,12 +65,16 @@ const manifest: Manifest = {
 
   // Progressive shard loading
   const modelBuffers: ArrayBuffer[] = [];
-  for (const shard of manifest.shards) {
-    const buf = await streamAndCache(shard.url, shard.sri);
-    modelBuffers.push(buf);
-    log.debug('shard loaded', { url: shard.url, bytes: shard.bytes });
-    // Optional: early warm-up once N layers available — skipped in MVP
-  }
+  // for (const shard of manifest.shards) {
+  //   const buf = await streamAndCache(
+  //     shard.url,
+  //     shard.sri,
+  //     args.hfToken ? { headers: { Authorization: `Bearer ${args.hfToken}` } } : undefined,
+  //   );
+  //   modelBuffers.push(buf);
+  //   log.debug('shard loaded', { url: shard.url, bytes: shard.bytes });
+  //   // Optional: early warm-up once N layers available — skipped in MVP
+  // }
 
   // Tokenizer — placeholder
   const tokenizer = new SimpleWhitespaceTokenizer();

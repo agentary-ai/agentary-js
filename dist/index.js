@@ -144,7 +144,6 @@ var init_logger = __esm({
 init_logger();
 var log = createLogger("capabilities");
 async function checkWasmFeatures() {
-  log.debug("checkWasmFeatures");
   const simd = WebAssembly.validate?.(
     new Uint8Array([
       0,
@@ -250,25 +249,6 @@ function openDb() {
     req.onerror = () => reject(req.error);
   });
 }
-async function putMeta(meta) {
-  const db = await openDb();
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction(META_STORE, "readwrite");
-    tx.objectStore(META_STORE).put(meta);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-  log2.trace("meta put", { key: meta.key, size: meta.size });
-}
-async function getMeta(key) {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(META_STORE, "readonly");
-    const req = tx.objectStore(META_STORE).get(key);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
 async function listMetas() {
   const db = await openDb();
   return new Promise((resolve, reject) => {
@@ -291,21 +271,6 @@ async function deleteMeta(key) {
 async function ensureCache() {
   return await caches.open("agentary-model-cache");
 }
-async function putCache(key, response, sri) {
-  const cache = await ensureCache();
-  await cache.put(key, response.clone());
-  const size = Number(response.headers.get("content-length") ?? "0");
-  const meta = sri !== void 0 ? { key, size, lastAccess: Date.now(), sri } : { key, size, lastAccess: Date.now() };
-  await putMeta(meta);
-  log2.debug("cache put", { key, size });
-}
-async function getCache(key) {
-  const cache = await ensureCache();
-  const res = await cache.match(key);
-  if (res) await putMeta({ ...await getMeta(key), key, size: Number(res.headers.get("content-length") ?? "0"), lastAccess: Date.now() });
-  log2.trace(res ? "cache hit" : "cache miss", { key });
-  return res ?? void 0;
-}
 async function evictLruIfNeeded(maxBytes) {
   const metas = await listMetas();
   let total = metas.reduce((s, m) => s + (m.size || 0), 0);
@@ -323,34 +288,72 @@ async function evictLruIfNeeded(maxBytes) {
 
 // src/runtime/manifest.ts
 init_logger();
-async function fetchWithSRI(url, sri) {
+async function loadManifest(url, init) {
   const log3 = createLogger("manifest");
   const t0 = performance.now();
-  const init = { cache: "force-cache" };
-  if (sri !== void 0) init.integrity = sri;
-  const res = await fetch(url, init);
-  recordMetric("model_stream_fetch_ms", performance.now() - t0);
-  if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
-  log3.debug("fetched shard", { url, bytes: Number(res.headers.get("content-length") ?? "0") });
-  return res;
-}
-async function streamAndCache(url, sri) {
-  const log3 = createLogger("manifest");
-  const cached = await getCache(url);
-  if (cached) {
-    log3.debug("cache hit", { url });
-    return await cached.arrayBuffer();
-  }
-  const res = await fetchWithSRI(url, sri);
-  const buf = await res.arrayBuffer();
-  await putCache(url, new Response(buf, { headers: { "content-length": String(buf.byteLength) } }), sri);
-  log3.debug("cache put", { url, bytes: buf.byteLength });
-  return buf;
+  const res = await fetch(url, { cache: "no-cache", ...init ?? {} });
+  if (!res.ok) throw new Error(`Failed to fetch manifest: ${res.status}`);
+  const manifest = await res.json();
+  recordMetric("model_manifest_fetch_ms", performance.now() - t0);
+  recordMetric("model_total_bytes", manifest.shards.reduce((s, x) => s + x.bytes, 0));
+  log3.info("loaded manifest", { url, version: manifest.version, shards: manifest.shards.length, totalBytes: manifest.shards.reduce((s, x) => s + x.bytes, 0) });
+  return manifest;
 }
 async function ensureCacheBudget(maxBytes) {
   const log3 = createLogger("manifest");
   log3.debug("ensure cache budget", { maxBytes });
   await evictLruIfNeeded(maxBytes);
+}
+async function loadHfManifest(repoSpec, token) {
+  const log3 = createLogger("manifest");
+  let spec = repoSpec;
+  if (spec.startsWith("hf:")) spec = spec.slice(3);
+  if (spec.startsWith("//")) spec = spec.slice(2);
+  const splitHash = spec.split("#");
+  const repoAndRev = (splitHash[0] ?? "").trim();
+  const subfolder = (splitHash[1] ?? "").trim();
+  const [ownerRepo, revision = "main"] = repoAndRev.split("@");
+  if (!ownerRepo || !ownerRepo.includes("/")) throw new Error("Invalid Hugging Face model spec. Expected hf:owner/repo[@rev][#subfolder]");
+  const repoId = ownerRepo;
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const treeUrl = `https://huggingface.co/api/models/${encodeURIComponent(repoId)}/tree/${encodeURIComponent(revision)}?recursive=1&path=${encodeURIComponent(subfolder)}`;
+  const t0 = performance.now();
+  const treeRes = await fetch(treeUrl, { headers, cache: "no-cache" });
+  if (!treeRes.ok) throw new Error(`Failed to query Hugging Face tree: ${treeRes.status}`);
+  const entries = await treeRes.json();
+  log3.info("treeRes parsed entries", { entriesCount: entries.length, sampleEntries: entries.slice(0, 3) });
+  recordMetric("model_manifest_fetch_ms", performance.now() - t0);
+  const files = entries.filter((e) => e.type === "file").map((e) => ({ path: e.path, size: e.size ?? 0 }));
+  const tokenizer = files.find((f) => /(?:^|\/)tokenizer\.json$/i.test(f.path));
+  const ggufFiles = files.filter((f) => f.path.endsWith(".gguf"));
+  let shards = [];
+  if (ggufFiles.length > 0) {
+    shards = ggufFiles.map((f) => ({
+      url: `https://huggingface.co/${repoId}/resolve/${revision}/${f.path}`,
+      bytes: f.size
+    }));
+  } else {
+    const shardBins = files.filter((f) => /\.(?:bin|safetensors)$/i.test(f.path));
+    shardBins.sort((a, b) => a.path.localeCompare(b.path, void 0, { numeric: true }));
+    shards = shardBins.map((f) => ({
+      url: `https://huggingface.co/${repoId}/resolve/${revision}/${f.path}`,
+      bytes: f.size
+    }));
+  }
+  if (shards.length === 0) throw new Error("No model files found in the specified Hugging Face repo");
+  const totalBytes = shards.reduce((s, x) => s + x.bytes, 0);
+  recordMetric("model_total_bytes", totalBytes);
+  log3.info("hf manifest resolved", { repoId, revision, subfolder, shards: shards.length, totalBytes });
+  const manifest = {
+    modelId: `hf:${repoId}@${revision}${subfolder ? `#${subfolder}` : ""}`,
+    tokenizerUrl: tokenizer ? `https://huggingface.co/${repoId}/resolve/${revision}/${tokenizer.path}` : "",
+    shards,
+    adapters: [],
+    params: { vocabSize: 0, numLayers: 0, hiddenSize: 0 },
+    version: "hf-auto-0"
+  };
+  log3.info("loadHfManifest", { manifest });
+  return manifest;
 }
 
 // src/runtime/session.ts
@@ -459,21 +462,43 @@ async function createSession(args) {
   recordMetric("capability_probe_ms", performance.now() - t0);
   const plan = planExecution(args.engine ?? "auto", args.ctx, report);
   log3.info("plan", { plan });
-  args.model.includes("http") ? args.model : `https://cdn.example.com/models/${args.model}/manifest.json`;
-  const manifest = {
-    shards: [
-      { url: "https://cdn.example.com/models/q4_0/1.5B/shard1.bin", bytes: 1024 * 1024 * 1024 },
-      { url: "https://cdn.example.com/models/q4_0/1.5B/shard2.bin", bytes: 1024 * 1024 * 1024 }
-    ]};
+  let manifest;
+  try {
+    if (args.model.startsWith("hf:")) {
+      manifest = await loadHfManifest(args.model, args.hfToken);
+    } else if (/^https?:\/\//i.test(args.model)) {
+      manifest = await loadManifest(args.model, args.hfToken ? { headers: { Authorization: `Bearer ${args.hfToken}` } } : void 0);
+    } else {
+      manifest = {
+        modelId: "gguf:q4_0/1.5B",
+        tokenizerUrl: "https://cdn.example.com/models/q4_0/1.5B/tokenizer.json",
+        shards: [
+          { url: "https://cdn.example.com/models/q4_0/1.5B/shard1.bin", bytes: 1024 * 1024 * 1024 },
+          { url: "https://cdn.example.com/models/q4_0/1.5B/shard2.bin", bytes: 1024 * 1024 * 1024 }
+        ],
+        adapters: [],
+        params: { vocabSize: 32e3, numLayers: 2, hiddenSize: 512 },
+        version: "0.0.1-demo"
+      };
+    }
+  } catch (e) {
+    log3.warn("manifest resolution failed, using demo manifest", { error: e?.message ?? String(e) });
+    manifest = {
+      modelId: "gguf:q4_0/1.5B",
+      tokenizerUrl: "https://cdn.example.com/models/q4_0/1.5B/tokenizer.json",
+      shards: [
+        { url: "https://cdn.example.com/models/q4_0/1.5B/shard1.bin", bytes: 1024 * 1024 * 1024 },
+        { url: "https://cdn.example.com/models/q4_0/1.5B/shard2.bin", bytes: 1024 * 1024 * 1024 }
+      ],
+      adapters: [],
+      params: { vocabSize: 32e3, numLayers: 2, hiddenSize: 512 },
+      version: "0.0.1-demo"
+    };
+  }
   const budget = Math.min(2 * manifest.shards.reduce((s, x) => s + x.bytes, 0), report.maxMemoryBudgetMB * 1024 * 1024);
   await ensureCacheBudget(budget);
   log3.debug("budget ensured", { budget });
   const modelBuffers = [];
-  for (const shard of manifest.shards) {
-    const buf = await streamAndCache(shard.url, shard.sri);
-    modelBuffers.push(buf);
-    log3.debug("shard loaded", { url: shard.url, bytes: shard.bytes });
-  }
   const tokenizer = new SimpleWhitespaceTokenizer();
   const worker = new Worker(new URL("./worker/inferenceWorker.js", import.meta.url), { type: "module" });
   const ready = new Promise((resolve, reject) => {

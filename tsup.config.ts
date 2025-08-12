@@ -15,6 +15,8 @@ export default defineConfig({
   target: 'es2022',
   platform: 'browser',
   outDir: 'dist',
+  external: [],
+  noExternal: ['@huggingface/hub'],
 });
 
 
