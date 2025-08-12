@@ -95,7 +95,6 @@ export async function loadHfManifest(repoSpec: string, token?: string): Promise<
   if (!treeRes.ok) throw new Error(`Failed to query Hugging Face tree: ${treeRes.status}`);
   const entries = (await treeRes.json()) as Array<{ path: string; size?: number; type: 'file' | 'directory' }>;
   
-  log.info('treeRes parsed entries', { entriesCount: entries.length, sampleEntries: entries.slice(0, 3) });
   recordMetric('model_manifest_fetch_ms', performance.now() - t0);
 
   // Identify candidate model files
