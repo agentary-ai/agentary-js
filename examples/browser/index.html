@@ -34,7 +34,7 @@
         out.textContent = '';
         btn.disabled = true;
         try {
-          const session = await createSession({ model: 'hf://hugging-quants/Llama-3.2-1B-Instruct-Q4_K_M-GGUF', hfToken: "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", ctx: 1024, engine: 'auto' });
+          const session = await createSession({ model: 'hf:meta-llama/Llama-3.2-1B-Instruct,hugging-quants/Llama-3.2-1B-Instruct-Q4_K_M-GGUF', hfToken: "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", ctx: 1024, engine: 'auto' });
           const started = performance.now();
           for await (const chunk of session.generate({ prompt: promptEl.value })) {
             if (chunk.isFirst && chunk.ttfbMs) {

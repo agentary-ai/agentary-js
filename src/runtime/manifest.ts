@@ -66,6 +66,7 @@ export async function ensureCacheBudget(maxBytes: number): Promise<void> {
  * Supported model formats (best-effort):
  * - Single file .gguf
  * - Multiple shard .bin files (matches common sharded patterns)
+ * - Separate repos for tokenizer and quantized models (e.g., Llama 3.2)
  */
 export async function loadHfManifest(repoSpec: string, token?: string): Promise<Manifest> {
   const log = createLogger('manifest');
@@ -74,62 +75,114 @@ export async function loadHfManifest(repoSpec: string, token?: string): Promise<
   // - hf:owner/repo@rev
   // - hf:owner/repo#subfolder
   // - hf:owner/repo@rev#subfolder
+  // - hf:main-repo,quantized-repo (for separate tokenizer and model repos)
   let spec = repoSpec;
   if (spec.startsWith('hf:')) spec = spec.slice(3);
   if (spec.startsWith('//')) spec = spec.slice(2);
   
-  const splitHash = spec.split('#');
-  const repoAndRev = (splitHash[0] ?? '').trim();
-  const subfolder = (splitHash[1] ?? '').trim();
-  const [ownerRepo, revision = 'main'] = repoAndRev.split('@');
+  // Check if this is a comma-separated spec for separate repos
+  const commaSplit = spec.split(',');
+  const isMultiRepo = commaSplit.length === 2;
+  
+  let mainRepoSpec: string;
+  let modelRepoSpec: string;
+  
+  if (isMultiRepo) {
+    mainRepoSpec = commaSplit[0]!.trim();
+    modelRepoSpec = commaSplit[1]!.trim();
+  } else {
+    mainRepoSpec = spec;
+    modelRepoSpec = spec;
+  }
 
-  if (!ownerRepo || !ownerRepo.includes('/')) throw new Error('Invalid Hugging Face model spec. Expected hf:owner/repo[@rev][#subfolder]');
-
-  const repoId = ownerRepo;
   const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-  const treeUrl = `https://huggingface.co/api/models/${encodeURIComponent(repoId)}/tree/${encodeURIComponent(revision)}?recursive=1&path=${encodeURIComponent(subfolder)}`;
+  
+  // Parse main repo (for tokenizer)
+  const mainSplitHash = mainRepoSpec.split('#');
+  const mainRepoAndRev = (mainSplitHash[0] ?? '').trim();
+  const mainSubfolder = (mainSplitHash[1] ?? '').trim();
+  const [mainOwnerRepo, mainRevision = 'main'] = mainRepoAndRev.split('@');
+
+  if (!mainOwnerRepo || !mainOwnerRepo.includes('/')) {
+    throw new Error('Invalid Hugging Face model spec. Expected hf:owner/repo[@rev][#subfolder] or hf:main-repo,quantized-repo');
+  }
+
+  // Parse model repo (for model files)
+  const modelSplitHash = modelRepoSpec.split('#');
+  const modelRepoAndRev = (modelSplitHash[0] ?? '').trim();
+  const modelSubfolder = (modelSplitHash[1] ?? '').trim();
+  const [modelOwnerRepo, modelRevision = 'main'] = modelRepoAndRev.split('@');
+
+  if (!modelOwnerRepo || !modelOwnerRepo.includes('/')) {
+    throw new Error('Invalid Hugging Face model spec. Expected hf:owner/repo[@rev][#subfolder] or hf:main-repo,quantized-repo');
+  }
 
   const t0 = performance.now();
-  const treeRes = await fetch(treeUrl, { headers, cache: 'no-cache' });
-
-  if (!treeRes.ok) throw new Error(`Failed to query Hugging Face tree: ${treeRes.status}`);
-  const entries = (await treeRes.json()) as Array<{ path: string; size?: number; type: 'file' | 'directory' }>;
+  
+  // Fetch tokenizer from main repo
+  const mainTreeUrl = `https://huggingface.co/api/models/${encodeURIComponent(mainOwnerRepo)}/tree/${encodeURIComponent(mainRevision)}?recursive=1&path=${encodeURIComponent(mainSubfolder)}`;
+  const mainTreeRes = await fetch(mainTreeUrl, { headers, cache: 'no-cache' });
+  
+  if (!mainTreeRes.ok) throw new Error(`Failed to query main Hugging Face repo tree: ${mainTreeRes.status}`);
+  const mainEntries = (await mainTreeRes.json()) as Array<{ path: string; size?: number; type: 'file' | 'directory' }>;
+  
+  // Fetch model files from model repo (could be same as main repo)
+  let modelEntries: Array<{ path: string; size?: number; type: 'file' | 'directory' }>;
+  if (isMultiRepo) {
+    const modelTreeUrl = `https://huggingface.co/api/models/${encodeURIComponent(modelOwnerRepo)}/tree/${encodeURIComponent(modelRevision)}?recursive=1&path=${encodeURIComponent(modelSubfolder)}`;
+    const modelTreeRes = await fetch(modelTreeUrl, { headers, cache: 'no-cache' });
+    
+    if (!modelTreeRes.ok) throw new Error(`Failed to query model Hugging Face repo tree: ${modelTreeRes.status}`);
+    modelEntries = (await modelTreeRes.json()) as Array<{ path: string; size?: number; type: 'file' | 'directory' }>;
+  } else {
+    modelEntries = mainEntries;
+  }
   
   recordMetric('model_manifest_fetch_ms', performance.now() - t0);
 
-  // Identify candidate model files
-  const files = entries.filter((e) => e.type === 'file').map((e) => ({ path: e.path, size: e.size ?? 0 }));
-  const tokenizer = files.find((f) => /(?:^|\/)tokenizer\.json$/i.test(f.path));
+  // Find tokenizer in main repo
+  const mainFiles = mainEntries.filter((e) => e.type === 'file').map((e) => ({ path: e.path, size: e.size ?? 0 }));
+  const tokenizer = mainFiles.find((f) => /(?:^|\/)tokenizer\.json$/i.test(f.path));
+
+  // Find model files in model repo
+  const modelFiles = modelEntries.filter((e) => e.type === 'file').map((e) => ({ path: e.path, size: e.size ?? 0 }));
 
   // Prefer .gguf single-file models; otherwise, fall back to .bin shards
-  const ggufFiles = files.filter((f) => f.path.endsWith('.gguf'));
+  const ggufFiles = modelFiles.filter((f) => f.path.endsWith('.gguf'));
   let shards: Shard[] = [];
   if (ggufFiles.length > 0) {
     shards = ggufFiles.map((f) => ({
-      url: `https://huggingface.co/${repoId}/resolve/${revision}/${f.path}`,
+      url: `https://huggingface.co/${modelOwnerRepo}/resolve/${modelRevision}/${f.path}`,
       bytes: f.size,
     }));
   } else {
     // Match common sharded bin patterns
-    const shardBins = files.filter((f) => /\.(?:bin|safetensors)$/i.test(f.path));
+    const shardBins = modelFiles.filter((f) => /\.(?:bin|safetensors)$/i.test(f.path));
     // Try to order deterministically: natural order by path
     shardBins.sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true }));
     shards = shardBins.map((f) => ({
-      url: `https://huggingface.co/${repoId}/resolve/${revision}/${f.path}`,
+      url: `https://huggingface.co/${modelOwnerRepo}/resolve/${modelRevision}/${f.path}`,
       bytes: f.size,
     }));
   }
 
-  if (shards.length === 0) throw new Error('No model files found in the specified Hugging Face repo');
+  if (shards.length === 0) throw new Error('No model files found in the specified Hugging Face repo(s)');
 
   const totalBytes = shards.reduce((s, x) => s + x.bytes, 0);
   recordMetric('model_total_bytes', totalBytes);
-  log.info('hf manifest resolved', { repoId, revision, subfolder, shards: shards.length, totalBytes });
+  log.info('hf manifest resolved', { 
+    mainRepo: mainOwnerRepo, 
+    modelRepo: modelOwnerRepo, 
+    revision: isMultiRepo ? `main:${mainRevision}, model:${modelRevision}` : mainRevision,
+    subfolder: isMultiRepo ? `main:${mainSubfolder}, model:${modelSubfolder}` : mainSubfolder,
+    shards: shards.length, 
+    totalBytes 
+  });
 
   // Minimal params; real values would be read from metadata
   const manifest: Manifest = {
-    modelId: `hf:${repoId}@${revision}${subfolder ? `#${subfolder}` : ''}`,
-    tokenizerUrl: tokenizer ? `https://huggingface.co/${repoId}/resolve/${revision}/${tokenizer.path}` : '',
+    modelId: isMultiRepo ? `hf:${mainOwnerRepo},${modelOwnerRepo}@${mainRevision},${modelRevision}` : `hf:${mainOwnerRepo}@${mainRevision}${mainSubfolder ? `#${mainSubfolder}` : ''}`,
+    tokenizerUrl: tokenizer ? `https://huggingface.co/${mainOwnerRepo}/resolve/${mainRevision}/${tokenizer.path}` : '',
     shards,
     adapters: [],
     params: { vocabSize: 0, numLayers: 0, hiddenSize: 0 },
