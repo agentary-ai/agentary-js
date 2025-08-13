@@ -22,9 +22,7 @@
     <pre id="out">Press Run…</pre>
 
     <script type="module">
-      import { createSession, setLogLevel } from '../../dist/index.js';
-
-      setLogLevel('debug');
+      import { createSession } from '../../dist/index.js';
 
       const out = document.getElementById('out');
       const btn = document.getElementById('run');
@@ -34,9 +32,10 @@
         out.textContent = '';
         btn.disabled = true;
         try {
-          const session = await createSession({ model: 'hf:meta-llama/Llama-3.2-1B-Instruct,hugging-quants/Llama-3.2-1B-Instruct-Q4_K_M-GGUF', hfToken: "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", ctx: 1024, engine: 'auto' });
+          const session = await createSession({ model: 'onnx-community/Qwen1.5-0.5B-Chat-ONNX' });
           const started = performance.now();
           for await (const chunk of session.generate({ prompt: promptEl.value })) {
+            console.log('chunk', chunk);
             if (chunk.isFirst && chunk.ttfbMs) {
               out.textContent += `TTFB: ${chunk.ttfbMs.toFixed(1)}ms\n`;
             }

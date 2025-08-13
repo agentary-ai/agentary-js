@@ -1,151 +1,58 @@
 import { type CreateSessionArgs, type GenerateArgs, type Session, type TokenStreamChunk } from '../types/api';
-import { probeCapabilities, planExecution } from './capabilities';
-import { loadManifest, streamAndCache, ensureCacheBudget, type Manifest, loadHfManifest } from './manifest';
-import { recordMetric } from './metrics';
-import { createLogger } from './logger';
-import { SimpleWhitespaceTokenizer } from '../tokenizer';
-import { Sampler, type SamplerOptions } from '../sampler';
-import { downloadTokenizer } from '../tokenizer';
+import { pipeline as hfPipeline, TextStreamer, env as hfEnv } from '@huggingface/transformers';
 
 export async function createSession(args: CreateSessionArgs): Promise<Session> {
-  const log = createLogger('session');
-
-  log.info('createSession', { args });
-
-  const t0 = performance.now();
-  const report = await probeCapabilities();
-  recordMetric('capability_probe_ms', performance.now() - t0);
-
-  const plan = planExecution(args.engine ?? 'auto', args.ctx, report);
-  log.info('plan', { plan });
-
-  // Resolve manifest from:
-  // - hf:owner/repo[@rev][#subfolder]
-  // - absolute URL to a manifest.json
-  // - fallback to demo hardcoded manifest
-  let manifest: Manifest;
-  try {
-    if (args.model.startsWith('hf:')) {
-      manifest = await loadHfManifest(args.model, args.hfToken);
-    } else if (/^https?:\/\//i.test(args.model)) {
-      manifest = await loadManifest(args.model, args.hfToken ? { headers: { Authorization: `Bearer ${args.hfToken}` } } : undefined);
-    } else {
-      // Legacy/demo path
-      manifest = {
-        modelId: 'gguf:q4_0/1.5B',
-        tokenizerUrl: 'https://cdn.example.com/models/q4_0/1.5B/tokenizer.json',
-        shards: [
-          { url: 'https://cdn.example.com/models/q4_0/1.5B/shard1.bin', bytes: 1024 * 1024 * 1024 },
-          { url: 'https://cdn.example.com/models/q4_0/1.5B/shard2.bin', bytes: 1024 * 1024 * 1024 },
-        ],
-        adapters: [],
-        params: { vocabSize: 32000, numLayers: 2, hiddenSize: 512 },
-        version: '0.0.1-demo',
-      };
-    }
-  } catch (e) {
-    log.warn('manifest resolution failed, using demo manifest', { error: (e as any)?.message ?? String(e) });
-    manifest = {
-      modelId: 'gguf:q4_0/1.5B',
-      tokenizerUrl: 'https://cdn.example.com/models/q4_0/1.5B/tokenizer.json',
-      shards: [
-        { url: 'https://cdn.example.com/models/q4_0/1.5B/shard1.bin', bytes: 1024 * 1024 * 1024 },
-        { url: 'https://cdn.example.com/models/q4_0/1.5B/shard2.bin', bytes: 1024 * 1024 * 1024 },
-      ],
-      adapters: [],
-      params: { vocabSize: 32000, numLayers: 2, hiddenSize: 512 },
-      version: '0.0.1-demo',
-    };
-  }
-  
-  log.info("Manifest shards size", { shardsSizeMB: (2 * manifest.shards.reduce((s, x) => s + x.bytes, 0)) / (1024 * 1024) });
-  log.info("Max memory budget", { maxMemoryBudgetMB: report.maxMemoryBudgetMB });
-
-  // Cache budget ~ 2x model size or device budget
-  const budget = Math.min(2 * manifest.shards.reduce((s, x) => s + x.bytes, 0), report.maxMemoryBudgetMB * 1024 * 1024);
-  await ensureCacheBudget(budget);
-  log.debug('budget ensured', { budget });
-
-  // const tokenizerJSON = await downloadTokenizer(manifest.tokenizerUrl, args.hfToken ? { token: args.hfToken } : {});
-  // log.info("tokenizer JSON", { tokenizerJSON });
-
-  // Progressive shard loading
-  const modelBuffers: ArrayBuffer[] = [];
-  for (const shard of manifest.shards) {
-    const buf = await streamAndCache(
-      shard.url,
-      shard.sri,
-      args.hfToken ? { headers: { Authorization: `Bearer ${args.hfToken}` } } : undefined,
-    );
-    modelBuffers.push(buf);
-    log.debug('shard loaded', { url: shard.url, bytes: shard.bytes });
-    // Optional: early warm-up once N layers available — skipped in MVP
+  if (args.hfToken) {
+    try {
+      // Best-effort: set global token if supported by the library
+      (hfEnv as any).HF_TOKEN = args.hfToken;
+    } catch {}
   }
 
-  // Tokenizer — placeholder
-  const tokenizer = new SimpleWhitespaceTokenizer();
-
-  const worker = new Worker(new URL('./worker/inferenceWorker.js', import.meta.url), { type: 'module' });
-  const ready = new Promise<void>((resolve, reject) => {
-    worker.onmessage = (ev) => {
-      const msg = ev.data as any;
-      if (msg?.type === 'ready') resolve();
-    };
-    worker.onerror = (e) => reject(e);
-  });
-  worker.postMessage({ type: 'init', payload: { modelBuffers, plan } });
-  await ready;
-  log.info('worker ready');
+  // Initialize a text-generation pipeline for the requested model
+  const generator: any = await hfPipeline('text-generation', args.model, { device: "webgpu" });
 
   let disposed = false;
 
   async function* generate(gen: GenerateArgs): AsyncIterable<TokenStreamChunk> {
     if (disposed) throw new Error('Session disposed');
 
-    const samplerOpts: SamplerOptions = {};
-    if (gen.temperature !== undefined) samplerOpts.temperature = gen.temperature;
-    if (gen.top_p !== undefined) samplerOpts.top_p = gen.top_p;
-    if (gen.top_k !== undefined) samplerOpts.top_k = gen.top_k;
-    if (gen.repetition_penalty !== undefined) samplerOpts.repetition_penalty = gen.repetition_penalty;
-    if (gen.seed !== undefined) samplerOpts.seed = gen.seed;
-    if (gen.deterministic !== undefined) samplerOpts.deterministic = gen.deterministic;
-    const sampler = new Sampler(samplerOpts);
-
-    const inputText = `${gen.system ? gen.system + '\n' : ''}${gen.prompt ?? ''}`;
-    const inputIds = tokenizer.encode(inputText);
-
+    const messages = [
+      { role: "system", content: "You are a helpful assistant." },
+      { role: "user", content:  gen.prompt ?? '' },
+    ];
+ 
     const queue: TokenStreamChunk[] = [];
     let done = false;
     let first = true;
     const ttfbStart = performance.now();
 
-    const onmessage = (ev: MessageEvent<any>) => {
-      const msg = ev.data;
-      if (msg?.type === 'token') {
+    const streamer = new TextStreamer(generator.tokenizer, {
+      skip_prompt: true,
+      callback_function: (text: string) => {
+        console.log('text', text);
         const chunk: TokenStreamChunk = {
-          tokenId: msg.tokenId,
-          token: tokenizer.decode([msg.tokenId]),
+          token: text,
+          tokenId: -1,
           isFirst: first,
           isLast: false,
-          ttfbMs: first ? (performance.now() - ttfbStart) : undefined,
-        } as TokenStreamChunk;
-        if (first && chunk.ttfbMs != null) recordMetric('ttfb_ms', chunk.ttfbMs);
+          ...(first ? { ttfbMs: performance.now() - ttfbStart } : {}),
+        };
         first = false;
         queue.push(chunk);
-      } else if (msg?.type === 'done') {
-        done = true;
-        log.debug('generation done');
-      }
-    };
+      },
+    });
 
-    const onerror = (e: MessageEvent<any>) => {
-      done = true;
-    };
-
-    worker.addEventListener('message', onmessage);
-    worker.addEventListener('error', onerror as any);
-    worker.postMessage({ type: 'generate', payload: { inputIds, opts: {} } });
-    log.debug('generation started', { inputTokens: inputIds.length });
+    // Kick off generation but do not await; stream via callback
+    const generationPromise = generator(messages, {
+      max_new_tokens: 512,
+      do_sample: gen.temperature !== undefined ? gen.temperature > 0 : false,
+      temperature: gen.temperature,
+      top_p: gen.top_p,
+      top_k: gen.top_k,
+      streamer,
+      stop: gen.stop,
+    }).finally(() => { done = true; });
 
     try {
       while (!done || queue.length) {
@@ -157,16 +64,14 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
       }
       yield { token: '', tokenId: -1, isFirst: false, isLast: true };
     } finally {
-      worker.removeEventListener('message', onmessage);
-      worker.removeEventListener('error', onerror as any);
+      await generationPromise.catch(() => {});
     }
   }
 
   async function dispose(): Promise<void> {
     if (disposed) return;
     disposed = true;
-    worker.postMessage({ type: 'dispose' });
-    worker.terminate();
+    try { await generator?.dispose?.(); } catch {}
   }
 
   const session: Session = { generate, dispose };

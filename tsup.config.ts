@@ -3,7 +3,6 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
-    'worker/inferenceWorker': 'src/worker/inferenceWorker.ts',
   },
   format: ['esm'],
   dts: true,
@@ -16,7 +15,7 @@ export default defineConfig({
   platform: 'browser',
   outDir: 'dist',
   external: [],
-  noExternal: ['@huggingface/hub'],
+  noExternal: ['@huggingface/transformers'],
 });
 
 

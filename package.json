@@ -12,14 +12,16 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./worker": "./dist/worker/inferenceWorker.js"
+    }
   },
   "sideEffects": false,
   "scripts": {
     "build": "tsup --config tsup.config.ts",
     "dev": "tsup --config tsup.config.ts --watch",
     "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.0.0"
   },
   "devDependencies": {
     "rimraf": "^5.0.5",
