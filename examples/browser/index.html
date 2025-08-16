@@ -19,6 +19,10 @@
       <input id="prompt" size="60" value="Hello world" />
       <button id="run">Run</button>
     </div>
+    <div class="row">
+      <label>HF Token</label>
+      <input id="token" size="60" placeholder="Optional (for private models)" />
+    </div>
     <pre id="out">Press Run…</pre>
 
     <script type="module">
@@ -27,12 +31,13 @@
       const out = document.getElementById('out');
       const btn = document.getElementById('run');
       const promptEl = document.getElementById('prompt');
+      const tokenEl = document.getElementById('token');
 
       btn.addEventListener('click', async () => {
         out.textContent = '';
         btn.disabled = true;
         try {
-          const session = await createSession({ model: 'onnx-community/Qwen1.5-0.5B-Chat-ONNX' });
+          const session = await createSession({ model: 'onnx-community/gemma-3-270m-it-ONNX', hfToken: tokenEl.value || undefined });
           const started = performance.now();
           for await (const chunk of session.generate({ prompt: promptEl.value })) {
             console.log('chunk', chunk);
