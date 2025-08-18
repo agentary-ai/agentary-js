@@ -1,13 +1,20 @@
-export type EngineKind = 'auto' | 'webgpu' | 'wasm' | 'webnn';
+import { DataType, DeviceType } from "@huggingface/transformers";
+
+export type EngineKind = DeviceType;
+export type TaskType = 'chat' | 'function_calling';
 
 export interface CreateSessionArgs {
-  model: string; // e.g. "q4_0/1.5B"
+  models?: {
+    chat?: string;
+    function_calling?: string;
+  }
   adapters?: string[];
   ctx?: number;
   engine?: EngineKind;
   // Optional: Hugging Face access token for private models when using the
   // `hf:` model scheme. Ignored otherwise.
   hfToken?: string;
+  quantization?: DataType;
 }
 
 export interface GenerateArgs {
@@ -40,5 +47,3 @@ export interface Session {
   generate(args: GenerateArgs): AsyncIterable<TokenStreamChunk>;
   dispose(): Promise<void>;
 }
-
-

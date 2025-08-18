@@ -1,41 +1,42 @@
 import { type CreateSessionArgs, type GenerateArgs, type Session, type TokenStreamChunk } from '../types/api';
+import { WorkerManager, type WorkerInstance } from './worker-manager';
 
 export async function createSession(args: CreateSessionArgs): Promise<Session> {
-  const worker = new Worker(new URL('./runtime/worker.js', import.meta.url), { type: 'module' });
-
+  const workerManager = new WorkerManager(args);
   let disposed = false;
-  let inflightId = 0;
 
-  function nextId(): string { inflightId += 1; return String(inflightId); }
+  function nextId(workerInstance: WorkerInstance): string { 
+    workerInstance.inflightId += 1; 
+    return String(workerInstance.inflightId); 
+  }
 
-  function once<T = unknown>(requestId: string, filter?: (m: any) => boolean): Promise<T> {
+  function once<T = unknown>(workerInstance: WorkerInstance, requestId: string, filter?: (m: any) => boolean): Promise<T> {
     return new Promise((resolve, reject) => {
       const onMessage = (ev: MessageEvent<any>) => {
         const msg = ev.data;
         if (!msg || msg.requestId !== requestId) return;
         if (filter && !filter(msg)) return;
-        worker.removeEventListener('message', onMessage as any);
-        worker.removeEventListener('error', onError as any);
+        workerInstance.worker.removeEventListener('message', onMessage as any);
+        workerInstance.worker.removeEventListener('error', onError as any);
         if (msg.type === 'error') reject(new Error(msg.error));
         else resolve(msg);
       };
       const onError = (e: ErrorEvent) => {
-        worker.removeEventListener('message', onMessage as any);
-        worker.removeEventListener('error', onError as any);
+        workerInstance.worker.removeEventListener('message', onMessage as any);
+        workerInstance.worker.removeEventListener('error', onError as any);
         reject(e.error || new Error(e.message));
       };
-      worker.addEventListener('message', onMessage as any);
-      worker.addEventListener('error', onError as any);
+      workerInstance.worker.addEventListener('message', onMessage as any);
+      workerInstance.worker.addEventListener('error', onError as any);
     });
   }
 
-  const initId = nextId();
-  worker.postMessage({ type: 'init', requestId: initId, args: { model: args.model, engine: args.engine, hfToken: args.hfToken } });
-  await once(initId);
-
   async function* generate(gen: GenerateArgs): AsyncIterable<TokenStreamChunk> {
     if (disposed) throw new Error('Session disposed');
-    const requestId = nextId();
+    
+    // Get the appropriate worker for this generation task
+    const workerInstance = await workerManager.getWorkerForGeneration(gen);
+    const requestId = nextId(workerInstance);
 
     const queue: TokenStreamChunk[] = [];
     let done = false;
@@ -53,12 +54,14 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
         done = true;
         queue.push({ token: '', tokenId: -1, isFirst: false, isLast: true });
         console.error('Generation error', msg.error);
+      } else if (msg.type === 'debug') {
+        console.log('debug', msg.payload);
       }
     };
 
-    worker.addEventListener('message', onMessage as any);
+    workerInstance.worker.addEventListener('message', onMessage as any);
 
-    worker.postMessage({
+    workerInstance.worker.postMessage({
       type: 'generate',
       requestId,
       args: {
@@ -85,17 +88,14 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
         }
       }
     } finally {
-      worker.removeEventListener('message', onMessage as any);
+      workerInstance.worker.removeEventListener('message', onMessage as any);
     }
   }
 
   async function dispose(): Promise<void> {
     if (disposed) return;
     disposed = true;
-    const requestId = nextId();
-    worker.postMessage({ type: 'dispose', requestId });
-    await once(requestId).catch(() => {});
-    worker.terminate();
+    await workerManager.disposeAll();
   }
 
   const session: Session = { generate, dispose };

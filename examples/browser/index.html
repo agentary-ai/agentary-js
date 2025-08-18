@@ -20,6 +20,37 @@
       <button id="run">Run</button>
     </div>
     <div class="row">
+      <label>Tools</label>
+      <input type="checkbox" id="useTools" />
+    </div>
+    <div class="row" id="toolsRow" style="display:none; align-items: start; gap: 8px;">
+      <label style="vertical-align: top;">Tools JSON</label>
+      <textarea id="toolsJson" rows="8" cols="60">[
+  {
+    "type": "function",
+    "function": {
+      "name": "get_weather",
+      "description": "Get current weather for a city.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "city": { "type": "string", "description": "City name" }
+        },
+        "required": ["city"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_time",
+      "description": "Get the current time in ISO format.",
+      "parameters": { "type": "object", "properties": {} }
+    }
+  }
+]</textarea>
+    </div>
+    <div class="row">
       <label>HF Token</label>
       <input id="token" size="60" placeholder="Optional (for private models)" />
     </div>
@@ -32,14 +63,36 @@
       const btn = document.getElementById('run');
       const promptEl = document.getElementById('prompt');
       const tokenEl = document.getElementById('token');
+      const useToolsEl = document.getElementById('useTools');
+      const toolsRowEl = document.getElementById('toolsRow');
+      const toolsJsonEl = document.getElementById('toolsJson');
+
+      useToolsEl.addEventListener('change', () => {
+        toolsRowEl.style.display = useToolsEl.checked ? 'block' : 'none';
+      });
 
       btn.addEventListener('click', async () => {
         out.textContent = '';
         btn.disabled = true;
         try {
-          const session = await createSession({ model: 'onnx-community/gemma-3-270m-it-ONNX', hfToken: tokenEl.value || undefined });
+          // const session = await createSession({ model: 'onnx-community/gemma-3-270m-it-ONNX', quantization: 'q4' });
+          const session = await createSession({ 
+            models: {
+            chat: 'onnx-community/gemma-3-270m-it-ONNX',
+            function_calling: 'onnx-community/Qwen2.5-0.5B-Instruct',
+          }, quantization: 'q4' });
           const started = performance.now();
-          for await (const chunk of session.generate({ prompt: promptEl.value })) {
+          let tools;
+          if (useToolsEl.checked) {
+            try {
+              tools = JSON.parse(toolsJsonEl.value);
+            } catch (e) {
+              out.textContent = 'Invalid tools JSON: ' + (e?.message ?? String(e));
+              btn.disabled = false;
+              return;
+            }
+          }
+          for await (const chunk of session.generate({ prompt: promptEl.value, tools })) {
             console.log('chunk', chunk);
             if (chunk.isFirst && chunk.ttfbMs) {
               out.textContent += `TTFB: ${chunk.ttfbMs.toFixed(1)}ms\n`;

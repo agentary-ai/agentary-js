@@ -1,4 +1,4 @@
-import { pipeline as hfPipeline, TextStreamer, env as hfEnv } from '@huggingface/transformers';
+import { pipeline, TextStreamer, env as hfEnv, DataType } from '@huggingface/transformers';
 
 type EngineKind = 'auto' | 'webgpu' | 'wasm' | 'webnn';
 
@@ -11,6 +11,7 @@ interface InitMessage {
     ctx?: number;
     engine?: EngineKind;
     hfToken?: string;
+    quantization?: DataType
   };
 }
 
@@ -66,7 +67,16 @@ interface ErrorMessage {
   error: string;
 }
 
-type OutboundMessage = ChunkMessage | AckMessage | DoneMessage | ErrorMessage;
+interface DebugMessage {
+  type: 'debug';
+  requestId: string;
+  payload: {
+    message: string;
+    data?: unknown;
+  };
+}
+
+type OutboundMessage = ChunkMessage | AckMessage | DoneMessage | ErrorMessage | DebugMessage;
 
 let generator: any | null = null;
 let disposed = false;
@@ -75,6 +85,11 @@ let isGenerating = false;
 function post(message: OutboundMessage) {
   // eslint-disable-next-line no-restricted-globals
   (self as unknown as DedicatedWorkerGlobalScope).postMessage(message);
+}
+
+function postDebug(requestId: string, message: string, data?: unknown) {
+  const payload = { message, ...(data !== undefined ? { data } : {}) } as const;
+  post({ type: 'debug', requestId, payload });
 }
 
 // eslint-disable-next-line no-restricted-globals
@@ -91,9 +106,9 @@ function post(message: OutboundMessage) {
 
       const device = engine && engine !== 'auto' ? engine : 'webgpu';
 
-      generator = await hfPipeline('text-generation', model, {
+      generator = await pipeline('text-generation', model, {
         device,
-        dtype: 'q4',
+        dtype: msg.args.quantization || "auto",
         progress_callback: (_info: any) => {},
       });
 
@@ -102,17 +117,32 @@ function post(message: OutboundMessage) {
     }
 
     if (msg.type === 'generate') {
+
+      postDebug(msg.requestId, 'generate request received', msg.args);
+
       if (!generator) throw new Error('Generator not initialized');
       if (disposed) throw new Error('Worker disposed');
       if (isGenerating) throw new Error('A generation task is already running');
 
       isGenerating = true;
 
-      const { prompt, temperature, top_p, top_k, stop } = msg.args;
+      const { prompt, temperature, top_p, top_k, stop, tools, repetition_penalty } = msg.args as any;
+
       const messages = [
         { role: 'system', content: 'You are a helpful assistant.' },
         { role: 'user', content: prompt ?? '' },
       ];
+
+      // If tools are provided, or even if not, pre-apply the chat template so we can
+      // pass tool schemas to the tokenizer. Disable special tokens when generating.
+      const renderedPrompt: string = (generator as any).tokenizer.apply_chat_template(messages, {
+        tokenize: false,
+        add_generation_prompt: true,
+        tools: Array.isArray(tools) && tools.length ? tools : null,
+      });
+
+      
+      postDebug(msg.requestId, 'rendered_prompt', renderedPrompt);
 
       let first = true;
       const ttfbStart = performance.now();
@@ -133,12 +163,15 @@ function post(message: OutboundMessage) {
       });
 
       try {
-        await generator(messages, {
+        await generator(renderedPrompt, {
+          // We already applied the chat template, so avoid adding BOS/EOS again.
+          add_special_tokens: false,
           max_new_tokens: 512,
           do_sample: temperature !== undefined ? temperature > 0 : false,
           temperature,
           top_p,
           top_k,
+          repetition_penalty: repetition_penalty || 1.1,
           streamer,
           stop,
         });
