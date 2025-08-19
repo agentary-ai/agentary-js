@@ -1,0 +1,351 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agentary JS – Agent Workflow Demo</title>
+    <style>
+      body { 
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; 
+        margin: 24px; 
+        max-width: 1200px;
+      }
+      .container { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+      .panel { 
+        border: 1px solid #ddd; 
+        border-radius: 8px; 
+        padding: 16px; 
+        background: #f9f9f9; 
+      }
+      pre { 
+        background: #111; 
+        color: #0f0; 
+        padding: 12px; 
+        border-radius: 6px; 
+        min-height: 300px; 
+        white-space: pre-wrap; 
+        overflow-y: auto;
+        max-height: 500px;
+      }
+      .step-result {
+        margin: 8px 0;
+        padding: 8px;
+        border-radius: 4px;
+        border-left: 4px solid #ccc;
+      }
+      .step-thinking { border-left-color: #3b82f6; background: #eff6ff; }
+      .step-tool_call { border-left-color: #f59e0b; background: #fffbeb; }
+      .step-decision { border-left-color: #8b5cf6; background: #f3e8ff; }
+      .step-response { border-left-color: #10b981; background: #ecfdf5; }
+      .step-error { border-left-color: #ef4444; background: #fef2f2; }
+      
+      .row { margin-bottom: 12px; }
+      input, button, select { font-size: 14px; padding: 6px 10px; }
+      button { background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; }
+      button:disabled { background: #9ca3af; cursor: not-allowed; }
+      label { display: inline-block; min-width: 120px; font-weight: 500; }
+      textarea { width: 100%; height: 150px; font-family: monospace; }
+      
+      h2 { margin-top: 0; color: #374151; }
+      h3 { color: #6b7280; }
+    </style>
+  </head>
+  <body>
+    <h1>🤖 Agentary JS – Agent Workflow Demo</h1>
+    
+    <div class="container">
+      <!-- Control Panel -->
+      <div class="panel">
+        <h2>Workflow Configuration</h2>
+        
+        <div class="row">
+          <label>Workflow:</label>
+          <select id="workflowSelect">
+            <option value="research">Research Assistant</option>
+            <option value="decision">Decision Maker</option>
+            <option value="calculator">Math Calculator</option>
+          </select>
+        </div>
+        
+        <div class="row">
+          <label>Input:</label>
+          <input id="workflowInput" size="50" value="What is 15 * 23 + 7?" />
+        </div>
+        
+        <div class="row">
+          <button id="runWorkflow">Run Workflow</button>
+          <button id="clearOutput">Clear Output</button>
+        </div>
+        
+        <h3>Workflow Definition</h3>
+        <textarea id="workflowDefinition" readonly></textarea>
+      </div>
+      
+      <!-- Output Panel -->
+      <div class="panel">
+        <h2>Workflow Execution</h2>
+        <div id="workflowOutput"></div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { createAgentSession } from '../dist/index.js';
+
+      const workflowSelect = document.getElementById('workflowSelect');
+      const workflowInput = document.getElementById('workflowInput');
+      const workflowDefinition = document.getElementById('workflowDefinition');
+      const workflowOutput = document.getElementById('workflowOutput');
+      const runButton = document.getElementById('runWorkflow');
+      const clearButton = document.getElementById('clearOutput');
+
+      // Define sample workflows
+      const workflows = {
+        research: {
+          id: 'research-workflow',
+          name: 'Research Assistant',
+          description: 'A workflow that researches topics and provides summaries',
+          maxIterations: 5,
+          timeout: 30000,
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'search_web',
+                description: 'Search the web for information',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    query: { type: 'string', description: 'Search query' }
+                  },
+                  required: ['query']
+                },
+                implementation: async (query) => {
+                  // Simulate web search
+                  await new Promise(resolve => setTimeout(resolve, 1000));
+                  return `Search results for "${query}": [Simulated web search results...]`;
+                }
+              }
+            }
+          ],
+          steps: [
+            {
+              id: 'understand-topic',
+              type: 'think',
+              description: 'Understand what the user wants to research',
+              nextSteps: ['search-info']
+            },
+            {
+              id: 'search-info',
+              type: 'act',
+              description: 'Search for information about the topic',
+              tools: ['search_web'],
+              nextSteps: ['analyze-results']
+            },
+            {
+              id: 'analyze-results',
+              type: 'think',
+              description: 'Analyze the search results',
+              nextSteps: ['provide-summary']
+            },
+            {
+              id: 'provide-summary',
+              type: 'respond',
+              description: 'Provide a comprehensive summary'
+            }
+          ]
+        },
+        
+        decision: {
+          id: 'decision-workflow',
+          name: 'Decision Maker',
+          description: 'A workflow that helps make decisions by weighing pros and cons',
+          maxIterations: 4,
+          timeout: 25000,
+          tools: [],
+          steps: [
+            {
+              id: 'understand-decision',
+              type: 'think',
+              description: 'Understand the decision that needs to be made',
+              nextSteps: ['list-options']
+            },
+            {
+              id: 'list-options',
+              type: 'think',
+              description: 'List all possible options',
+              nextSteps: ['analyze-pros-cons']
+            },
+            {
+              id: 'analyze-pros-cons',
+              type: 'think',
+              description: 'Analyze pros and cons of each option',
+              nextSteps: ['make-recommendation']
+            },
+            {
+              id: 'make-recommendation',
+              type: 'decide',
+              description: 'Make a final recommendation'
+            }
+          ]
+        },
+        
+        calculator: {
+          id: 'calculator-workflow',
+          name: 'Math Calculator',
+          description: 'A workflow that solves mathematical problems step by step',
+          maxIterations: 3,
+          timeout: 15000,
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'calculate',
+                description: 'Perform mathematical calculations',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    expression: { type: 'string', description: 'Mathematical expression to evaluate' }
+                  },
+                  required: ['expression']
+                },
+                implementation: async (expression) => {
+                  try {
+                    // Simple eval for demo - in production, use a proper math parser
+                    const result = eval(expression.replace(/[^0-9+\-*/().\s]/g, ''));
+                    return `${expression} = ${result}`;
+                  } catch (error) {
+                    return `Error calculating "${expression}": ${error.message}`;
+                  }
+                }
+              }
+            }
+          ],
+          steps: [
+            {
+              id: 'parse-problem',
+              type: 'think',
+              description: 'Parse and understand the mathematical problem',
+              nextSteps: ['solve-step-by-step']
+            },
+            {
+              id: 'solve-step-by-step',
+              type: 'act',
+              description: 'Solve the problem step by step using calculations',
+              tools: ['calculate'],
+              nextSteps: ['explain-solution']
+            },
+            {
+              id: 'explain-solution',
+              type: 'respond',
+              description: 'Explain the solution clearly'
+            }
+          ]
+        }
+      };
+
+      // Update workflow definition display
+      function updateWorkflowDefinition() {
+        const selectedWorkflow = workflows[workflowSelect.value];
+        workflowDefinition.value = JSON.stringify(selectedWorkflow, null, 2);
+      }
+
+      // Format step result for display
+      function formatStepResult(result) {
+        const div = document.createElement('div');
+        div.className = `step-result step-${result.type}`;
+        
+        let content = `<strong>[${result.type.toUpperCase()}] Step: ${result.stepId}</strong><br/>`;
+        content += result.content;
+        
+        if (result.toolCall) {
+          content += `<br/><em>Tool: ${result.toolCall.name}(${JSON.stringify(result.toolCall.args)})</em>`;
+          if (result.toolCall.result) {
+            content += `<br/><em>Result: ${result.toolCall.result}</em>`;
+          }
+        }
+        
+        if (result.error) {
+          content += `<br/><span style="color: #ef4444;">Error: ${result.error}</span>`;
+        }
+        
+        if (result.metadata?.duration) {
+          content += `<br/><small>Duration: ${result.metadata.duration}ms</small>`;
+        }
+        
+        div.innerHTML = content;
+        return div;
+      }
+
+      // Event listeners
+      workflowSelect.addEventListener('change', updateWorkflowDefinition);
+      
+      clearButton.addEventListener('click', () => {
+        workflowOutput.innerHTML = '';
+      });
+
+      runButton.addEventListener('click', async () => {
+        const selectedWorkflow = workflows[workflowSelect.value];
+        const input = workflowInput.value.trim();
+        
+        if (!input) {
+          alert('Please enter an input for the workflow');
+          return;
+        }
+
+        workflowOutput.innerHTML = '';
+        runButton.disabled = true;
+        
+        try {
+          // Create agent session
+          const agentSession = await createAgentSession({
+            models: {
+              chat: 'onnx-community/gemma-3-270m-it-ONNX',
+              function_calling: 'onnx-community/Qwen2.5-0.5B-Instruct'
+            },
+            quantization: 'q4'
+          });
+
+          // Add initial context to the workflow
+          const workflowWithContext = {
+            ...selectedWorkflow,
+            steps: selectedWorkflow.steps.map(step => ({
+              ...step,
+              description: step.description + `\n\nUser input: "${input}"`
+            }))
+          };
+
+          const startTime = performance.now();
+          
+          // Run workflow
+          for await (const result of agentSession.runWorkflow(workflowWithContext)) {
+            console.log('Step result:', result);
+            workflowOutput.appendChild(formatStepResult(result));
+            workflowOutput.scrollTop = workflowOutput.scrollHeight;
+          }
+          
+          const totalTime = performance.now() - startTime;
+          
+          // Add completion message
+          const completionDiv = document.createElement('div');
+          completionDiv.className = 'step-result';
+          completionDiv.innerHTML = `<strong>✅ Workflow completed in ${totalTime.toFixed(1)}ms</strong>`;
+          workflowOutput.appendChild(completionDiv);
+          
+          await agentSession.dispose();
+          
+        } catch (error) {
+          console.error('Workflow error:', error);
+          const errorDiv = document.createElement('div');
+          errorDiv.className = 'step-result step-error';
+          errorDiv.innerHTML = `<strong>❌ Workflow failed:</strong><br/>${error.message}`;
+          workflowOutput.appendChild(errorDiv);
+        } finally {
+          runButton.disabled = false;
+        }
+      });
+
+      // Initialize
+      updateWorkflowDefinition();
+    </script>
+  </body>
+</html>

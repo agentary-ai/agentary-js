@@ -202,7 +202,7 @@ npm run build
 
 # Serve the example (requires a local server)
 cd examples/browser
-python -m http.server 8000
+npx http-server . -c-1
 
 # Open http://localhost:8000 in your browser
 ```

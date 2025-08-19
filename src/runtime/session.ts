@@ -23,16 +23,20 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
     const onMessage = (ev: MessageEvent<any>) => {
       const msg = ev.data;
       if (!msg || msg.requestId !== requestId) return;
+
       if (msg.type === 'chunk') {
         const { token, tokenId, isFirst, isLast, ttfbMs } = msg.payload;
         queue.push({ token, tokenId, isFirst, isLast, ...(ttfbMs !== undefined ? { ttfbMs } : {}) });
+
       } else if (msg.type === 'done') {
         done = true;
         queue.push({ token: '', tokenId: -1, isFirst: false, isLast: true });
+
       } else if (msg.type === 'error') {
         done = true;
         queue.push({ token: '', tokenId: -1, isFirst: false, isLast: true });
         console.error('Generation error', msg.error);
+        
       } else if (msg.type === 'debug') {
         console.log('debug', msg.payload);
       }

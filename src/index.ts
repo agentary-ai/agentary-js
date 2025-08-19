@@ -1,2 +1,15 @@
 export { createSession } from './runtime/session.js';
-export type { CreateSessionArgs, GenerateArgs, TokenStreamChunk, Session, TaskType } from './types/api';
+export { createAgentSession } from './runtime/agent-session.js';
+export type { 
+  CreateSessionArgs, 
+  GenerateArgs, 
+  TokenStreamChunk, 
+  Session, 
+  TaskType,
+  Tool,
+  WorkflowStep,
+  WorkflowDefinition,
+  AgentStepResult,
+  AgentWorkflowResult,
+  AgentSession
+} from './types/api';
