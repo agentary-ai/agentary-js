@@ -10,27 +10,6 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
     return String(workerInstance.inflightId); 
   }
 
-  function once<T = unknown>(workerInstance: WorkerInstance, requestId: string, filter?: (m: any) => boolean): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const onMessage = (ev: MessageEvent<any>) => {
-        const msg = ev.data;
-        if (!msg || msg.requestId !== requestId) return;
-        if (filter && !filter(msg)) return;
-        workerInstance.worker.removeEventListener('message', onMessage as any);
-        workerInstance.worker.removeEventListener('error', onError as any);
-        if (msg.type === 'error') reject(new Error(msg.error));
-        else resolve(msg);
-      };
-      const onError = (e: ErrorEvent) => {
-        workerInstance.worker.removeEventListener('message', onMessage as any);
-        workerInstance.worker.removeEventListener('error', onError as any);
-        reject(e.error || new Error(e.message));
-      };
-      workerInstance.worker.addEventListener('message', onMessage as any);
-      workerInstance.worker.addEventListener('error', onError as any);
-    });
-  }
-
   async function* generate(gen: GenerateArgs): AsyncIterable<TokenStreamChunk> {
     if (disposed) throw new Error('Session disposed');
     
