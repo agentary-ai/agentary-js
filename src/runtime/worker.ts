@@ -1,5 +1,6 @@
 import { pipeline, TextStreamer, env as hfEnv } from '@huggingface/transformers';
 import { InboundMessage, OutboundMessage } from '../types/worker';
+import { logger } from '../utils/logger';
 
 let generator: any | null = null;
 let disposed = false;
@@ -13,6 +14,8 @@ function post(message: OutboundMessage) {
 function postDebug(requestId: string, message: string, data?: unknown) {
   const payload = { message, ...(data !== undefined ? { data } : {}) } as const;
   post({ type: 'debug', requestId, payload });
+  // Also log locally in worker for immediate visibility
+  logger.worker.debug(message, data, requestId);
 }
 
 // eslint-disable-next-line no-restricted-globals
@@ -22,6 +25,8 @@ function postDebug(requestId: string, message: string, data?: unknown) {
     if (msg.type === 'init') {
       if (disposed) throw new Error('Worker disposed');
       const { model, engine, hfToken } = msg.args;
+
+      logger.worker.info('Initializing worker', { model, engine, quantization: msg.args.quantization }, msg.requestId);
 
       if (hfToken) {
         (hfEnv as any).HF_TOKEN = hfToken;
@@ -35,6 +40,7 @@ function postDebug(requestId: string, message: string, data?: unknown) {
         progress_callback: (_info: any) => {},
       });
 
+      logger.worker.info('Worker initialized successfully', { model, device }, msg.requestId);
       post({ type: 'ack', requestId: msg.requestId });
       return;
     }
@@ -86,8 +92,7 @@ function postDebug(requestId: string, message: string, data?: unknown) {
       });
 
       try {
-        await generator(renderedPrompt, {
-          // We already applied the chat template, so avoid adding BOS/EOS again.
+        const generationOptions = {
           add_special_tokens: false,
           max_new_tokens: 512,
           do_sample: temperature !== undefined ? temperature > 0 : false,
@@ -97,7 +102,13 @@ function postDebug(requestId: string, message: string, data?: unknown) {
           repetition_penalty: repetition_penalty || 1.1,
           streamer,
           stop,
-        });
+        };
+        
+        logger.worker.debug('Starting generation', generationOptions, msg.requestId);
+        
+        await generator(renderedPrompt, generationOptions);
+        
+        logger.worker.debug('Generation completed successfully', undefined, msg.requestId);
       } finally {
         isGenerating = false;
       }
@@ -111,8 +122,17 @@ function postDebug(requestId: string, message: string, data?: unknown) {
         post({ type: 'ack', requestId: msg.requestId });
         return;
       }
+      
+      logger.worker.info('Disposing worker', undefined, msg.requestId);
       disposed = true;
-      try { await generator?.dispose?.(); } catch {}
+      
+      try { 
+        await generator?.dispose?.();
+        logger.worker.debug('Generator disposed successfully', undefined, msg.requestId);
+      } catch (error: any) {
+        logger.worker.warn('Error disposing generator', error?.message, msg.requestId);
+      }
+      
       generator = null;
       post({ type: 'ack', requestId: msg.requestId });
       // eslint-disable-next-line no-restricted-globals
@@ -120,7 +140,11 @@ function postDebug(requestId: string, message: string, data?: unknown) {
       return;
     }
   } catch (error: any) {
-    post({ type: 'error', requestId: (msg as any)?.requestId ?? 'unknown', error: error?.message ?? String(error) });
+    const requestId = (msg as any)?.requestId ?? 'unknown';
+    const errorMessage = error?.message ?? String(error);
+    
+    logger.worker.error('Worker error', { error: errorMessage, stack: error?.stack }, requestId);
+    post({ type: 'error', requestId, error: errorMessage });
   }
 };
 

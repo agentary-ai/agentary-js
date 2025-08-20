@@ -1,4 +1,5 @@
 import { type CreateSessionArgs, type GenerateArgs, type TaskType } from '../types/api';
+import { logger } from '../utils/logger';
 
 export interface WorkerConfig {
   model: string;
@@ -85,6 +86,7 @@ export class WorkerManager {
     let workerInstance = this.workers.get(taskType);
     
     if (!workerInstance) {
+      logger.worker.info('Creating new worker instance', { taskType });
       workerInstance = this.createWorkerInstance(taskType);
       this.workers.set(taskType, workerInstance);
     }
@@ -92,6 +94,8 @@ export class WorkerManager {
     if (!workerInstance.initialized && !workerInstance.disposed) {
       const model = this.getModelForTaskType(taskType);
       const initId = this.nextId(workerInstance);
+      
+      logger.worker.debug('Initializing worker', { taskType, model, initId });
       
       workerInstance.worker.postMessage({
         type: 'init',
@@ -104,8 +108,14 @@ export class WorkerManager {
         },
       });
       
-      await this.once(workerInstance, initId);
-      workerInstance.initialized = true;
+      try {
+        await this.once(workerInstance, initId);
+        workerInstance.initialized = true;
+        logger.worker.info('Worker initialized successfully', { taskType, model });
+      } catch (error: any) {
+        logger.worker.error('Worker initialization failed', { taskType, model, error: error.message });
+        throw error;
+      }
     }
 
     return workerInstance;
@@ -118,6 +128,8 @@ export class WorkerManager {
   }
 
   async disposeAll(): Promise<void> {
+    logger.worker.info('Disposing all workers', { workerCount: this.workers.size });
+    
     const disposePromises: Promise<void>[] = [];
 
     for (const [taskType, workerInstance] of this.workers) {
@@ -129,6 +141,8 @@ export class WorkerManager {
 
     await Promise.all(disposePromises);
     this.workers.clear();
+    
+    logger.worker.info('All workers disposed successfully');
   }
 
   private async disposeWorker(workerInstance: WorkerInstance): Promise<void> {

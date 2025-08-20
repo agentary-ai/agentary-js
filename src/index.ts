@@ -1,5 +1,7 @@
 export { createSession } from './runtime/session.js';
 export { createAgentSession } from './runtime/agent-session.js';
+export { logger, createLogger, setGlobalLogLevel, LogLevel } from './utils/logger';
+export { LogConfigs, getEnvironmentConfig, enableDebuggingMode, disableDebuggingMode, isDebuggingMode } from './utils/logger-config';
 export type { 
   CreateSessionArgs, 
   GenerateArgs, 

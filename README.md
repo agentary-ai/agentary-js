@@ -207,6 +207,136 @@ npx http-server . -c-1
 # Open http://localhost:8000 in your browser
 ```
 
+## 🔍 Logging & Debugging
+
+Agentary.js includes a comprehensive logging system for debugging and monitoring your AI applications.
+
+### Basic Logging Usage
+
+```typescript
+import { logger, LogLevel } from 'agentary-js';
+
+// Use predefined category loggers
+logger.session.info('Session created successfully');
+logger.worker.debug('Processing generation request', { prompt: 'Hello' });
+logger.agent.warn('Step timeout approaching', { stepId: 'step-1' });
+
+// Or use custom categories
+logger.info('custom-category', 'Custom message', { data: 'example' });
+```
+
+### Configuration
+
+#### Environment-based Configuration
+
+The logger automatically configures itself based on the environment:
+
+- **Production**: WARN level, no colors, minimal context
+- **Development**: DEBUG level, colors enabled, full context
+- **Testing**: ERROR level only
+
+#### Manual Configuration
+
+```typescript
+import { createLogger, LogLevel, LogConfigs } from 'agentary-js';
+
+// Use a pre-defined config
+const logger = createLogger(LogConfigs.debugging);
+
+// Or create custom configuration
+const logger = createLogger({
+  level: LogLevel.INFO,
+  enableColors: true,
+  enableTimestamps: true,
+  maxLogHistory: 500,
+  customFormatters: {
+    'my-category': (entry) => `🎯 ${entry.message}`
+  }
+});
+```
+
+#### Browser Configuration
+
+Set log level via URL parameter or localStorage:
+
+```javascript
+// Via URL: http://localhost:3000?logLevel=debug
+// Via localStorage:
+localStorage.setItem('agentary_log_level', 'debug');
+
+// Enable enhanced debugging mode
+import { enableDebuggingMode } from 'agentary-js';
+enableDebuggingMode();
+```
+
+#### Node.js Configuration
+
+Set via environment variable:
+
+```bash
+AGENTARY_LOG_LEVEL=debug node your-app.js
+```
+
+### Log Levels
+
+- **DEBUG**: Detailed information for debugging (worker init, step execution, etc.)
+- **INFO**: General information (session creation, workflow completion)
+- **WARN**: Warning conditions (timeouts, retries)
+- **ERROR**: Error conditions (failures, exceptions)
+- **SILENT**: No logging
+
+### Structured Logging
+
+All logs include structured data for better filtering and analysis:
+
+```typescript
+logger.worker.info('Generation completed', {
+  model: 'gemma-3-270m',
+  tokensGenerated: 156,
+  duration: 1240
+}, requestId);
+
+// Outputs: [2024-01-15T10:30:45.123Z] [INFO] [worker] [req:abc123] Generation completed {"model":"gemma-3-270m","tokensGenerated":156,"duration":1240}
+```
+
+### Debug Features
+
+#### Export Logs
+
+```typescript
+import { logger } from 'agentary-js';
+
+// Get log history
+const logs = logger.getLogHistory();
+
+// Export as text
+const logText = logger.exportLogs();
+console.log(logText);
+
+// Clear history
+logger.clearHistory();
+```
+
+#### Custom Formatters
+
+```typescript
+import { createLogger } from 'agentary-js';
+
+const logger = createLogger({
+  customFormatters: {
+    'performance': (entry) => {
+      if (entry.data?.duration) {
+        return `⚡ PERF: ${entry.message} (${entry.data.duration}ms)`;
+      }
+      return `⚡ PERF: ${entry.message}`;
+    }
+  }
+});
+
+logger.performance.info('Model loading completed', { duration: 2341 });
+// Outputs: ⚡ PERF: Model loading completed (2341ms)
+```
+
 ## 🤝 Contributing
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.

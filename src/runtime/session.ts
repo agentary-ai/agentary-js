@@ -1,5 +1,6 @@
 import { type CreateSessionArgs, type GenerateArgs, type Session, type TokenStreamChunk } from '../types/api';
 import { WorkerManager, type WorkerInstance } from './worker-manager';
+import { logger } from '../utils/logger';
 
 export async function createSession(args: CreateSessionArgs): Promise<Session> {
   const workerManager = new WorkerManager(args);
@@ -35,10 +36,10 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
       } else if (msg.type === 'error') {
         done = true;
         queue.push({ token: '', tokenId: -1, isFirst: false, isLast: true });
-        console.error('Generation error', msg.error);
+        logger.session.error('Generation error', msg.error, requestId);
         
       } else if (msg.type === 'debug') {
-        console.log('debug', msg.payload);
+        logger.session.debug('Worker debug message', msg.payload, requestId);
       }
     };
 

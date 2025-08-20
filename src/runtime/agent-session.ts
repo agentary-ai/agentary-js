@@ -10,6 +10,7 @@ import {
   type TokenStreamChunk
 } from '../types/api';
 import { createSession } from './session';
+import { logger } from '../utils/logger';
 
 export class AgentSessionImpl implements AgentSession {
   private session: Session;
@@ -64,9 +65,17 @@ export class AgentSessionImpl implements AgentSession {
   async* runWorkflow(workflow: WorkflowDefinition): AsyncIterable<AgentStepResult> {
     if (this.disposed) throw new Error('Agent session disposed');
 
+    logger.agent.info('Starting workflow execution', { 
+      workflowId: workflow.id, 
+      workflowName: workflow.name,
+      stepCount: workflow.steps.length,
+      toolCount: workflow.tools.length 
+    });
+
     // Register workflow tools
     for (const tool of workflow.tools) {
       this.registerTool(tool);
+      logger.agent.debug('Registered workflow tool', { toolName: tool.function.name });
     }
 
     const context: Record<string, any> = {
@@ -87,6 +96,12 @@ export class AgentSessionImpl implements AgentSession {
       while (currentStepId && iteration < maxIterations) {
         // Check timeout
         if (Date.now() - startTime > timeout) {
+          logger.agent.warn('Workflow timeout exceeded', { 
+            workflowId: workflow.id, 
+            stepId: currentStepId, 
+            elapsedMs: Date.now() - startTime,
+            timeoutMs: timeout 
+          });
           yield {
             stepId: currentStepId,
             type: 'error',
@@ -99,6 +114,11 @@ export class AgentSessionImpl implements AgentSession {
 
         const step = workflow.steps.find(s => s.id === currentStepId);
         if (!step) {
+          logger.agent.error('Workflow step not found', { 
+            workflowId: workflow.id, 
+            stepId: currentStepId,
+            availableSteps: workflow.steps.map(s => s.id)
+          });
           yield {
             stepId: currentStepId,
             type: 'error',
@@ -110,6 +130,13 @@ export class AgentSessionImpl implements AgentSession {
         }
 
         // Execute step
+        logger.agent.debug('Executing workflow step', { 
+          workflowId: workflow.id, 
+          stepId: step.id, 
+          stepType: step.type,
+          iteration: iteration 
+        });
+        
         let stepCompleted = false;
         let nextStepId: string | undefined;
 
@@ -147,6 +174,11 @@ export class AgentSessionImpl implements AgentSession {
       }
 
       if (iteration >= maxIterations) {
+        logger.agent.warn('Workflow exceeded maximum iterations', { 
+          workflowId: workflow.id, 
+          maxIterations,
+          totalTimeMs: Date.now() - startTime
+        });
         yield {
           stepId: currentStepId || 'unknown',
           type: 'error',
@@ -154,9 +186,24 @@ export class AgentSessionImpl implements AgentSession {
           isComplete: true,
           error: 'Max iterations'
         };
+      } else {
+        logger.agent.info('Workflow completed successfully', { 
+          workflowId: workflow.id, 
+          iterations: iteration,
+          totalTimeMs: Date.now() - startTime
+        });
       }
 
     } catch (error: any) {
+      logger.agent.error('Workflow execution failed', { 
+        workflowId: workflow.id, 
+        stepId: currentStepId,
+        error: error.message,
+        iterations: iteration,
+        totalTimeMs: Date.now() - startTime,
+        stack: error.stack
+      });
+      
       yield {
         stepId: currentStepId || 'unknown',
         type: 'error',

@@ -57,7 +57,12 @@
     <pre id="out">Press Run…</pre>
 
     <script type="module">
-      import { createSession } from '../../dist/index.js';
+      import { createSession, enableDebuggingMode } from '../../dist/index.js';
+      
+      // Enable debugging mode for development
+      // This can also be done via URL: ?logLevel=debug
+      // Or localStorage: localStorage.setItem('agentary_log_level', 'debug')
+      enableDebuggingMode();
 
       const out = document.getElementById('out');
       const btn = document.getElementById('run');
@@ -93,7 +98,10 @@
             }
           }
           for await (const chunk of session.generate({ prompt: promptEl.value, tools })) {
-            console.log('chunk', chunk);
+            // Debug logging for chunks
+            if (window.agentaryDebug) {
+              console.log('chunk', chunk);
+            }
             if (chunk.isFirst && chunk.ttfbMs) {
               out.textContent += `TTFB: ${chunk.ttfbMs.toFixed(1)}ms\n`;
             }

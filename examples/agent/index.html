@@ -3,298 +3,791 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Agentary JS – Agent Workflow Demo</title>
+    <title>Agentary JS – Task Management Assistant</title>
     <style>
+      * { box-sizing: border-box; }
       body { 
         font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; 
-        margin: 24px; 
-        max-width: 1200px;
+        margin: 0;
+        padding: 24px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        color: #333;
       }
-      .container { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+      
+      .header {
+        text-align: center;
+        margin-bottom: 32px;
+        color: white;
+      }
+      
+      .header h1 {
+        font-size: 2.5rem;
+        margin: 0 0 8px 0;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      }
+      
+      .header p {
+        font-size: 1.1rem;
+        opacity: 0.9;
+        margin: 0;
+      }
+      
+      .container { 
+        max-width: 1400px;
+        margin: 0 auto;
+        display: grid; 
+        grid-template-columns: 400px 1fr; 
+        gap: 24px; 
+      }
+      
       .panel { 
-        border: 1px solid #ddd; 
-        border-radius: 8px; 
-        padding: 16px; 
-        background: #f9f9f9; 
+        background: white;
+        border-radius: 12px; 
+        padding: 24px; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.08);
+        border: 1px solid rgba(255,255,255,0.2);
       }
-      pre { 
-        background: #111; 
-        color: #0f0; 
-        padding: 12px; 
-        border-radius: 6px; 
-        min-height: 300px; 
-        white-space: pre-wrap; 
-        overflow-y: auto;
-        max-height: 500px;
+      
+      .control-panel {
+        height: fit-content;
+        position: sticky;
+        top: 24px;
       }
+      
       .step-result {
-        margin: 8px 0;
-        padding: 8px;
-        border-radius: 4px;
+        margin: 12px 0;
+        padding: 16px;
+        border-radius: 8px;
         border-left: 4px solid #ccc;
+        animation: slideIn 0.3s ease-out;
       }
+      
+      @keyframes slideIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      
       .step-thinking { border-left-color: #3b82f6; background: #eff6ff; }
       .step-tool_call { border-left-color: #f59e0b; background: #fffbeb; }
       .step-decision { border-left-color: #8b5cf6; background: #f3e8ff; }
       .step-response { border-left-color: #10b981; background: #ecfdf5; }
       .step-error { border-left-color: #ef4444; background: #fef2f2; }
       
-      .row { margin-bottom: 12px; }
-      input, button, select { font-size: 14px; padding: 6px 10px; }
-      button { background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; }
-      button:disabled { background: #9ca3af; cursor: not-allowed; }
-      label { display: inline-block; min-width: 120px; font-weight: 500; }
-      textarea { width: 100%; height: 150px; font-family: monospace; }
+      .row { margin-bottom: 16px; }
       
-      h2 { margin-top: 0; color: #374151; }
-      h3 { color: #6b7280; }
+      input, button, select, textarea { 
+        font-size: 14px; 
+        padding: 12px 16px;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px; 
+        transition: all 0.2s;
+      }
+      
+      input:focus, select:focus, textarea:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      }
+      
+      button { 
+        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        color: white; 
+        border: none; 
+        cursor: pointer; 
+        font-weight: 600;
+        transition: all 0.2s;
+      }
+      
+      button:hover:not(:disabled) { 
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+      }
+      
+      button:disabled { 
+        background: #9ca3af; 
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+      
+      .btn-secondary {
+        background: linear-gradient(135deg, #6b7280, #374151);
+      }
+      
+      .btn-danger {
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+      }
+      
+      label { 
+        display: block;
+        font-weight: 600;
+        margin-bottom: 6px;
+        color: #374151;
+      }
+      
+      input[type="text"], input[type="datetime-local"], select {
+        width: 100%;
+      }
+      
+      .task-list {
+        background: #f8fafc;
+        border-radius: 8px;
+        padding: 16px;
+        margin-top: 16px;
+        border: 1px solid #e2e8f0;
+      }
+      
+      .task-item {
+        background: white;
+        padding: 12px;
+        margin: 8px 0;
+        border-radius: 6px;
+        border-left: 4px solid #10b981;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+      }
+      
+      .task-overdue {
+        border-left-color: #ef4444;
+        background: #fef2f2;
+      }
+      
+      .task-upcoming {
+        border-left-color: #f59e0b;
+        background: #fffbeb;
+      }
+      
+      .task-info {
+        flex: 1;
+      }
+      
+      .task-title {
+        font-weight: 600;
+        color: #1f2937;
+      }
+      
+      .task-due {
+        font-size: 12px;
+        color: #6b7280;
+        margin-top: 4px;
+      }
+      
+      .task-actions {
+        display: flex;
+        gap: 8px;
+      }
+      
+      .task-actions button {
+        padding: 6px 12px;
+        font-size: 12px;
+        min-width: auto;
+      }
+      
+      .status-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 8px;
+      }
+      
+      .status-online { background: #10b981; }
+      .status-working { background: #f59e0b; }
+      .status-offline { background: #ef4444; }
+      
+      h2 { 
+        margin-top: 0; 
+        color: #1f2937;
+        font-size: 1.5rem;
+        margin-bottom: 20px;
+      }
+      
+      h3 { 
+        color: #374151;
+        font-size: 1.1rem;
+        margin: 20px 0 12px 0;
+      }
+      
+      .workflow-output {
+        min-height: 400px;
+        max-height: 80vh;
+        overflow-y: auto; 
+        padding-right: 8px;
+      }
+      
+      .workflow-output::-webkit-scrollbar {
+        width: 6px;
+      }
+      
+      .workflow-output::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 3px;
+      }
+      
+      .workflow-output::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 3px;
+      }
+      
+      .workflow-output::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+      
+      .feature-grid {
+        display: grid; 
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+        gap: 12px; 
+        margin-top: 16px;
+      }
+      
+      .feature-card {
+        background: #f8fafc; 
+        padding: 12px;
+        border-radius: 6px; 
+        border: 1px solid #e2e8f0;
+        text-align: center;
+        font-size: 13px;
+        color: #475569;
+      }
+      
+      .completion-message {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white;
+        padding: 16px;
+        border-radius: 8px;
+        margin: 16px 0;
+        font-weight: 600;
+        text-align: center;
+      }
+      
+      @media (max-width: 1024px) {
+        .container {
+          grid-template-columns: 1fr;
+          gap: 16px;
+        }
+        
+        .control-panel {
+          position: static;
+        }
+        
+        body {
+          padding: 16px;
+        }
+      }
     </style>
   </head>
   <body>
-    <h1>🤖 Agentary JS – Agent Workflow Demo</h1>
+    <div class="header">
+      <h1>🤖 Task Management Assistant</h1>
+      <p>An intelligent agent that helps you organize your work and boost productivity</p>
+    </div>
     
     <div class="container">
       <!-- Control Panel -->
-      <div class="panel">
-        <h2>Workflow Configuration</h2>
+      <div class="panel control-panel">
+        <h2>
+          <span class="status-indicator status-offline" id="agentStatus"></span>
+          Agent Control
+        </h2>
         
         <div class="row">
-          <label>Workflow:</label>
-          <select id="workflowSelect">
-            <option value="research">Research Assistant</option>
-            <option value="decision">Decision Maker</option>
-            <option value="calculator">Math Calculator</option>
-          </select>
+          <label>Ask your assistant:</label>
+          <input 
+            id="taskInput" 
+            type="text" 
+            placeholder="e.g., Add a task to buy groceries by tomorrow"
+            value="Create a task to finish the quarterly report by Friday at 5 PM" 
+          />
         </div>
         
         <div class="row">
-          <label>Input:</label>
-          <input id="workflowInput" size="50" value="What is 15 * 23 + 7?" />
-        </div>
+          <button id="runTask">🚀 Ask Assistant</button>
+          <button id="clearOutput" class="btn-secondary">🗑️ Clear</button>
+            </div>
         
-        <div class="row">
-          <button id="runWorkflow">Run Workflow</button>
-          <button id="clearOutput">Clear Output</button>
+        <h3>Quick Actions</h3>
+        <div class="feature-grid">
+          <button class="feature-card" onclick="setQuickTask('Show my tasks for today')">
+            📅 Today's Tasks
+          </button>
+          <button class="feature-card" onclick="setQuickTask('Add reminder to drink water every 2 hours')">
+            ⏰ Set Reminder
+          </button>
+          <button class="feature-card" onclick="setQuickTask('What tasks are overdue?')">
+            ⚠️ Overdue Items
+          </button>
+          <button class="feature-card" onclick="setQuickTask('Schedule a meeting for next Tuesday at 2 PM')">
+            📝 Schedule Meeting
+          </button>
+          <button class="feature-card" onclick="setQuickTask('Show my productivity stats')">
+            📊 Productivity
+          </button>
+          <button class="feature-card" onclick="setQuickTask('Create a backup of my tasks')">
+            💾 Backup Data
+          </button>
+          </div>
+          
+        <h3>Current Tasks</h3>
+        <div id="currentTasks" class="task-list">
+          <p style="color: #6b7280; text-align: center; margin: 0;">
+            No tasks yet. Ask your assistant to create some!
+          </p>
+          </div>
+          
+        <h3>Browser Features</h3>
+        <div class="feature-grid">
+          <div class="feature-card">🔔 Notifications</div>
+          <div class="feature-card">💾 Local Storage</div>
+          <div class="feature-card">📍 Geolocation</div>
+          <div class="feature-card">📱 Device Info</div>
+          <div class="feature-card">⏰ Timers</div>
+          <div class="feature-card">📊 Analytics</div>
         </div>
-        
-        <h3>Workflow Definition</h3>
-        <textarea id="workflowDefinition" readonly></textarea>
       </div>
       
       <!-- Output Panel -->
       <div class="panel">
-        <h2>Workflow Execution</h2>
-        <div id="workflowOutput"></div>
+        <h2>🧠 Assistant Workflow</h2>
+        <div id="workflowOutput" class="workflow-output">
+          <div style="text-align: center; color: #6b7280; padding: 40px 20px;">
+            <p>👋 Welcome! I'm your task management assistant.</p>
+            <p>I can help you:</p>
+            <ul style="text-align: left; display: inline-block; margin: 16px 0;">
+              <li>Create and organize tasks with smart scheduling</li>
+              <li>Set reminders with browser notifications</li>
+              <li>Track deadlines and productivity metrics</li>
+              <li>Backup and sync your data locally</li>
+              <li>Provide location-based task suggestions</li>
+            </ul>
+            <p><strong>Ask me anything to get started!</strong></p>
+          </div>
+        </div>
       </div>
     </div>
 
     <script type="module">
-      import { createAgentSession } from '../dist/index.js';
+      import { createAgentSession, enableDebuggingMode } from '../../dist/index.js';
+      
+      // Enable debugging mode for development
+      enableDebuggingMode();
 
-      const workflowSelect = document.getElementById('workflowSelect');
-      const workflowInput = document.getElementById('workflowInput');
-      const workflowDefinition = document.getElementById('workflowDefinition');
+      // DOM Elements
+      const taskInput = document.getElementById('taskInput');
       const workflowOutput = document.getElementById('workflowOutput');
-      const runButton = document.getElementById('runWorkflow');
+      const runButton = document.getElementById('runTask');
       const clearButton = document.getElementById('clearOutput');
+      const agentStatus = document.getElementById('agentStatus');
+      const currentTasks = document.getElementById('currentTasks');
 
-      // Define sample workflows
-      const workflows = {
-        research: {
-          id: 'research-workflow',
-          name: 'Research Assistant',
-          description: 'A workflow that researches topics and provides summaries',
-          maxIterations: 5,
-          timeout: 30000,
-          tools: [
-            {
-              type: 'function',
-              function: {
-                name: 'search_web',
-                description: 'Search the web for information',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    query: { type: 'string', description: 'Search query' }
-                  },
-                  required: ['query']
-                },
-                implementation: async (query) => {
-                  // Simulate web search
-                  await new Promise(resolve => setTimeout(resolve, 1000));
-                  return `Search results for "${query}": [Simulated web search results...]`;
-                }
+      // Task Management System
+      class TaskManager {
+        constructor() {
+          this.tasks = this.loadTasks();
+          this.reminders = new Map();
+          this.renderTasks();
+        }
+
+        loadTasks() {
+          try {
+            return JSON.parse(localStorage.getItem('agentary_tasks') || '[]');
+          } catch {
+            return [];
+          }
+        }
+
+        saveTasks() {
+          localStorage.setItem('agentary_tasks', JSON.stringify(this.tasks));
+          this.renderTasks();
+        }
+
+        addTask(title, dueDate = null, priority = 'medium') {
+          const task = {
+            id: Date.now().toString(),
+            title,
+            dueDate: dueDate ? new Date(dueDate).toISOString() : null,
+            priority,
+            completed: false,
+            createdAt: new Date().toISOString()
+          };
+          this.tasks.push(task);
+          this.saveTasks();
+          return task;
+        }
+
+        completeTask(id) {
+          const task = this.tasks.find(t => t.id === id);
+          if (task) {
+            task.completed = true;
+            task.completedAt = new Date().toISOString();
+            this.saveTasks();
+          }
+          return task;
+        }
+
+        deleteTask(id) {
+          this.tasks = this.tasks.filter(t => t.id !== id);
+          this.saveTasks();
+        }
+
+        getOverdueTasks() {
+          const now = new Date();
+          return this.tasks.filter(task => 
+            !task.completed && 
+            task.dueDate && 
+            new Date(task.dueDate) < now
+          );
+        }
+
+        getTodaysTasks() {
+          const today = new Date().toDateString();
+          return this.tasks.filter(task => 
+            !task.completed && 
+            task.dueDate && 
+            new Date(task.dueDate).toDateString() === today
+          );
+        }
+
+        renderTasks() {
+          if (this.tasks.length === 0) {
+            currentTasks.innerHTML = '<p style="color: #6b7280; text-align: center; margin: 0;">No tasks yet. Ask your assistant to create some!</p>';
+            return;
+          }
+
+          const activeTasks = this.tasks.filter(t => !t.completed).slice(0, 5);
+          const now = new Date();
+
+          currentTasks.innerHTML = activeTasks.map(task => {
+            const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+            const isOverdue = dueDate && dueDate < now;
+            const isUpcoming = dueDate && dueDate > now && dueDate < new Date(now.getTime() + 24 * 60 * 60 * 1000);
+            
+            let className = 'task-item';
+            if (isOverdue) className += ' task-overdue';
+            else if (isUpcoming) className += ' task-upcoming';
+
+            return `
+              <div class="${className}">
+                <div class="task-info">
+                  <div class="task-title">${task.title}</div>
+                  ${dueDate ? `<div class="task-due">Due: ${dueDate.toLocaleDateString()} ${dueDate.toLocaleTimeString()}</div>` : ''}
+                </div>
+                <div class="task-actions">
+                  <button onclick="taskManager.completeTask('${task.id}')" class="btn-secondary">✓</button>
+                  <button onclick="taskManager.deleteTask('${task.id}')" class="btn-danger">✕</button>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+
+      // Browser API Tools
+      const browserTools = [
+        {
+          type: 'function',
+          function: {
+            name: 'create_task',
+            description: 'Create a new task with title and optional due date',
+            parameters: {
+              type: 'object',
+              properties: {
+                title: { type: 'string', description: 'Task title or description' },
+                dueDate: { type: 'string', description: 'Due date in ISO format (optional)' },
+                priority: { type: 'string', enum: ['low', 'medium', 'high'], description: 'Task priority' }
+              },
+              required: ['title']
+            },
+            implementation: async (title, dueDate, priority = 'medium') => {
+              const task = taskManager.addTask(title, dueDate, priority);
+              return `✅ Created task: "${title}"${dueDate ? ` (Due: ${new Date(dueDate).toLocaleDateString()})` : ''}`;
+            }
+          }
+        },
+        
+        {
+          type: 'function',
+          function: {
+            name: 'show_tasks',
+            description: 'Show current tasks, optionally filtered by status or date',
+            parameters: {
+              type: 'object',
+              properties: {
+                filter: { type: 'string', enum: ['all', 'today', 'overdue', 'completed'], description: 'Filter type' }
               }
+            },
+            implementation: async (filter = 'all') => {
+              let tasks;
+              switch (filter) {
+                case 'today': tasks = taskManager.getTodaysTasks(); break;
+                case 'overdue': tasks = taskManager.getOverdueTasks(); break;
+                case 'completed': tasks = taskManager.tasks.filter(t => t.completed); break;
+                default: tasks = taskManager.tasks.filter(t => !t.completed);
+              }
+              
+              if (tasks.length === 0) {
+                return `No ${filter} tasks found.`;
+              }
+              
+              return `📋 ${filter.charAt(0).toUpperCase() + filter.slice(1)} tasks (${tasks.length}):\n` +
+                tasks.map((task, i) => `${i + 1}. ${task.title}${task.dueDate ? ` (Due: ${new Date(task.dueDate).toLocaleDateString()})` : ''}`).join('\n');
             }
-          ],
-          steps: [
-            {
-              id: 'understand-topic',
-              type: 'think',
-              description: 'Understand what the user wants to research',
-              nextSteps: ['search-info']
-            },
-            {
-              id: 'search-info',
-              type: 'act',
-              description: 'Search for information about the topic',
-              tools: ['search_web'],
-              nextSteps: ['analyze-results']
-            },
-            {
-              id: 'analyze-results',
-              type: 'think',
-              description: 'Analyze the search results',
-              nextSteps: ['provide-summary']
-            },
-            {
-              id: 'provide-summary',
-              type: 'respond',
-              description: 'Provide a comprehensive summary'
-            }
-          ]
+          }
         },
-        
-        decision: {
-          id: 'decision-workflow',
-          name: 'Decision Maker',
-          description: 'A workflow that helps make decisions by weighing pros and cons',
-          maxIterations: 4,
-          timeout: 25000,
-          tools: [],
-          steps: [
-            {
-              id: 'understand-decision',
-              type: 'think',
-              description: 'Understand the decision that needs to be made',
-              nextSteps: ['list-options']
+
+        {
+          type: 'function',
+          function: {
+            name: 'send_notification',
+            description: 'Send a browser notification to the user',
+            parameters: {
+              type: 'object',
+              properties: {
+                title: { type: 'string', description: 'Notification title' },
+                body: { type: 'string', description: 'Notification body text' }
+              },
+              required: ['title', 'body']
             },
-            {
-              id: 'list-options',
-              type: 'think',
-              description: 'List all possible options',
-              nextSteps: ['analyze-pros-cons']
-            },
-            {
-              id: 'analyze-pros-cons',
-              type: 'think',
-              description: 'Analyze pros and cons of each option',
-              nextSteps: ['make-recommendation']
-            },
-            {
-              id: 'make-recommendation',
-              type: 'decide',
-              description: 'Make a final recommendation'
-            }
-          ]
-        },
-        
-        calculator: {
-          id: 'calculator-workflow',
-          name: 'Math Calculator',
-          description: 'A workflow that solves mathematical problems step by step',
-          maxIterations: 3,
-          timeout: 15000,
-          tools: [
-            {
-              type: 'function',
-              function: {
-                name: 'calculate',
-                description: 'Perform mathematical calculations',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    expression: { type: 'string', description: 'Mathematical expression to evaluate' }
-                  },
-                  required: ['expression']
-                },
-                implementation: async (expression) => {
-                  try {
-                    // Simple eval for demo - in production, use a proper math parser
-                    const result = eval(expression.replace(/[^0-9+\-*/().\s]/g, ''));
-                    return `${expression} = ${result}`;
-                  } catch (error) {
-                    return `Error calculating "${expression}": ${error.message}`;
+            implementation: async (title, body) => {
+              if ('Notification' in window) {
+              if (Notification.permission === 'granted') {
+                  new Notification(title, { body, icon: '🤖' });
+                  return `🔔 Notification sent: "${title}"`;
+              } else if (Notification.permission !== 'denied') {
+                const permission = await Notification.requestPermission();
+                if (permission === 'granted') {
+                    new Notification(title, { body, icon: '🤖' });
+                    return `🔔 Notification permission granted and sent: "${title}"`;
                   }
                 }
               }
+              return `⚠️ Notifications not available or permission denied`;
             }
-          ],
+          }
+        },
+
+        {
+          type: 'function',
+          function: {
+            name: 'get_location',
+            description: 'Get user location for location-based reminders',
+            parameters: {
+              type: 'object',
+              properties: {
+                accuracy: { type: 'string', enum: ['high', 'low'], description: 'GPS accuracy requirement' }
+              }
+            },
+            implementation: async (accuracy = 'low') => {
+              if (!navigator.geolocation) {
+                return '❌ Geolocation not supported by this browser';
+                  }
+
+                  try {
+                const position = await new Promise((resolve, reject) => {
+                  navigator.geolocation.getCurrentPosition(
+                    resolve,
+                    reject,
+                    { enableHighAccuracy: accuracy === 'high', timeout: 5000 }
+                  );
+                });
+                
+                const { latitude, longitude } = position.coords;
+                return `📍 Location: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+                  } catch (error) {
+                return `❌ Location access denied or failed: ${error.message}`;
+                  }
+            }
+          }
+        },
+
+        {
+          type: 'function',
+          function: {
+            name: 'get_device_info',
+            description: 'Get information about the user device and environment',
+            parameters: {
+              type: 'object',
+              properties: {}
+            },
+            implementation: async () => {
+              const info = {
+                platform: navigator.platform,
+                userAgent: navigator.userAgent.split(' ').slice(-2).join(' '),
+                language: navigator.language,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                screen: `${screen.width}x${screen.height}`,
+                viewport: `${window.innerWidth}x${window.innerHeight}`,
+                online: navigator.onLine,
+                cookiesEnabled: navigator.cookieEnabled
+              };
+              
+              return `📱 Device Info:\n${Object.entries(info).map(([k, v]) => `${k}: ${v}`).join('\n')}`;
+            }
+          }
+        },
+
+            {
+              type: 'function',
+              function: {
+            name: 'backup_tasks',
+            description: 'Create a backup of all tasks and data',
+                parameters: {
+                  type: 'object',
+              properties: {}
+            },
+            implementation: async () => {
+              const backup = {
+                tasks: taskManager.tasks,
+                created: new Date().toISOString(),
+                version: '1.0'
+              };
+              
+              const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `tasks-backup-${new Date().toISOString().split('T')[0]}.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+              
+              return `💾 Backup created and downloaded (${taskManager.tasks.length} tasks)`;
+            }
+          }
+        },
+
+            {
+              type: 'function',
+              function: {
+            name: 'productivity_stats',
+            description: 'Generate productivity statistics and insights',
+                parameters: {
+                  type: 'object',
+              properties: {}
+            },
+            implementation: async () => {
+              const total = taskManager.tasks.length;
+              const completed = taskManager.tasks.filter(t => t.completed).length;
+              const overdue = taskManager.getOverdueTasks().length;
+              const today = taskManager.getTodaysTasks().length;
+              
+              const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+              
+              return `📊 Productivity Stats:
+• Total tasks: ${total}
+• Completed: ${completed} (${completionRate}%)
+• Today: ${today}
+• Overdue: ${overdue}
+• Completion rate: ${completionRate}%`;
+            }
+          }
+        }
+      ];
+
+      // Initialize Task Manager
+      const taskManager = new TaskManager();
+      window.taskManager = taskManager; // Make accessible globally
+
+      // Task Management Workflow
+      const taskWorkflow = {
+        id: 'task-management',
+        name: 'Task Management Assistant',
+        description: 'Intelligent task management with browser integration',
+        maxIterations: 4,
+        timeout: 30000,
+        tools: browserTools,
           steps: [
             {
-              id: 'parse-problem',
+            id: 'understand-request',
               type: 'think',
-              description: 'Parse and understand the mathematical problem',
-              nextSteps: ['solve-step-by-step']
+            description: 'Understand what the user wants to do with their tasks',
+            nextSteps: ['take-action']
             },
             {
-              id: 'solve-step-by-step',
+            id: 'take-action',
               type: 'act',
-              description: 'Solve the problem step by step using calculations',
-              tools: ['calculate'],
-              nextSteps: ['explain-solution']
-            },
-            {
-              id: 'explain-solution',
+            description: 'Take appropriate action using available tools',
+            tools: browserTools.map(t => t.function.name),
+            nextSteps: ['provide-feedback']
+          },
+          {
+            id: 'provide-feedback',
               type: 'respond',
-              description: 'Explain the solution clearly'
-            }
-          ]
-        }
+            description: 'Provide helpful feedback and suggestions to the user'
+          }
+        ]
       };
 
-      // Update workflow definition display
-      function updateWorkflowDefinition() {
-        const selectedWorkflow = workflows[workflowSelect.value];
-        workflowDefinition.value = JSON.stringify(selectedWorkflow, null, 2);
-      }
+      // Helper Functions
+      window.setQuickTask = (task) => {
+        taskInput.value = task;
+      };
 
-      // Format step result for display
       function formatStepResult(result) {
         const div = document.createElement('div');
         div.className = `step-result step-${result.type}`;
         
-        let content = `<strong>[${result.type.toUpperCase()}] Step: ${result.stepId}</strong><br/>`;
-        content += result.content;
+        let content = `<strong>[${result.type.toUpperCase()}] ${result.stepId}</strong><br/>`;
+        content += result.content.replace(/\n/g, '<br/>');
         
         if (result.toolCall) {
-          content += `<br/><em>Tool: ${result.toolCall.name}(${JSON.stringify(result.toolCall.args)})</em>`;
+          content += `<br/><em>🔧 ${result.toolCall.name}(${JSON.stringify(result.toolCall.args)})</em>`;
           if (result.toolCall.result) {
-            content += `<br/><em>Result: ${result.toolCall.result}</em>`;
+            content += `<br/><em>✅ ${result.toolCall.result}</em>`;
           }
         }
         
         if (result.error) {
-          content += `<br/><span style="color: #ef4444;">Error: ${result.error}</span>`;
+          content += `<br/><span style="color: #ef4444;">❌ ${result.error}</span>`;
         }
         
         if (result.metadata?.duration) {
-          content += `<br/><small>Duration: ${result.metadata.duration}ms</small>`;
+          content += `<br/><small>⏱️ ${result.metadata.duration}ms</small>`;
         }
         
         div.innerHTML = content;
         return div;
       }
 
-      // Event listeners
-      workflowSelect.addEventListener('change', updateWorkflowDefinition);
-      
+      function updateAgentStatus(status) {
+        agentStatus.className = `status-indicator status-${status}`;
+      }
+
+      // Event Listeners
       clearButton.addEventListener('click', () => {
-        workflowOutput.innerHTML = '';
+        workflowOutput.innerHTML = `
+          <div style="text-align: center; color: #6b7280; padding: 40px 20px;">
+            <p>👋 Welcome! I'm your task management assistant.</p>
+            <p>I can help you:</p>
+            <ul style="text-align: left; display: inline-block; margin: 16px 0;">
+              <li>Create and organize tasks with smart scheduling</li>
+              <li>Set reminders with browser notifications</li>
+              <li>Track deadlines and productivity metrics</li>
+              <li>Backup and sync your data locally</li>
+              <li>Provide location-based task suggestions</li>
+            </ul>
+            <p><strong>Ask me anything to get started!</strong></p>
+          </div>
+        `;
       });
 
       runButton.addEventListener('click', async () => {
-        const selectedWorkflow = workflows[workflowSelect.value];
-        const input = workflowInput.value.trim();
+        const input = taskInput.value.trim();
         
         if (!input) {
-          alert('Please enter an input for the workflow');
+          alert('Please enter a task or question for your assistant');
           return;
         }
 
+        // Clear welcome message
+        if (workflowOutput.querySelector('ul')) {
         workflowOutput.innerHTML = '';
+        }
+
         runButton.disabled = true;
-        
+        updateAgentStatus('working');
+
         try {
           // Create agent session
           const agentSession = await createAgentSession({
@@ -305,20 +798,26 @@
             quantization: 'q4'
           });
 
-          // Add initial context to the workflow
+          updateAgentStatus('online');
+
+          // Add user request to workflow context
           const workflowWithContext = {
-            ...selectedWorkflow,
-            steps: selectedWorkflow.steps.map(step => ({
+            ...taskWorkflow,
+            steps: taskWorkflow.steps.map(step => ({
               ...step,
-              description: step.description + `\n\nUser input: "${input}"`
+              description: step.description + `\n\nUser request: "${input}"`
             }))
           };
 
           const startTime = performance.now();
+          let hasResults = false;
           
           // Run workflow
           for await (const result of agentSession.runWorkflow(workflowWithContext)) {
-            console.log('Step result:', result);
+            hasResults = true;
+            if (window.agentaryDebug) {
+              console.log('Step result:', result);
+            }
             workflowOutput.appendChild(formatStepResult(result));
             workflowOutput.scrollTop = workflowOutput.scrollHeight;
           }
@@ -326,10 +825,12 @@
           const totalTime = performance.now() - startTime;
           
           // Add completion message
+          if (hasResults) {
           const completionDiv = document.createElement('div');
-          completionDiv.className = 'step-result';
-          completionDiv.innerHTML = `<strong>✅ Workflow completed in ${totalTime.toFixed(1)}ms</strong>`;
+            completionDiv.className = 'completion-message';
+            completionDiv.innerHTML = `🎉 Task completed in ${totalTime.toFixed(0)}ms`;
           workflowOutput.appendChild(completionDiv);
+          }
           
           await agentSession.dispose();
           
@@ -337,15 +838,28 @@
           console.error('Workflow error:', error);
           const errorDiv = document.createElement('div');
           errorDiv.className = 'step-result step-error';
-          errorDiv.innerHTML = `<strong>❌ Workflow failed:</strong><br/>${error.message}`;
+          errorDiv.innerHTML = `<strong>❌ Assistant Error:</strong><br/>${error.message}`;
           workflowOutput.appendChild(errorDiv);
         } finally {
           runButton.disabled = false;
+          updateAgentStatus('offline');
         }
       });
 
+      // Allow Enter key to submit
+      taskInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !runButton.disabled) {
+          runButton.click();
+        }
+      });
+
+      // Request notification permission on load
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+
       // Initialize
-      updateWorkflowDefinition();
+      updateAgentStatus('offline');
     </script>
   </body>
 </html>
