@@ -1,6 +1,6 @@
 # Agentary JS
 
-> A JavaScript SDK for running quantized small language models in the browser using WebGPU and WebAssembly
+> A JavaScript SDK for running quantized small language models in the browser using WebGPU and WebAssembly, with built-in support for agentic workflows
 
 [![npm version](https://img.shields.io/npm/v/agentary-js.svg)](https://www.npmjs.com/package/agentary-js)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -12,7 +12,9 @@
 - **Quantized Models**: Support for efficient quantized models (Q4, Q8, etc.) for optimal performance
 - **Streaming Generation**: Real-time token streaming with Time to First Byte (TTFB) metrics
 - **Function Calling**: Built-in support for tool/function calling capabilities
-- **Multi-Model Support**: Use different models for chat and function calling tasks
+- **Multi-Model Support**: Use different models for chat, function calling, planning, and reasoning tasks
+- **Agentic Workflows**: Create and execute complex multi-step agent workflows with conditional logic
+- **Tool Integration**: Register custom tools for agents to use during workflow execution
 - **Zero Server**: Complete client-side execution with no data leaving the user's device
 
 ## 📦 Installation
@@ -91,6 +93,102 @@ for await (const chunk of session.generate({
 }
 ```
 
+### Agentic Workflows
+
+Create sophisticated multi-step agent workflows that can think, reason, and take actions autonomously.
+
+```javascript
+import { createAgentSession } from 'agentary-js';
+
+// Create an agent session with specialized models
+const agent = await createAgentSession({
+  models: {
+    chat: 'onnx-community/gemma-3-270m-it-ONNX',
+    function_calling: 'onnx-community/Qwen2.5-0.5B-Instruct',
+    planning: 'onnx-community/gemma-3-270m-it-ONNX',
+    reasoning: 'onnx-community/gemma-3-270m-it-ONNX'
+  },
+  quantization: 'q4'
+});
+
+// Define a research workflow
+const researchWorkflow = {
+  id: 'research-assistant',
+  name: 'Research Assistant Workflow',
+  description: 'Analyzes a topic and provides comprehensive insights',
+  maxIterations: 5,
+  timeout: 30000,
+  steps: [
+    {
+      id: 'understand-topic',
+      type: 'think',
+      description: 'Understand and break down the research topic',
+      nextSteps: ['gather-information']
+    },
+    {
+      id: 'gather-information',
+      type: 'act',
+      description: 'Search for relevant information',
+      tools: ['web_search'],
+      nextSteps: ['analyze-findings']
+    },
+    {
+      id: 'analyze-findings',
+      type: 'think',
+      description: 'Analyze gathered information for insights',
+      nextSteps: ['provide-summary']
+    },
+    {
+      id: 'provide-summary',
+      type: 'respond',
+      description: 'Provide a comprehensive summary and recommendations'
+    }
+  ],
+  tools: [
+    {
+      type: 'function',
+      function: {
+        name: 'web_search',
+        description: 'Search the web for information',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search query' }
+          },
+          required: ['query']
+        },
+        implementation: async (query) => {
+          // Your search implementation
+          return `Search results for: ${query}`;
+        }
+      }
+    }
+  ]
+};
+
+// Execute the workflow
+console.log('🤖 Starting research workflow...\n');
+
+for await (const step of agent.runWorkflow(researchWorkflow)) {
+  console.log(`[${step.type.toUpperCase()}] ${step.stepId}: ${step.content}`);
+  
+  if (step.toolCall) {
+    console.log(`  🔧 Tool: ${step.toolCall.name}(${JSON.stringify(step.toolCall.args)})`);
+    if (step.toolCall.result) {
+      console.log(`  📄 Result: ${step.toolCall.result}`);
+    }
+  }
+  
+  if (step.error) {
+    console.log(`  ❌ Error: ${step.error}`);
+  }
+  
+  console.log(''); // Empty line for readability
+}
+
+await agent.dispose();
+```
+
 ### Using Private Hugging Face Models
 
 ```javascript
@@ -109,6 +207,10 @@ const session = await createSession({
 
 Creates a new inference session with the specified configuration.
 
+### `createAgentSession(args: CreateSessionArgs): Promise<AgentSession>`
+
+Creates a new agent session with workflow capabilities, extending the basic session with agentic features.
+
 #### CreateSessionArgs
 
 | Property | Type | Description |
@@ -116,6 +218,8 @@ Creates a new inference session with the specified configuration.
 | `models` | `object` | Model configuration for different tasks |
 | `models.chat` | `string` | Model ID for chat/text generation |
 | `models.function_calling` | `string` | Model ID for function calling tasks |
+| `models.planning` | `string` | Model ID for planning tasks (optional) |
+| `models.reasoning` | `string` | Model ID for reasoning tasks (optional) |
 | `engine` | `'webgpu' \| 'wasm' \| 'auto'` | Inference engine (default: 'auto') |
 | `quantization` | `'q4' \| 'q8' \| 'auto'` | Model quantization level |
 | `hfToken` | `string` | Hugging Face token for private models |
@@ -155,6 +259,77 @@ Generates text with streaming output.
 
 Cleans up the session and releases all resources.
 
+### `AgentSession`
+
+Extends `Session` with additional methods for workflow execution and tool management.
+
+#### `runWorkflow(workflow: WorkflowDefinition): AsyncIterable<AgentStepResult>`
+
+Executes a multi-step agent workflow with real-time step results.
+
+#### `executeStep(step: WorkflowStep, context: Record<string, any>): AsyncIterable<AgentStepResult>`
+
+Executes a single workflow step with the given context.
+
+#### `registerTool(tool: Tool): void`
+
+Registers a custom tool for use in workflows and generation.
+
+#### `getRegisteredTools(): Tool[]`
+
+Returns all currently registered tools.
+
+#### AgentStepResult
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `stepId` | `string` | Unique identifier for the step |
+| `type` | `'thinking' \| 'tool_call' \| 'decision' \| 'response' \| 'error'` | Type of step result |
+| `content` | `string` | Generated content or result description |
+| `isComplete` | `boolean` | Whether this step is finished |
+| `toolCall` | `object` | Tool call information (if applicable) |
+| `toolCall.name` | `string` | Name of the called tool |
+| `toolCall.args` | `Record<string, any>` | Arguments passed to the tool |
+| `toolCall.result` | `any` | Tool execution result |
+| `nextStepId` | `string` | ID of the next step to execute |
+| `error` | `string` | Error message (if step failed) |
+| `metadata` | `Record<string, any>` | Additional step metadata |
+
+#### WorkflowDefinition
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `string` | Unique workflow identifier |
+| `name` | `string` | Human-readable workflow name |
+| `description` | `string` | Workflow description |
+| `steps` | `WorkflowStep[]` | Array of workflow steps |
+| `tools` | `Tool[]` | Tools available to the workflow |
+| `maxIterations` | `number` | Maximum number of steps to execute |
+| `timeout` | `number` | Workflow timeout in milliseconds |
+
+#### WorkflowStep
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `string` | Unique step identifier |
+| `type` | `'think' \| 'act' \| 'decide' \| 'respond'` | Type of step |
+| `description` | `string` | Step description/prompt |
+| `tools` | `string[]` | Tools available for this step |
+| `nextSteps` | `string[]` | Possible next step IDs |
+| `maxRetries` | `number` | Maximum retry attempts |
+| `condition` | `string` | Conditional logic for step execution |
+
+#### Tool
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `type` | `'function'` | Tool type (currently only 'function') |
+| `function` | `object` | Function definition |
+| `function.name` | `string` | Function name |
+| `function.description` | `string` | Function description |
+| `function.parameters` | `Record<string, any>` | JSON Schema for parameters |
+| `function.implementation` | `Function` | JavaScript implementation |
+
 ## 🌐 Browser Support
 
 - **WebGPU**: Chrome 113+, Edge 113+, Firefox with WebGPU enabled
@@ -186,26 +361,112 @@ npm run dev
 src/
 ├── index.ts              # Main library exports
 ├── runtime/
-│   ├── session.ts        # Session management
+│   ├── session.ts        # Basic session management
+│   ├── agent-session.ts  # Agent workflow session
 │   ├── worker.ts         # Web Worker for model inference
 │   └── worker-manager.ts # Worker lifecycle management
-└── types/
-    ├── api.ts           # Public API types
-    └── worker.ts        # Internal worker types
+├── types/
+│   ├── api.ts           # Public API types
+│   └── worker.ts        # Internal worker types
+└── utils/
+    └── logger.ts        # Logging utilities
 ```
 
-### Running the Example
+### Running the Examples
 
 ```bash
 # Build the library
 npm run build
 
-# Serve the example (requires a local server)
-cd examples/browser
+# Serve the examples (requires a local server)
+cd examples
 npx http-server . -c-1
 
-# Open http://localhost:8000 in your browser
+# Open examples in your browser:
+# http://localhost:8080/chat/          - Basic chat example
+# http://localhost:8080/agent/         - Agent workflow example
 ```
+
+#### Available Examples
+
+- **Chat Example** (`examples/chat/`): Basic text generation and function calling
+- **Agent Example** (`examples/agent/`): Advanced agent workflows with multiple step types
+  - Research Assistant workflow
+  - Decision Making workflow  
+  - Math Calculator workflow
+
+## 🧠 Agent Workflow Patterns
+
+### Step Types
+
+Agent workflows support four main step types:
+
+- **`think`**: Analysis, reasoning, and planning steps
+- **`act`**: Action steps that use tools to interact with external systems
+- **`decide`**: Decision-making steps with conditional logic
+- **`respond`**: Final response or summary generation
+
+### Common Workflow Patterns
+
+#### Sequential Workflow
+```javascript
+const sequentialWorkflow = {
+  steps: [
+    { id: 'step1', type: 'think', nextSteps: ['step2'] },
+    { id: 'step2', type: 'act', nextSteps: ['step3'] },
+    { id: 'step3', type: 'respond' }
+  ]
+};
+```
+
+#### Conditional Workflow
+```javascript
+const conditionalWorkflow = {
+  steps: [
+    { id: 'analyze', type: 'think', nextSteps: ['simple', 'complex'] },
+    { id: 'simple', type: 'respond', condition: 'simple_case' },
+    { id: 'complex', type: 'act', condition: 'complex_case', nextSteps: ['respond'] },
+    { id: 'respond', type: 'respond' }
+  ]
+};
+```
+
+#### Research & Analysis Pattern
+```javascript
+const researchPattern = {
+  steps: [
+    { id: 'plan', type: 'think', description: 'Plan research approach' },
+    { id: 'gather', type: 'act', tools: ['search', 'fetch'] },
+    { id: 'analyze', type: 'think', description: 'Analyze findings' },
+    { id: 'synthesize', type: 'respond', description: 'Synthesize insights' }
+  ]
+};
+```
+
+### Best Practices
+
+#### 1. Tool Design
+- Keep tools focused and single-purpose
+- Include comprehensive parameter schemas
+- Handle errors gracefully in implementations
+- Use descriptive names and descriptions
+
+#### 2. Workflow Structure
+- Limit workflows to 3-7 steps for optimal performance
+- Use clear, descriptive step IDs and descriptions
+- Set reasonable timeouts and iteration limits
+- Plan for error scenarios
+
+#### 3. Context Management
+- Pass relevant context between steps
+- Avoid overly long context that might exceed model limits
+- Use structured data in step metadata
+
+#### 4. Model Selection
+- Use planning models for strategic, forward-thinking steps
+- Use reasoning models for analysis and inference
+- Use function calling models for tool-heavy workflows
+- Consider using specialized models for domain-specific tasks
 
 ## 🔍 Logging & Debugging
 

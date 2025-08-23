@@ -141,6 +141,7 @@ export class AgentSessionImpl implements AgentSession {
         let nextStepId: string | undefined;
 
         for await (const result of this.executeStep(step, context)) {
+          logger.agent.debug('Step result', result);
           yield result;
           
           if (result.isComplete) {

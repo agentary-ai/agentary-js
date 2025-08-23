@@ -40,6 +40,7 @@ export const LogConfigs = {
     maxLogHistory: 2000,
     customFormatters: {
       'worker': (entry) => `🔧 [WORKER] ${entry.message} ${entry.data ? JSON.stringify(entry.data) : ''}`,
+      'worker-manager': (entry) => `🔧 [WORKER-MANAGER] ${entry.message} ${entry.data ? JSON.stringify(entry.data) : ''}`,
       'session': (entry) => `💬 [SESSION] ${entry.message} ${entry.data ? JSON.stringify(entry.data) : ''}`,
       'agent': (entry) => `🤖 [AGENT] ${entry.message} ${entry.data ? JSON.stringify(entry.data) : ''}`,
       'performance': (entry) => `⚡ [PERF] ${entry.message} ${entry.data ? JSON.stringify(entry.data) : ''}`,

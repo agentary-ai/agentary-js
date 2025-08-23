@@ -86,7 +86,7 @@ export class WorkerManager {
     let workerInstance = this.workers.get(taskType);
     
     if (!workerInstance) {
-      logger.worker.info('Creating new worker instance', { taskType });
+      logger.workerManager.info('Creating new worker instance', { taskType });
       workerInstance = this.createWorkerInstance(taskType);
       this.workers.set(taskType, workerInstance);
     }
@@ -95,7 +95,7 @@ export class WorkerManager {
       const model = this.getModelForTaskType(taskType);
       const initId = this.nextId(workerInstance);
       
-      logger.worker.debug('Initializing worker', { taskType, model, initId });
+      logger.workerManager.debug('Initializing worker', { taskType, model, initId });
       
       workerInstance.worker.postMessage({
         type: 'init',
@@ -111,9 +111,9 @@ export class WorkerManager {
       try {
         await this.once(workerInstance, initId);
         workerInstance.initialized = true;
-        logger.worker.info('Worker initialized successfully', { taskType, model });
+        logger.workerManager.info('Worker initialized successfully', { taskType, model });
       } catch (error: any) {
-        logger.worker.error('Worker initialization failed', { taskType, model, error: error.message });
+        logger.workerManager.error('Worker initialization failed', { taskType, model, error: error.message });
         throw error;
       }
     }
@@ -128,7 +128,7 @@ export class WorkerManager {
   }
 
   async disposeAll(): Promise<void> {
-    logger.worker.info('Disposing all workers', { workerCount: this.workers.size });
+    logger.workerManager.info('Disposing all workers', { workerCount: this.workers.size });
     
     const disposePromises: Promise<void>[] = [];
 
@@ -142,7 +142,7 @@ export class WorkerManager {
     await Promise.all(disposePromises);
     this.workers.clear();
     
-    logger.worker.info('All workers disposed successfully');
+    logger.workerManager.info('All workers disposed successfully');
   }
 
   private async disposeWorker(workerInstance: WorkerInstance): Promise<void> {
