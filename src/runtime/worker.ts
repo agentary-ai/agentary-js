@@ -55,10 +55,10 @@ function postDebug(requestId: string, message: string, data?: unknown) {
 
       isGenerating = true;
 
-      const { prompt, temperature, top_p, top_k, stop, tools, repetition_penalty } = msg.args as any;
+      const { prompt, system, temperature, top_p, top_k, stop, tools, repetition_penalty } = msg.args as any;
 
       const messages = [
-        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'system', content: system ?? '' },
         { role: 'user', content: prompt ?? '' },
       ];
 

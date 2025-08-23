@@ -42,9 +42,9 @@ export class WorkerManager {
       case 'function_calling':
         return models?.function_calling || models?.chat || 'onnx-community/Qwen2.5-0.5B-Instruct';
       case 'planning':
-        return models?.planning || models?.chat || 'onnx-community/gemma-3-270m-it-ONNX';
+        return models?.planning || models?.chat || 'onnx-community/Qwen2.5-0.5B-Instruct';
       case 'reasoning':
-        return models?.reasoning || models?.chat || 'onnx-community/gemma-3-270m-it-ONNX';
+        return models?.reasoning || models?.chat || 'onnx-community/Qwen2.5-0.5B-Instruct';
       case 'chat':
       default:
         return models?.chat || 'onnx-community/gemma-3-270m-it-ONNX';
@@ -52,8 +52,14 @@ export class WorkerManager {
   }
 
   private determineTaskType(args: GenerateArgs): TaskType {
-    // If tools are provided, use function_calling worker, otherwise use chat worker
-    return (args.tools && args.tools.length > 0) ? 'function_calling' : 'chat';
+    if (args.taskType) {
+      return args.taskType;
+    }
+    else if (args.tools && args.tools.length > 0) {
+      return 'function_calling';
+    } else {
+      return 'chat';
+    }
   }
 
   private nextId(workerInstance: WorkerInstance): string {
@@ -122,7 +128,6 @@ export class WorkerManager {
   }
 
   async getWorkerForGeneration(args: GenerateArgs): Promise<WorkerInstance> {
-    // TODO: Support worker selection for planning and reasoning
     const taskType = this.determineTaskType(args);
     return this.getWorkerForTask(taskType);
   }

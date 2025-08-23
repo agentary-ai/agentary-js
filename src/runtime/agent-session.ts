@@ -7,7 +7,8 @@ import {
   type Session,
   type CreateSessionArgs,
   type GenerateArgs,
-  type TokenStreamChunk
+  type TokenStreamChunk,
+  type TaskType
 } from '../types/api';
 import { createSession } from './session';
 import { logger } from '../utils/logger';
@@ -238,16 +239,20 @@ export class AgentSessionImpl implements AgentSession {
         metadata: { startTime: stepStartTime }
       };
 
-      // Create prompt based on step type
-      const prompt = this.buildStepPrompt(step, stepContext);
+      // Create system and user prompts
+      const systemPrompt = this.buildSystemPrompt(step, stepContext);
+      const userPrompt = this.buildUserPrompt(step, stepContext);
 
       let stepResult = '';
       let toolCallResult: any = undefined;
 
+      const taskType = this.getTaskTypeForStep(step);
+
       // Generate response
-      // TODO: Support worker selection for planning and reasoning
       for await (const chunk of this.session.generate({
-        prompt,
+        system: systemPrompt,
+        prompt: userPrompt,
+        taskType,
         tools: availableTools.map(tool => ({
           type: tool!.type,
           function: {
@@ -333,17 +338,56 @@ export class AgentSessionImpl implements AgentSession {
     }
   }
 
-  private buildStepPrompt(step: WorkflowStep, context: Record<string, any>): string {
-    let prompt = `
-      You are executing step "${step.id}" in a workflow.
-
-      Step Description: ${step.description}
-      Step Type: ${step.type}
-    `;
-
-    if (context.workflowName) {
-      prompt += `Workflow: ${context.workflowName}\n`;
+  private getTaskTypeForStep(step: WorkflowStep): TaskType {
+    switch (step.type) {
+      case 'think':
+        return 'reasoning';
+      case 'act':
+        return 'function_calling';
+      case 'decide':
+        return 'reasoning';
+      case 'respond':
+        return 'chat';
+      default:
+        return 'chat';
     }
+  }
+
+  private buildSystemPrompt(step: WorkflowStep, context: Record<string, any>): string {
+    let systemPrompt = `You are an AI agent executing workflows step by step.
+
+Current Workflow: ${context.workflowName || 'Unknown'}
+Current Step: ${step.id} (${step.type})
+Step Objective: ${step.description}
+
+`;
+
+    // Add available tools to system context
+    if (context.availableTools && context.availableTools.length > 0) {
+      systemPrompt += `Available Tools: ${context.availableTools.map((t: Tool) => t.function.name).join(', ')}\n\n`;
+    }
+
+    // Step-specific behavior instructions
+    switch (step.type) {
+      case 'think':
+        systemPrompt += `BEHAVIOR: You are in reasoning mode. Analyze the information carefully, think through the problem step by step, and provide clear logical reasoning. Do not use tools in this step.`;
+        break;
+      case 'act':
+        systemPrompt += `BEHAVIOR: You are in action mode. Use the available tools to accomplish the objective. Call tools with proper parameters to complete the required actions.`;
+        break;
+      case 'decide':
+        systemPrompt += `BEHAVIOR: You are in decision mode. Evaluate the available information, consider different options, and make a clear decision with reasoning.`;
+        break;
+      case 'respond':
+        systemPrompt += `BEHAVIOR: You are in response mode. Provide a clear, helpful, and comprehensive response to the user based on all previous work.`;
+        break;
+    }
+
+    return systemPrompt;
+  }
+
+  private buildUserPrompt(step: WorkflowStep, context: Record<string, any>): string {
+    let userPrompt = '';
 
     // Add context from previous steps
     const previousSteps = Object.keys(context).filter(key => 
@@ -352,34 +396,24 @@ export class AgentSessionImpl implements AgentSession {
     );
 
     if (previousSteps.length > 0) {
-      prompt += `\nPrevious steps:\n`;
+      userPrompt += `Previous work completed:\n`;
       for (const stepId of previousSteps) {
         const stepData = context[stepId];
-        prompt += `- ${stepId}: ${stepData.result}\n`;
+        userPrompt += `- ${stepId}: ${stepData.result}\n`;
       }
+      userPrompt += '\n';
     }
 
-    // Add available tools
-    if (context.availableTools && context.availableTools.length > 0) {
-      prompt += `\nAvailable tools: ${context.availableTools.map((t: Tool) => t.function.name).join(', ')}\n`;
+    // Extract the actual user task from step description
+    // This assumes the user task is appended to step descriptions
+    const userTaskMatch = step.description.match(/User's task: "(.+?)"/);
+    if (userTaskMatch) {
+      userPrompt += `User's original request: "${userTaskMatch[1]}"\n\n`;
     }
 
-    switch (step.type) {
-      case 'think':
-        prompt += `\nPlease think through this step and provide your analysis or reasoning.`;
-        break;
-      case 'act':
-        prompt += `\nPlease take action. Use the available tools if needed to complete this step.`;
-        break;
-      case 'decide':
-        prompt += `\nPlease make a decision based on the available information.`;
-        break;
-      case 'respond':
-        prompt += `\nPlease provide a response or summary for this step.`;
-        break;
-    }
+    userPrompt += `Please complete the current step: ${step.id}`;
 
-    return prompt;
+    return userPrompt;
   }
 
   private parseToolCall(content: string): { name: string; args: Record<string, any> } | null {

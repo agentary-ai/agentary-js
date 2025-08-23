@@ -39,7 +39,7 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
         logger.session.error('Generation error', msg.error, requestId);
         
       } else if (msg.type === 'debug') {
-        logger.session.debug('Worker debug message', msg.payload, requestId);
+        // logger.session.debug('Worker debug message', msg.payload, requestId);
       }
     };
 

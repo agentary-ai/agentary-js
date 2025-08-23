@@ -173,12 +173,12 @@
           <input 
             id="task" 
             type="text" 
-            placeholder="e.g., Calculate 15 * 23 + 47"
-            value="Calculate 15 * 23 + 47"
+            placeholder="Enter a math problem"
+            value="Ashley bought a big bag of candy to share with her friends. In total, there were 296 candies. She gave 105 candies to Marissa. She also gave 86 candies to Kayla. How many candies were left?"
           />
         </div>
         <div class="input-group">
-          <button id="runBtn">🚀 Run Agent</button>
+          <button id="runBtn">🚀 Run Math Agent</button>
           <button id="clearBtn">🗑️ Clear</button>
         </div>
       </div>
@@ -240,8 +240,8 @@
 
       // Simple 3-step workflow
       const mathWorkflow = {
-        id: 'simple-math',
-        name: 'Simple Math Solver',
+        id: 'math-problem-solver',
+        name: 'Math Problem Solver',
         description: 'Solves math problems step by step',
         maxIterations: 4,
         timeout: 20000,
@@ -249,7 +249,7 @@
           {
             id: 'understand',
             type: 'think',
-            description: 'Understand the math problem and identify what needs to be calculated',
+            description: 'Understand the math problem and identify the steps that must be taken to solve it',
             nextSteps: ['calculate']
           },
           {

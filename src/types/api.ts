@@ -20,6 +20,7 @@ export interface CreateSessionArgs {
 }
 
 export interface GenerateArgs {
+  taskType?: TaskType;
   prompt?: string;
   system?: string;
   tools?: unknown[];
