@@ -94,7 +94,7 @@ function postDebug(requestId: string, message: string, data?: unknown) {
       try {
         const generationOptions = {
           add_special_tokens: false,
-          max_new_tokens: 512,
+          max_new_tokens: 1024,
           do_sample: temperature !== undefined ? temperature > 0 : false,
           temperature,
           top_p,

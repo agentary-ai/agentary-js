@@ -249,20 +249,20 @@
           {
             id: 'understand',
             type: 'think',
-            description: 'Understand the math problem and identify the steps that must be taken to solve it',
+            description: 'Understand the math problem and identify the steps that must be taken to solve it.',
             nextSteps: ['calculate']
           },
           {
             id: 'calculate',
             type: 'act',
-            description: 'Use the calculator tool to solve the problem',
+            description: 'Use the calculator tool to calculate the answer, based on the steps outlined.',
             tools: ['calculate'],
             nextSteps: ['explain']
           },
           {
             id: 'explain',
             type: 'respond',
-            description: 'Explain the solution in a clear and friendly way'
+            description: 'Explain the solution in a clear and friendly way.'
           }
         ],
         tools: [calculatorTool]
@@ -349,7 +349,7 @@
             addStep(stepResult);
             
             if (stepResult.isComplete) {
-              console.log(`Completed step: ${stepResult.stepId}`);
+              // console.log(`Completed step: ${stepResult.stepId}`);
             }
             
             if (stepResult.error) {
