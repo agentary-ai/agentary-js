@@ -1,12 +1,6 @@
+import { DataType } from '@huggingface/transformers';
 import { type CreateSessionArgs, type GenerateArgs, type TaskType } from '../types/api';
 import { logger } from '../utils/logger';
-
-export interface WorkerConfig {
-  model: string;
-  engine?: string;
-  hfToken?: string;
-  quantization?: any;
-}
 
 export interface WorkerInstance {
   worker: Worker;
@@ -14,6 +8,11 @@ export interface WorkerInstance {
   initialized: boolean;
   disposed: boolean;
   inflightId: number;
+}
+
+export interface Model {
+  name: string;
+  quantization: DataType;
 }
 
 export class WorkerManager {
@@ -35,19 +34,18 @@ export class WorkerManager {
     };
   }
 
-  private getModelForTaskType(taskType: TaskType): string {
+  private getModelForTaskType(taskType: TaskType): Model {
     const models = this.args.models;
-    
     switch (taskType) {
       case 'function_calling':
-        return models?.function_calling || models?.chat || 'onnx-community/Qwen2.5-0.5B-Instruct';
+        return models?.function_calling || { name: 'onnx-community/Qwen3-0.6B-ONNX', quantization: 'q4f16' };
       case 'planning':
-        return models?.planning || models?.chat || 'onnx-community/Qwen2.5-0.5B-Instruct';
+        return models?.planning || { name: 'onnx-community/Qwen3-0.6B-ONNX', quantization: 'q4f16' };
       case 'reasoning':
-        return models?.reasoning || models?.chat || 'onnx-community/Qwen2.5-0.5B-Instruct';
+        return models?.reasoning || { name: 'onnx-community/Qwen3-0.6B-ONNX', quantization: 'q4f16' };
       case 'chat':
       default:
-        return models?.chat || 'onnx-community/gemma-3-270m-it-ONNX';
+        return models?.chat || { name: 'onnx-community/Qwen3-0.6B-ONNX', quantization: 'q4f16' };
     }
   }
 
@@ -99,18 +97,20 @@ export class WorkerManager {
 
     if (!workerInstance.initialized && !workerInstance.disposed) {
       const model = this.getModelForTaskType(taskType);
+      logger.workerManager.debug('Model selected for task type', { taskType, model });
+
       const initId = this.nextId(workerInstance);
       
       logger.workerManager.debug('Initializing worker', { taskType, model, initId });
-      
+
       workerInstance.worker.postMessage({
         type: 'init',
         requestId: initId,
         args: {
-          model,
+          model: model.name,
           engine: this.args.engine,
           hfToken: this.args.hfToken,
-          quantization: this.args.quantization,
+          quantization: model.quantization,
         },
       });
       

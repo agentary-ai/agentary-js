@@ -354,13 +354,13 @@ export class AgentSessionImpl implements AgentSession {
   }
 
   private buildSystemPrompt(step: WorkflowStep, context: Record<string, any>): string {
-    let systemPrompt = `You are an AI agent executing workflows step by step.
+    let systemPrompt = `
+      You are an AI agent executing workflows step by step.
 
-Current Workflow: ${context.workflowName || 'Unknown'}
-Current Step: ${step.id} (${step.type})
-Step Objective: ${step.description}
-
-`;
+      Current Workflow: ${context.workflowName || 'Unknown'}
+      Current Step: ${step.id} (${step.type})
+      Step Objective: ${step.description}
+    `;
 
     // Add available tools to system context
     if (context.availableTools && context.availableTools.length > 0) {
@@ -475,7 +475,7 @@ Step Objective: ${step.description}
   }
 }
 
-export async function createAgentSession(args: CreateSessionArgs): Promise<AgentSession> {
+export async function createAgentSession(args: CreateSessionArgs = {}): Promise<AgentSession> {
   const session = await createSession(args);
   return new AgentSessionImpl(session);
 }

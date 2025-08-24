@@ -5,10 +5,22 @@ export type TaskType = 'chat' | 'function_calling' | 'planning' | 'reasoning';
 
 export interface CreateSessionArgs {
   models?: {
-    chat?: string;
-    function_calling?: string;
-    planning?: string;
-    reasoning?: string;
+    chat?: {
+      name: string;
+      quantization: DataType;
+    };
+    function_calling?: {
+      name: string;
+      quantization: DataType;
+    };
+    planning?: {
+      name: string;
+      quantization: DataType;
+    };
+    reasoning?: {
+      name: string;
+      quantization: DataType;
+    };
   }
   adapters?: string[];
   ctx?: number;
@@ -16,7 +28,6 @@ export interface CreateSessionArgs {
   // Optional: Hugging Face access token for private models when using the
   // `hf:` model scheme. Ignored otherwise.
   hfToken?: string;
-  quantization?: DataType;
 }
 
 export interface GenerateArgs {

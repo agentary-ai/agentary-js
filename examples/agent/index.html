@@ -329,13 +329,7 @@
 
         try {
           // Create agent session
-          const agent = await createAgentSession({
-            models: {
-              chat: 'onnx-community/gemma-3-270m-it-ONNX',
-              function_calling: 'onnx-community/Qwen2.5-0.5B-Instruct'
-            },
-            quantization: 'q4'
-          });
+          const agent = await createAgentSession();
 
           updateStatus('Agent running...', 'running');
 

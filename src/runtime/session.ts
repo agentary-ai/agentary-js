@@ -2,7 +2,7 @@ import { type CreateSessionArgs, type GenerateArgs, type Session, type TokenStre
 import { WorkerManager, type WorkerInstance } from './worker-manager';
 import { logger } from '../utils/logger';
 
-export async function createSession(args: CreateSessionArgs): Promise<Session> {
+export async function createSession(args: CreateSessionArgs = {}): Promise<Session> {
   const workerManager = new WorkerManager(args);
   let disposed = false;
 
