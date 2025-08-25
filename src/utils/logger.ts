@@ -92,16 +92,18 @@ class Logger {
   }
 
   private isColorsSupported(): boolean {
-    // Disable colors in workers or when not supported
-    if (typeof window === 'undefined' && typeof WorkerGlobalScope !== 'undefined') {
-      return false;
-    }
-    
-    // Browser environment - check for dev tools
+    // Check if we're in a browser environment (main thread or worker)
     if (typeof window !== 'undefined') {
-      return true; // Modern browsers support colors in console
+      return true; // Main browser thread supports colors
     }
     
+    // Check if we're in a web worker
+    if (typeof WorkerGlobalScope !== 'undefined' && typeof self !== 'undefined') {
+      return true; // Web workers also support console colors in modern browsers
+    }
+    
+    // Node.js or other environments - could check for terminal color support here
+    // For now, disable colors in non-browser environments
     return false;
   }
 
@@ -290,6 +292,17 @@ class Logger {
       this.warn('agent', message, data, context !== undefined ? { context } : undefined),
     error: (message: string, data?: unknown, context?: Record<string, unknown>) => 
       this.error('agent', message, data, context !== undefined ? { context } : undefined),
+  };
+
+  workerManager = {
+    debug: (message: string, data?: unknown, requestId?: string) => 
+      this.debug('worker-manager', message, data, requestId !== undefined ? { requestId } : undefined),
+    info: (message: string, data?: unknown, requestId?: string) => 
+      this.info('worker-manager', message, data, requestId !== undefined ? { requestId } : undefined),
+    warn: (message: string, data?: unknown, requestId?: string) => 
+      this.warn('worker-manager', message, data, requestId !== undefined ? { requestId } : undefined),
+    error: (message: string, data?: unknown, requestId?: string) => 
+      this.error('worker-manager', message, data, requestId !== undefined ? { requestId } : undefined),
   };
 
   performance = {

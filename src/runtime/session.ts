@@ -2,7 +2,7 @@ import { type CreateSessionArgs, type GenerateArgs, type Session, type TokenStre
 import { WorkerManager, type WorkerInstance } from './worker-manager';
 import { logger } from '../utils/logger';
 
-export async function createSession(args: CreateSessionArgs): Promise<Session> {
+export async function createSession(args: CreateSessionArgs = {}): Promise<Session> {
   const workerManager = new WorkerManager(args);
   let disposed = false;
 
@@ -39,7 +39,7 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
         logger.session.error('Generation error', msg.error, requestId);
         
       } else if (msg.type === 'debug') {
-        logger.session.debug('Worker debug message', msg.payload, requestId);
+        // logger.session.debug('Worker debug message', msg.payload, requestId);
       }
     };
 

@@ -3,863 +3,389 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Agentary JS – Task Management Assistant</title>
+    <title>Simple Agent Workflow Demo</title>
     <style>
-      * { box-sizing: border-box; }
       body { 
-        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; 
-        margin: 0;
-        padding: 24px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        min-height: 100vh;
-        color: #333;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+        margin: 40px; 
+        background: #f8fafc;
+        color: #334155;
       }
-      
-      .header {
-        text-align: center;
-        margin-bottom: 32px;
-        color: white;
-      }
-      
-      .header h1 {
-        font-size: 2.5rem;
-        margin: 0 0 8px 0;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-      }
-      
-      .header p {
-        font-size: 1.1rem;
-        opacity: 0.9;
-        margin: 0;
-      }
-      
       .container { 
-        max-width: 1400px;
-        margin: 0 auto;
-        display: grid; 
-        grid-template-columns: 400px 1fr; 
-        gap: 24px; 
-      }
-      
-      .panel { 
-        background: white;
+        max-width: 800px; 
+        margin: 0 auto; 
+        background: white; 
         border-radius: 12px; 
-        padding: 24px; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.08);
-        border: 1px solid rgba(255,255,255,0.2);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        padding: 32px;
       }
-      
-      .control-panel {
-        height: fit-content;
-        position: sticky;
-        top: 24px;
+      h1 { 
+        color: #1e293b; 
+        text-align: center; 
+        margin-bottom: 8px;
       }
-      
-      .step-result {
-        margin: 12px 0;
-        padding: 16px;
+      .subtitle {
+        text-align: center;
+        color: #64748b;
+        margin-bottom: 32px;
+        font-size: 16px;
+      }
+      .input-section {
+        margin-bottom: 24px;
+        padding: 20px;
+        background: #f1f5f9;
         border-radius: 8px;
-        border-left: 4px solid #ccc;
-        animation: slideIn 0.3s ease-out;
       }
-      
-      @keyframes slideIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
+      .input-group {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 16px;
       }
-      
-      .step-thinking { border-left-color: #3b82f6; background: #eff6ff; }
-      .step-tool_call { border-left-color: #f59e0b; background: #fffbeb; }
-      .step-decision { border-left-color: #8b5cf6; background: #f3e8ff; }
-      .step-response { border-left-color: #10b981; background: #ecfdf5; }
-      .step-error { border-left-color: #ef4444; background: #fef2f2; }
-      
-      .row { margin-bottom: 16px; }
-      
-      input, button, select, textarea { 
-        font-size: 14px; 
-        padding: 12px 16px;
-        border: 2px solid #e5e7eb;
-        border-radius: 8px; 
-        transition: all 0.2s;
+      label {
+        min-width: 100px;
+        font-weight: 500;
+        color: #475569;
       }
-      
-      input:focus, select:focus, textarea:focus {
+      input {
+        flex: 1;
+        padding: 8px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 14px;
+      }
+      input:focus {
         outline: none;
         border-color: #3b82f6;
         box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
       }
-      
-      button { 
-        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-        color: white; 
-        border: none; 
-        cursor: pointer; 
-        font-weight: 600;
-        transition: all 0.2s;
-      }
-      
-      button:hover:not(:disabled) { 
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-      }
-      
-      button:disabled { 
-        background: #9ca3af; 
-        cursor: not-allowed;
-        transform: none;
-        box-shadow: none;
-      }
-      
-      .btn-secondary {
-        background: linear-gradient(135deg, #6b7280, #374151);
-      }
-      
-      .btn-danger {
-        background: linear-gradient(135deg, #ef4444, #dc2626);
-      }
-      
-      label { 
-        display: block;
-        font-weight: 600;
-        margin-bottom: 6px;
-        color: #374151;
-      }
-      
-      input[type="text"], input[type="datetime-local"], select {
-        width: 100%;
-      }
-      
-      .task-list {
-        background: #f8fafc;
-        border-radius: 8px;
-        padding: 16px;
-        margin-top: 16px;
-        border: 1px solid #e2e8f0;
-      }
-      
-      .task-item {
-        background: white;
-        padding: 12px;
-        margin: 8px 0;
-        border-radius: 6px;
-        border-left: 4px solid #10b981;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        display: flex; 
-        justify-content: space-between; 
-        align-items: center; 
-      }
-      
-      .task-overdue {
-        border-left-color: #ef4444;
-        background: #fef2f2;
-      }
-      
-      .task-upcoming {
-        border-left-color: #f59e0b;
-        background: #fffbeb;
-      }
-      
-      .task-info {
-        flex: 1;
-      }
-      
-      .task-title {
-        font-weight: 600;
-        color: #1f2937;
-      }
-      
-      .task-due {
-        font-size: 12px;
-        color: #6b7280;
-        margin-top: 4px;
-      }
-      
-      .task-actions {
-        display: flex;
-        gap: 8px;
-      }
-      
-      .task-actions button {
-        padding: 6px 12px;
-        font-size: 12px;
-        min-width: auto;
-      }
-      
-      .status-indicator {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        display: inline-block;
-        margin-right: 8px;
-      }
-      
-      .status-online { background: #10b981; }
-      .status-working { background: #f59e0b; }
-      .status-offline { background: #ef4444; }
-      
-      h2 { 
-        margin-top: 0; 
-        color: #1f2937;
-        font-size: 1.5rem;
-        margin-bottom: 20px;
-      }
-      
-      h3 { 
-        color: #374151;
-        font-size: 1.1rem;
-        margin: 20px 0 12px 0;
-      }
-      
-      .workflow-output {
-        min-height: 400px;
-        max-height: 80vh;
-        overflow-y: auto; 
-        padding-right: 8px;
-      }
-      
-      .workflow-output::-webkit-scrollbar {
-        width: 6px;
-      }
-      
-      .workflow-output::-webkit-scrollbar-track {
-        background: #f1f5f9;
-        border-radius: 3px;
-      }
-      
-      .workflow-output::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
-        border-radius: 3px;
-      }
-      
-      .workflow-output::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
-      }
-      
-      .feature-grid {
-        display: grid; 
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
-        gap: 12px; 
-        margin-top: 16px;
-      }
-      
-      .feature-card {
-        background: #f8fafc; 
-        padding: 12px;
-        border-radius: 6px; 
-        border: 1px solid #e2e8f0;
-        text-align: center;
-        font-size: 13px;
-        color: #475569;
-      }
-      
-      .completion-message {
-        background: linear-gradient(135deg, #10b981, #059669);
+      button {
+        background: #3b82f6;
         color: white;
-        padding: 16px;
-        border-radius: 8px;
-        margin: 16px 0;
-        font-weight: 600;
-        text-align: center;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: background 0.2s;
       }
-      
-      @media (max-width: 1024px) {
-        .container {
-          grid-template-columns: 1fr;
-          gap: 16px;
-        }
-        
-        .control-panel {
-          position: static;
-        }
-        
-        body {
-          padding: 16px;
-        }
+      button:hover:not(:disabled) {
+        background: #2563eb;
+      }
+      button:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+      }
+      .output-section {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        min-height: 300px;
+        overflow: hidden;
+      }
+      .output-header {
+        background: #1e293b;
+        color: white;
+        padding: 12px 16px;
+        font-weight: 500;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .status {
+        font-size: 12px;
+        padding: 2px 8px;
+        border-radius: 12px;
+        background: #374151;
+      }
+      .status.running {
+        background: #059669;
+        animation: pulse 2s infinite;
+      }
+      .status.completed {
+        background: #059669;
+      }
+      .status.error {
+        background: #dc2626;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+      .output-content {
+        padding: 16px;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      .step {
+        margin-bottom: 16px;
+        padding: 12px;
+        border-radius: 6px;
+        border-left: 4px solid #e2e8f0;
+      }
+      .step.thinking {
+        background: #eff6ff;
+        border-left-color: #3b82f6;
+      }
+      .step.tool_call {
+        background: #fff7ed;
+        border-left-color: #f59e0b;
+      }
+      .step.response {
+        background: #ecfdf5;
+        border-left-color: #10b981;
+      }
+      .step.error {
+        background: #fef2f2;
+        border-left-color: #ef4444;
+      }
+      .step-header {
+        font-weight: 600;
+        margin-bottom: 4px;
+        font-size: 14px;
+      }
+      .step-content {
+        color: #4b5563;
+        line-height: 1.5;
+      }
+      .tool-info {
+        background: rgba(0, 0, 0, 0.05);
+        padding: 8px;
+        border-radius: 4px;
+        margin-top: 8px;
+        font-family: monospace;
+        font-size: 12px;
+      }
+      .empty-state {
+        text-align: center;
+        color: #9ca3af;
+        padding: 60px 20px;
       }
     </style>
   </head>
   <body>
-    <div class="header">
-      <h1>🤖 Task Management Assistant</h1>
-      <p>An intelligent agent that helps you organize your work and boost productivity</p>
-    </div>
-    
     <div class="container">
-      <!-- Control Panel -->
-      <div class="panel control-panel">
-        <h2>
-          <span class="status-indicator status-offline" id="agentStatus"></span>
-          Agent Control
-        </h2>
-        
-        <div class="row">
-          <label>Ask your assistant:</label>
+      <h1>🤖 Simple Agent Workflow</h1>
+      <p class="subtitle">Watch an AI agent solve problems step-by-step</p>
+      
+      <div class="input-section">
+        <div class="input-group">
+          <label for="task">Task:</label>
           <input 
-            id="taskInput" 
+            id="task" 
             type="text" 
-            placeholder="e.g., Add a task to buy groceries by tomorrow"
-            value="Create a task to finish the quarterly report by Friday at 5 PM" 
+            placeholder="Enter a math problem"
+            value="Ashley bought a big bag of candy to share with her friends. In total, there were 296 candies. She gave 105 candies to Marissa. She also gave 86 candies to Kayla. How many candies were left?"
           />
         </div>
-        
-        <div class="row">
-          <button id="runTask">🚀 Ask Assistant</button>
-          <button id="clearOutput" class="btn-secondary">🗑️ Clear</button>
-            </div>
-        
-        <h3>Quick Actions</h3>
-        <div class="feature-grid">
-          <button class="feature-card" onclick="setQuickTask('Show my tasks for today')">
-            📅 Today's Tasks
-          </button>
-          <button class="feature-card" onclick="setQuickTask('Add reminder to drink water every 2 hours')">
-            ⏰ Set Reminder
-          </button>
-          <button class="feature-card" onclick="setQuickTask('What tasks are overdue?')">
-            ⚠️ Overdue Items
-          </button>
-          <button class="feature-card" onclick="setQuickTask('Schedule a meeting for next Tuesday at 2 PM')">
-            📝 Schedule Meeting
-          </button>
-          <button class="feature-card" onclick="setQuickTask('Show my productivity stats')">
-            📊 Productivity
-          </button>
-          <button class="feature-card" onclick="setQuickTask('Create a backup of my tasks')">
-            💾 Backup Data
-          </button>
-          </div>
-          
-        <h3>Current Tasks</h3>
-        <div id="currentTasks" class="task-list">
-          <p style="color: #6b7280; text-align: center; margin: 0;">
-            No tasks yet. Ask your assistant to create some!
-          </p>
-          </div>
-          
-        <h3>Browser Features</h3>
-        <div class="feature-grid">
-          <div class="feature-card">🔔 Notifications</div>
-          <div class="feature-card">💾 Local Storage</div>
-          <div class="feature-card">📍 Geolocation</div>
-          <div class="feature-card">📱 Device Info</div>
-          <div class="feature-card">⏰ Timers</div>
-          <div class="feature-card">📊 Analytics</div>
+        <div class="input-group">
+          <button id="runBtn">🚀 Run Math Agent</button>
+          <button id="clearBtn">🗑️ Clear</button>
         </div>
       </div>
-      
-      <!-- Output Panel -->
-      <div class="panel">
-        <h2>🧠 Assistant Workflow</h2>
-        <div id="workflowOutput" class="workflow-output">
-          <div style="text-align: center; color: #6b7280; padding: 40px 20px;">
-            <p>👋 Welcome! I'm your task management assistant.</p>
-            <p>I can help you:</p>
-            <ul style="text-align: left; display: inline-block; margin: 16px 0;">
-              <li>Create and organize tasks with smart scheduling</li>
-              <li>Set reminders with browser notifications</li>
-              <li>Track deadlines and productivity metrics</li>
-              <li>Backup and sync your data locally</li>
-              <li>Provide location-based task suggestions</li>
-            </ul>
-            <p><strong>Ask me anything to get started!</strong></p>
+
+      <div class="output-section">
+        <div class="output-header">
+          <span>Agent Output</span>
+          <span id="status" class="status">Ready</span>
+        </div>
+        <div class="output-content" id="output">
+          <div class="empty-state">
+            <p>Enter a task above and click "Run Agent" to see the AI work step-by-step!</p>
+            <p style="font-size: 14px; margin-top: 16px;">
+              Try: "Calculate 25 * 4 + 10", "What's 50% of 200?", or "Add 15 + 27 + 33"
+            </p>
           </div>
         </div>
       </div>
     </div>
 
     <script type="module">
-      import { createAgentSession, enableDebuggingMode } from '../../dist/index.js';
-      
-      // Enable debugging mode for development
-      enableDebuggingMode();
+      import { createAgentSession } from '../../dist/index.js';
 
-      // DOM Elements
-      const taskInput = document.getElementById('taskInput');
-      const workflowOutput = document.getElementById('workflowOutput');
-      const runButton = document.getElementById('runTask');
-      const clearButton = document.getElementById('clearOutput');
-      const agentStatus = document.getElementById('agentStatus');
-      const currentTasks = document.getElementById('currentTasks');
+      const taskInput = document.getElementById('task');
+      const runBtn = document.getElementById('runBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      const output = document.getElementById('output');
+      const status = document.getElementById('status');
 
-      // Task Management System
-      class TaskManager {
-        constructor() {
-          this.tasks = this.loadTasks();
-          this.reminders = new Map();
-          this.renderTasks();
-        }
-
-        loadTasks() {
-          try {
-            return JSON.parse(localStorage.getItem('agentary_tasks') || '[]');
-          } catch {
-            return [];
-          }
-        }
-
-        saveTasks() {
-          localStorage.setItem('agentary_tasks', JSON.stringify(this.tasks));
-          this.renderTasks();
-        }
-
-        addTask(title, dueDate = null, priority = 'medium') {
-          const task = {
-            id: Date.now().toString(),
-            title,
-            dueDate: dueDate ? new Date(dueDate).toISOString() : null,
-            priority,
-            completed: false,
-            createdAt: new Date().toISOString()
-          };
-          this.tasks.push(task);
-          this.saveTasks();
-          return task;
-        }
-
-        completeTask(id) {
-          const task = this.tasks.find(t => t.id === id);
-          if (task) {
-            task.completed = true;
-            task.completedAt = new Date().toISOString();
-            this.saveTasks();
-          }
-          return task;
-        }
-
-        deleteTask(id) {
-          this.tasks = this.tasks.filter(t => t.id !== id);
-          this.saveTasks();
-        }
-
-        getOverdueTasks() {
-          const now = new Date();
-          return this.tasks.filter(task => 
-            !task.completed && 
-            task.dueDate && 
-            new Date(task.dueDate) < now
-          );
-        }
-
-        getTodaysTasks() {
-          const today = new Date().toDateString();
-          return this.tasks.filter(task => 
-            !task.completed && 
-            task.dueDate && 
-            new Date(task.dueDate).toDateString() === today
-          );
-        }
-
-        renderTasks() {
-          if (this.tasks.length === 0) {
-            currentTasks.innerHTML = '<p style="color: #6b7280; text-align: center; margin: 0;">No tasks yet. Ask your assistant to create some!</p>';
-            return;
-          }
-
-          const activeTasks = this.tasks.filter(t => !t.completed).slice(0, 5);
-          const now = new Date();
-
-          currentTasks.innerHTML = activeTasks.map(task => {
-            const dueDate = task.dueDate ? new Date(task.dueDate) : null;
-            const isOverdue = dueDate && dueDate < now;
-            const isUpcoming = dueDate && dueDate > now && dueDate < new Date(now.getTime() + 24 * 60 * 60 * 1000);
-            
-            let className = 'task-item';
-            if (isOverdue) className += ' task-overdue';
-            else if (isUpcoming) className += ' task-upcoming';
-
-            return `
-              <div class="${className}">
-                <div class="task-info">
-                  <div class="task-title">${task.title}</div>
-                  ${dueDate ? `<div class="task-due">Due: ${dueDate.toLocaleDateString()} ${dueDate.toLocaleTimeString()}</div>` : ''}
-                </div>
-                <div class="task-actions">
-                  <button onclick="taskManager.completeTask('${task.id}')" class="btn-secondary">✓</button>
-                  <button onclick="taskManager.deleteTask('${task.id}')" class="btn-danger">✕</button>
-                </div>
-              </div>
-            `;
-          }).join('');
-        }
-      }
-
-      // Browser API Tools
-      const browserTools = [
-        {
-          type: 'function',
-          function: {
-            name: 'create_task',
-            description: 'Create a new task with title and optional due date',
-            parameters: {
-              type: 'object',
-              properties: {
-                title: { type: 'string', description: 'Task title or description' },
-                dueDate: { type: 'string', description: 'Due date in ISO format (optional)' },
-                priority: { type: 'string', enum: ['low', 'medium', 'high'], description: 'Task priority' }
-              },
-              required: ['title']
-            },
-            implementation: async (title, dueDate, priority = 'medium') => {
-              const task = taskManager.addTask(title, dueDate, priority);
-              return `✅ Created task: "${title}"${dueDate ? ` (Due: ${new Date(dueDate).toLocaleDateString()})` : ''}`;
-            }
-          }
-        },
-        
-        {
-          type: 'function',
-          function: {
-            name: 'show_tasks',
-            description: 'Show current tasks, optionally filtered by status or date',
-            parameters: {
-              type: 'object',
-              properties: {
-                filter: { type: 'string', enum: ['all', 'today', 'overdue', 'completed'], description: 'Filter type' }
+      // Simple calculator tool
+      const calculatorTool = {
+        type: 'function',
+        function: {
+          name: 'calculate',
+          description: 'Perform mathematical calculations',
+          parameters: {
+            type: 'object',
+            properties: {
+              expression: {
+                type: 'string',
+                description: 'Mathematical expression to evaluate (e.g., "15 * 23 + 47")'
               }
             },
-            implementation: async (filter = 'all') => {
-              let tasks;
-              switch (filter) {
-                case 'today': tasks = taskManager.getTodaysTasks(); break;
-                case 'overdue': tasks = taskManager.getOverdueTasks(); break;
-                case 'completed': tasks = taskManager.tasks.filter(t => t.completed); break;
-                default: tasks = taskManager.tasks.filter(t => !t.completed);
-              }
-              
-              if (tasks.length === 0) {
-                return `No ${filter} tasks found.`;
-              }
-              
-              return `📋 ${filter.charAt(0).toUpperCase() + filter.slice(1)} tasks (${tasks.length}):\n` +
-                tasks.map((task, i) => `${i + 1}. ${task.title}${task.dueDate ? ` (Due: ${new Date(task.dueDate).toLocaleDateString()})` : ''}`).join('\n');
-            }
-          }
-        },
-
-        {
-          type: 'function',
-          function: {
-            name: 'send_notification',
-            description: 'Send a browser notification to the user',
-            parameters: {
-              type: 'object',
-              properties: {
-                title: { type: 'string', description: 'Notification title' },
-                body: { type: 'string', description: 'Notification body text' }
-              },
-              required: ['title', 'body']
-            },
-            implementation: async (title, body) => {
-              if ('Notification' in window) {
-              if (Notification.permission === 'granted') {
-                  new Notification(title, { body, icon: '🤖' });
-                  return `🔔 Notification sent: "${title}"`;
-              } else if (Notification.permission !== 'denied') {
-                const permission = await Notification.requestPermission();
-                if (permission === 'granted') {
-                    new Notification(title, { body, icon: '🤖' });
-                    return `🔔 Notification permission granted and sent: "${title}"`;
-                  }
-                }
-              }
-              return `⚠️ Notifications not available or permission denied`;
-            }
-          }
-        },
-
-        {
-          type: 'function',
-          function: {
-            name: 'get_location',
-            description: 'Get user location for location-based reminders',
-            parameters: {
-              type: 'object',
-              properties: {
-                accuracy: { type: 'string', enum: ['high', 'low'], description: 'GPS accuracy requirement' }
-              }
-            },
-            implementation: async (accuracy = 'low') => {
-              if (!navigator.geolocation) {
-                return '❌ Geolocation not supported by this browser';
-                  }
-
-                  try {
-                const position = await new Promise((resolve, reject) => {
-                  navigator.geolocation.getCurrentPosition(
-                    resolve,
-                    reject,
-                    { enableHighAccuracy: accuracy === 'high', timeout: 5000 }
-                  );
-                });
-                
-                const { latitude, longitude } = position.coords;
-                return `📍 Location: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-                  } catch (error) {
-                return `❌ Location access denied or failed: ${error.message}`;
-                  }
-            }
-          }
-        },
-
-        {
-          type: 'function',
-          function: {
-            name: 'get_device_info',
-            description: 'Get information about the user device and environment',
-            parameters: {
-              type: 'object',
-              properties: {}
-            },
-            implementation: async () => {
-              const info = {
-                platform: navigator.platform,
-                userAgent: navigator.userAgent.split(' ').slice(-2).join(' '),
-                language: navigator.language,
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                screen: `${screen.width}x${screen.height}`,
-                viewport: `${window.innerWidth}x${window.innerHeight}`,
-                online: navigator.onLine,
-                cookiesEnabled: navigator.cookieEnabled
-              };
-              
-              return `📱 Device Info:\n${Object.entries(info).map(([k, v]) => `${k}: ${v}`).join('\n')}`;
-            }
-          }
-        },
-
-            {
-              type: 'function',
-              function: {
-            name: 'backup_tasks',
-            description: 'Create a backup of all tasks and data',
-                parameters: {
-                  type: 'object',
-              properties: {}
-            },
-            implementation: async () => {
-              const backup = {
-                tasks: taskManager.tasks,
-                created: new Date().toISOString(),
-                version: '1.0'
-              };
-              
-              const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `tasks-backup-${new Date().toISOString().split('T')[0]}.json`;
-              a.click();
-              URL.revokeObjectURL(url);
-              
-              return `💾 Backup created and downloaded (${taskManager.tasks.length} tasks)`;
-            }
-          }
-        },
-
-            {
-              type: 'function',
-              function: {
-            name: 'productivity_stats',
-            description: 'Generate productivity statistics and insights',
-                parameters: {
-                  type: 'object',
-              properties: {}
-            },
-            implementation: async () => {
-              const total = taskManager.tasks.length;
-              const completed = taskManager.tasks.filter(t => t.completed).length;
-              const overdue = taskManager.getOverdueTasks().length;
-              const today = taskManager.getTodaysTasks().length;
-              
-              const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-              
-              return `📊 Productivity Stats:
-• Total tasks: ${total}
-• Completed: ${completed} (${completionRate}%)
-• Today: ${today}
-• Overdue: ${overdue}
-• Completion rate: ${completionRate}%`;
+            required: ['expression']
+          },
+          implementation: (expression) => {
+            try {
+              // Simple safe evaluation for demo purposes
+              // In production, use a proper math parser
+              const sanitized = expression.replace(/[^0-9+\-*/(). ]/g, '');
+              const result = eval(sanitized);
+              return `${expression} = ${result}`;
+            } catch (error) {
+              return `Error: Could not calculate "${expression}"`;
             }
           }
         }
-      ];
+      };
 
-      // Initialize Task Manager
-      const taskManager = new TaskManager();
-      window.taskManager = taskManager; // Make accessible globally
-
-      // Task Management Workflow
-      const taskWorkflow = {
-        id: 'task-management',
-        name: 'Task Management Assistant',
-        description: 'Intelligent task management with browser integration',
+      // Simple 3-step workflow
+      const mathWorkflow = {
+        id: 'math-problem-solver',
+        name: 'Math Problem Solver',
+        description: 'Solves math problems step by step',
         maxIterations: 4,
-        timeout: 30000,
-        tools: browserTools,
-          steps: [
-            {
-            id: 'understand-request',
-              type: 'think',
-            description: 'Understand what the user wants to do with their tasks',
-            nextSteps: ['take-action']
-            },
-            {
-            id: 'take-action',
-              type: 'act',
-            description: 'Take appropriate action using available tools',
-            tools: browserTools.map(t => t.function.name),
-            nextSteps: ['provide-feedback']
+        timeout: 50000,
+        steps: [
+          {
+            id: 'understand',
+            type: 'think',
+            description: 'Understand the math problem and identify the steps that must be taken to solve it.',
+            nextSteps: ['calculate']
           },
           {
-            id: 'provide-feedback',
-              type: 'respond',
-            description: 'Provide helpful feedback and suggestions to the user'
+            id: 'calculate',
+            type: 'act',
+            description: 'Use the calculator tool to calculate the answer, based on the steps outlined.',
+            tools: ['calculate'],
+            nextSteps: ['explain']
+          },
+          {
+            id: 'explain',
+            type: 'respond',
+            description: 'Explain the solution in a clear and friendly way.'
           }
-        ]
+        ],
+        tools: [calculatorTool]
       };
 
-      // Helper Functions
-      window.setQuickTask = (task) => {
-        taskInput.value = task;
-      };
+      function updateStatus(text, className = '') {
+        status.textContent = text;
+        status.className = `status ${className}`;
+      }
 
-      function formatStepResult(result) {
-        const div = document.createElement('div');
-        div.className = `step-result step-${result.type}`;
+      function addStep(stepResult) {
+        const stepDiv = document.createElement('div');
+        stepDiv.className = `step ${stepResult.type}`;
         
-        let content = `<strong>[${result.type.toUpperCase()}] ${result.stepId}</strong><br/>`;
-        content += result.content.replace(/\n/g, '<br/>');
+        const header = document.createElement('div');
+        header.className = 'step-header';
         
-        if (result.toolCall) {
-          content += `<br/><em>🔧 ${result.toolCall.name}(${JSON.stringify(result.toolCall.args)})</em>`;
-          if (result.toolCall.result) {
-            content += `<br/><em>✅ ${result.toolCall.result}</em>`;
+        const typeIcons = {
+          thinking: '🤔',
+          tool_call: '🔧',
+          response: '💬',
+          error: '❌'
+        };
+        
+        header.textContent = `${typeIcons[stepResult.type] || '•'} Step: ${stepResult.stepId}`;
+        
+        const content = document.createElement('div');
+        content.className = 'step-content';
+        content.textContent = stepResult.content;
+        
+        stepDiv.appendChild(header);
+        stepDiv.appendChild(content);
+        
+        // Add tool info if present
+        if (stepResult.toolCall) {
+          const toolInfo = document.createElement('div');
+          toolInfo.className = 'tool-info';
+          toolInfo.textContent = `🔧 ${stepResult.toolCall.name}("${stepResult.toolCall.args.expression || ''}")`;
+          if (stepResult.toolCall.result) {
+            toolInfo.textContent += ` → ${stepResult.toolCall.result}`;
           }
+          stepDiv.appendChild(toolInfo);
         }
         
-        if (result.error) {
-          content += `<br/><span style="color: #ef4444;">❌ ${result.error}</span>`;
-        }
-        
-        if (result.metadata?.duration) {
-          content += `<br/><small>⏱️ ${result.metadata.duration}ms</small>`;
-        }
-        
-        div.innerHTML = content;
-        return div;
+        output.appendChild(stepDiv);
+        output.scrollTop = output.scrollHeight;
       }
 
-      function updateAgentStatus(status) {
-        agentStatus.className = `status-indicator status-${status}`;
+      function clearOutput() {
+        output.innerHTML = '<div class="empty-state"><p>Output cleared. Ready for next task!</p></div>';
+        updateStatus('Ready');
       }
 
-      // Event Listeners
-      clearButton.addEventListener('click', () => {
-        workflowOutput.innerHTML = `
-          <div style="text-align: center; color: #6b7280; padding: 40px 20px;">
-            <p>👋 Welcome! I'm your task management assistant.</p>
-            <p>I can help you:</p>
-            <ul style="text-align: left; display: inline-block; margin: 16px 0;">
-              <li>Create and organize tasks with smart scheduling</li>
-              <li>Set reminders with browser notifications</li>
-              <li>Track deadlines and productivity metrics</li>
-              <li>Backup and sync your data locally</li>
-              <li>Provide location-based task suggestions</li>
-            </ul>
-            <p><strong>Ask me anything to get started!</strong></p>
-          </div>
-        `;
-      });
-
-      runButton.addEventListener('click', async () => {
-        const input = taskInput.value.trim();
-        
-        if (!input) {
-          alert('Please enter a task or question for your assistant');
+      async function runAgent() {
+        const task = taskInput.value.trim();
+        if (!task) {
+          alert('Please enter a task!');
           return;
         }
 
-        // Clear welcome message
-        if (workflowOutput.querySelector('ul')) {
-        workflowOutput.innerHTML = '';
-        }
-
-        runButton.disabled = true;
-        updateAgentStatus('working');
+        runBtn.disabled = true;
+        clearOutput();
+        updateStatus('Starting agent...', 'running');
 
         try {
           // Create agent session
-          const agentSession = await createAgentSession({
-            models: {
-              chat: 'onnx-community/gemma-3-270m-it-ONNX',
-              function_calling: 'onnx-community/Qwen2.5-0.5B-Instruct'
-            },
-            quantization: 'q4'
-          });
+          const agent = await createAgentSession();
 
-          updateAgentStatus('online');
+          updateStatus('Agent running...', 'running');
 
-          // Add user request to workflow context
-          const workflowWithContext = {
-            ...taskWorkflow,
-            steps: taskWorkflow.steps.map(step => ({
+          // Modify workflow to include user task
+          const taskWorkflow = {
+            ...mathWorkflow,
+            steps: mathWorkflow.steps.map(step => ({
               ...step,
-              description: step.description + `\n\nUser request: "${input}"`
+              description: step.description + `\n\nUser's task: "${task}"`
             }))
           };
 
-          const startTime = performance.now();
-          let hasResults = false;
-          
-          // Run workflow
-          for await (const result of agentSession.runWorkflow(workflowWithContext)) {
-            hasResults = true;
-            if (window.agentaryDebug) {
-              console.log('Step result:', result);
+          // Run the workflow
+          let stepCount = 0;
+          for await (const stepResult of agent.runWorkflow(taskWorkflow)) {
+            stepCount++;
+            addStep(stepResult);
+            
+            if (stepResult.isComplete) {
+              // console.log(`Completed step: ${stepResult.stepId}`);
             }
-            workflowOutput.appendChild(formatStepResult(result));
-            workflowOutput.scrollTop = workflowOutput.scrollHeight;
+            
+            if (stepResult.error) {
+              updateStatus('Error occurred', 'error');
+              break;
+            }
           }
-          
-          const totalTime = performance.now() - startTime;
-          
-          // Add completion message
-          if (hasResults) {
-          const completionDiv = document.createElement('div');
-            completionDiv.className = 'completion-message';
-            completionDiv.innerHTML = `🎉 Task completed in ${totalTime.toFixed(0)}ms`;
-          workflowOutput.appendChild(completionDiv);
-          }
-          
-          await agentSession.dispose();
-          
+
+          updateStatus(`Completed (${stepCount} steps)`, 'completed');
+          await agent.dispose();
+
         } catch (error) {
-          console.error('Workflow error:', error);
+          console.error('Agent error:', error);
+          updateStatus('Failed', 'error');
+          
           const errorDiv = document.createElement('div');
-          errorDiv.className = 'step-result step-error';
-          errorDiv.innerHTML = `<strong>❌ Assistant Error:</strong><br/>${error.message}`;
-          workflowOutput.appendChild(errorDiv);
+          errorDiv.className = 'step error';
+          errorDiv.innerHTML = `
+            <div class="step-header">❌ Error</div>
+            <div class="step-content">Failed to run agent: ${error.message}</div>
+          `;
+          output.appendChild(errorDiv);
         } finally {
-          runButton.disabled = false;
-          updateAgentStatus('offline');
+          runBtn.disabled = false;
         }
-      });
-
-      // Allow Enter key to submit
-      taskInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !runButton.disabled) {
-          runButton.click();
-        }
-      });
-
-      // Request notification permission on load
-      if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
       }
 
-      // Initialize
-      updateAgentStatus('offline');
+      // Event listeners
+      runBtn.addEventListener('click', runAgent);
+      clearBtn.addEventListener('click', clearOutput);
+      
+      taskInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          runAgent();
+        }
+      });
     </script>
   </body>
 </html>

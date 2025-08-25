@@ -7,7 +7,8 @@ import {
   type Session,
   type CreateSessionArgs,
   type GenerateArgs,
-  type TokenStreamChunk
+  type TokenStreamChunk,
+  type TaskType
 } from '../types/api';
 import { createSession } from './session';
 import { logger } from '../utils/logger';
@@ -141,15 +142,16 @@ export class AgentSessionImpl implements AgentSession {
         let nextStepId: string | undefined;
 
         for await (const result of this.executeStep(step, context)) {
+          logger.agent.debug('Step result', result);
           yield result;
           
           if (result.isComplete) {
             stepCompleted = true;
             nextStepId = result.nextStepId;
             
-            // Update context with step results
+            // Update context with step results (clean content only, no thinking)
             context[step.id] = {
-              result: result.content,
+              result: result.content, // This is already the clean content
               toolCall: result.toolCall,
               metadata: result.metadata
             };
@@ -237,16 +239,20 @@ export class AgentSessionImpl implements AgentSession {
         metadata: { startTime: stepStartTime }
       };
 
-      // Create prompt based on step type
-      const prompt = this.buildStepPrompt(step, stepContext);
+      // Create system and user prompts
+      const systemPrompt = this.buildSystemPrompt(step, stepContext);
+      const userPrompt = this.buildUserPrompt(step, stepContext);
 
       let stepResult = '';
       let toolCallResult: any = undefined;
 
+      const taskType = this.getTaskTypeForStep(step);
+
       // Generate response
-      // TODO: Support worker selection for planning and reasoning
       for await (const chunk of this.session.generate({
-        prompt,
+        system: systemPrompt,
+        prompt: userPrompt,
+        taskType,
         tools: availableTools.map(tool => ({
           type: tool!.type,
           function: {
@@ -262,11 +268,23 @@ export class AgentSessionImpl implements AgentSession {
         }
       }
 
-      // Parse potential tool calls from the result
-      const toolCall = this.parseToolCall(stepResult);
+      logger.agent.debug('Step result', { stepResult, stepType: step.type, availableToolNames: availableTools.map(t => t?.function.name) });
+
+      // Filter out thinking tags and extract clean content
+      const { cleanContent, thinkingContent } = this.removeThinkTags(stepResult);
       
+      // Parse potential tool calls from the clean content
+      const toolCall = this.parseToolCall(cleanContent);
+      logger.agent.debug('Tool call parsing result', { 
+        cleanContent, 
+        toolCall, 
+        availableToolsCount: availableTools.length,
+        availableToolNames: availableTools.map(t => t?.function.name)
+      });
+
       if (toolCall && availableTools.length > 0) {
         const tool = availableTools.find(t => t!.function.name === toolCall.name);
+        logger.agent.debug('Tool found', { tool });
         if (tool?.function.implementation) {
           yield {
             stepId: step.id,
@@ -277,9 +295,11 @@ export class AgentSessionImpl implements AgentSession {
           };
 
           try {
+            logger.agent.debug('Calling tool', { toolCall });
             const result = await tool.function.implementation(...Object.values(toolCall.args));
             toolCallResult = result;
-            
+            logger.agent.debug('Tool execution result', { result });
+
             yield {
               stepId: step.id,
               type: 'tool_call',
@@ -288,6 +308,7 @@ export class AgentSessionImpl implements AgentSession {
               toolCall: { ...toolCall, result }
             };
           } catch (error: any) {
+            logger.agent.error('Tool execution failed', { error });
             yield {
               stepId: step.id,
               type: 'error',
@@ -298,19 +319,26 @@ export class AgentSessionImpl implements AgentSession {
             return;
           }
         }
+      } else {
+        if (!toolCall) {
+          logger.agent.debug('No tool call detected in content', { cleanContent });
+        } else if (availableTools.length === 0) {
+          logger.agent.debug('Tool call detected but no tools available', { toolCall });
+        }
       }
 
       // Determine next step based on step type and result
-      const nextStepId = this.determineNextStep(step, stepResult, toolCallResult);
+      const nextStepId = this.determineNextStep(step, cleanContent, toolCallResult);
 
       const result: AgentStepResult = {
         stepId: step.id,
         type: this.getResultType(step.type),
-        content: stepResult,
+        content: cleanContent, // Use cleaned content without <think> tags
         isComplete: true,
         metadata: { 
           duration: Date.now() - stepStartTime,
-          stepType: step.type
+          stepType: step.type,
+          ...(thinkingContent ? { thinkingContent } : {}) // Store thinking separately in metadata
         }
       };
       if (nextStepId) {
@@ -332,17 +360,66 @@ export class AgentSessionImpl implements AgentSession {
     }
   }
 
-  private buildStepPrompt(step: WorkflowStep, context: Record<string, any>): string {
-    let prompt = `
-      You are executing step "${step.id}" in a workflow.
+  private getTaskTypeForStep(step: WorkflowStep): TaskType {
+    switch (step.type) {
+      case 'think':
+        return 'reasoning';
+      case 'act':
+        return 'function_calling';
+      case 'decide':
+        return 'reasoning';
+      case 'respond':
+        return 'chat';
+      default:
+        return 'chat';
+    }
+  }
 
-      Step Description: ${step.description}
-      Step Type: ${step.type}
+  private buildSystemPrompt(step: WorkflowStep, context: Record<string, any>): string {
+    let systemPrompt = `
+      You are an AI agent executing workflows step by step.
+
+      Current Workflow: ${context.workflowName || 'Unknown'}
+      Current Step: ${step.id} (${step.type})
+      Step Objective: ${step.description}
     `;
 
-    if (context.workflowName) {
-      prompt += `Workflow: ${context.workflowName}\n`;
+    // Add available tools to system context
+    if (context.availableTools && context.availableTools.length > 0) {
+      systemPrompt += `Available Tools: ${context.availableTools.map((t: Tool) => t.function.name).join(', ')}\n\n`;
     }
+
+    // Add thinking tags instruction
+    systemPrompt += `\nIMPORTANT: You can use <think></think> tags to show your internal reasoning. Content within these tags will be visible in this step but filtered out before being passed to subsequent steps.\n\n`;
+
+    // Step-specific behavior instructions
+    switch (step.type) {
+      case 'think':
+        systemPrompt += `BEHAVIOR: You are in reasoning mode. Use <think></think> tags to show your internal reasoning process, then provide clear logical reasoning outside the tags. Do not use tools in this step.`;
+        break;
+      case 'act':
+        systemPrompt += `BEHAVIOR: You are in action mode. Use <think></think> tags to plan your approach, then use the available tools to accomplish the objective. 
+
+When you need to call a tool, use this exact format:
+<tool_call>
+{"name": "tool_name", "arguments": {"param": "value"}}
+</tool_call>
+
+Make sure to call the appropriate tools with proper parameters to complete the required actions.`;
+        break;
+      case 'decide':
+        systemPrompt += `BEHAVIOR: You are in decision mode. Use <think></think> tags to evaluate options internally, then provide a clear decision with reasoning outside the tags.`;
+        break;
+      case 'respond':
+        systemPrompt += `BEHAVIOR: You are in response mode. Use <think></think> tags for any internal processing, then provide a clear, helpful, and comprehensive response to the user based on all previous work.`;
+        break;
+    }
+
+    return systemPrompt;
+  }
+
+  private buildUserPrompt(step: WorkflowStep, context: Record<string, any>): string {
+    let userPrompt = '';
 
     // Add context from previous steps
     const previousSteps = Object.keys(context).filter(key => 
@@ -351,53 +428,119 @@ export class AgentSessionImpl implements AgentSession {
     );
 
     if (previousSteps.length > 0) {
-      prompt += `\nPrevious steps:\n`;
+      userPrompt += `Previous work completed:\n`;
       for (const stepId of previousSteps) {
         const stepData = context[stepId];
-        prompt += `- ${stepId}: ${stepData.result}\n`;
+        userPrompt += `- ${stepId}: ${stepData.result}\n`;
       }
+      userPrompt += '\n';
     }
 
-    // Add available tools
-    if (context.availableTools && context.availableTools.length > 0) {
-      prompt += `\nAvailable tools: ${context.availableTools.map((t: Tool) => t.function.name).join(', ')}\n`;
+    // Extract the actual user task from step description
+    // This assumes the user task is appended to step descriptions
+    const userTaskMatch = step.description.match(/User's task: "(.+?)"/);
+    if (userTaskMatch) {
+      userPrompt += `User's original request: "${userTaskMatch[1]}"\n\n`;
     }
 
-    switch (step.type) {
-      case 'think':
-        prompt += `\nPlease think through this step and provide your analysis or reasoning.`;
-        break;
-      case 'act':
-        prompt += `\nPlease take action. Use the available tools if needed to complete this step.`;
-        break;
-      case 'decide':
-        prompt += `\nPlease make a decision based on the available information.`;
-        break;
-      case 'respond':
-        prompt += `\nPlease provide a response or summary for this step.`;
-        break;
-    }
+    userPrompt += `Please complete the current step: ${step.id}`;
 
-    return prompt;
+    return userPrompt;
+  }
+
+  private removeThinkTags(content: string): { cleanContent: string; thinkingContent: string } {
+    // Extract and remove <think></think> tags while preserving the thinking content separately
+    const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
+    const thinkMatches = content.match(thinkRegex);
+    
+    // Extract thinking content (without tags)
+    const thinkingContent = thinkMatches 
+      ? thinkMatches.map(match => match.replace(/<\/?think>/gi, '').trim()).join('\n\n')
+      : '';
+    
+    // Remove <think></think> blocks from the main content
+    const cleanContent = content.replace(thinkRegex, '').trim();
+    
+    return { cleanContent, thinkingContent };
   }
 
   private parseToolCall(content: string): { name: string; args: Record<string, any> } | null {
-    // Simple tool call parsing - in a real implementation, this would be more sophisticated
-    // Look for function call patterns in the generated text
-    const toolCallRegex = /(\w+)\((.*?)\)/;
-    const match = content.match(toolCallRegex);
+    logger.agent.debug('Parsing tool call from content', { content });
     
-    if (match && match[1]) {
+    // First check if the content itself is a JSON string that needs to be parsed
+    // Only attempt this if the content looks like JSON (starts with { and ends with })
+    let actualContent = content;
+    if (content.trim().startsWith('{') && content.trim().endsWith('}')) {
       try {
-        const args = match[2] ? JSON.parse(`{${match[2]}}`) : {};
+        // Try to parse as JSON to see if it's a JSON-encoded object
+        const possibleJson = JSON.parse(content);
+        if (possibleJson && typeof possibleJson === 'object' && possibleJson.cleanContent) {
+          actualContent = possibleJson.cleanContent;
+          logger.agent.debug('Extracted cleanContent from JSON wrapper', { actualContent });
+        }
+      } catch {
+        // Not valid JSON, use content as-is
+        logger.agent.debug('Content looks like JSON but failed to parse, using as-is');
+      }
+    }
+    
+    // Look for tool calls in XML format: <tool_call>{"name": "...", "arguments": {...}}</tool_call>
+    // Also handle cases where the closing tag might be missing
+    const xmlToolCallRegex = /<tool_call>\s*({.*?})\s*(?:<\/tool_call>|$)/s;
+    const xmlMatch = actualContent.match(xmlToolCallRegex);
+    
+    if (xmlMatch && xmlMatch[1]) {
+      logger.agent.debug('Found XML tool call match', { rawMatch: xmlMatch[1] });
+      
+      try {
+        // Handle cases where the JSON might be escaped (from a JSON string)
+        let jsonString = xmlMatch[1];
+        
+        // If it looks like escaped JSON, try to unescape it
+        if (jsonString.includes('\\"')) {
+          try {
+            jsonString = JSON.parse(`"${jsonString}"`);
+            logger.agent.debug('Unescaped JSON string', { unescaped: jsonString });
+          } catch {
+            // If unescaping fails, use the original
+            logger.agent.debug('Failed to unescape, using original');
+          }
+        }
+        
+        const toolCallData = JSON.parse(jsonString);
+        logger.agent.debug('Parsed tool call data', { toolCallData });
+        
+        if (toolCallData.name) {
+          const result = {
+            name: toolCallData.name,
+            args: toolCallData.arguments || toolCallData.args || {}
+          };
+          logger.agent.debug('Returning parsed tool call', { result });
+          return result;
+        }
+      } catch (error) {
+        logger.agent.warn('Failed to parse XML tool call JSON', { 
+          content: xmlMatch[1], 
+          error: error instanceof Error ? error.message : String(error) 
+        });
+      }
+    }
+    
+    // Fallback: Look for simple function call patterns in the generated text
+    const functionCallRegex = /(\w+)\((.*?)\)/;
+    const functionMatch = content.match(functionCallRegex);
+    
+    if (functionMatch && functionMatch[1]) {
+      try {
+        const args = functionMatch[2] ? JSON.parse(`{${functionMatch[2]}}`) : {};
         return {
-          name: match[1],
+          name: functionMatch[1],
           args
         };
       } catch {
         // Fallback: try to extract simple key-value pairs
         const simpleArgs: Record<string, any> = {};
-        const argPairs = match[2] ? match[2].split(',') : [];
+        const argPairs = functionMatch[2] ? functionMatch[2].split(',') : [];
         for (const pair of argPairs) {
           const [key, value] = pair.split(':').map(s => s.trim());
           if (key && value) {
@@ -405,12 +548,35 @@ export class AgentSessionImpl implements AgentSession {
           }
         }
         return {
-          name: match[1]!,
+          name: functionMatch[1]!,
           args: simpleArgs
         };
       }
     }
     
+    // Additional fallback: Look for JSON tool call patterns without XML tags
+    const jsonToolCallRegex = /\{\s*"name"\s*:\s*"([^"]+)"\s*,\s*"(?:arguments|args)"\s*:\s*(\{[^}]*\})\s*\}/;
+    const jsonMatch = actualContent.match(jsonToolCallRegex);
+    
+    if (jsonMatch && jsonMatch[1]) {
+      logger.agent.debug('Found JSON tool call match', { match: jsonMatch[0] });
+      try {
+        const args = JSON.parse(jsonMatch[2] || '{}');
+        const result = {
+          name: jsonMatch[1],
+          args
+        };
+        logger.agent.debug('Returning JSON parsed tool call', { result });
+        return result;
+      } catch (error) {
+        logger.agent.warn('Failed to parse JSON tool call arguments', { 
+          args: jsonMatch[2], 
+          error: error instanceof Error ? error.message : String(error) 
+        });
+      }
+    }
+
+    logger.agent.debug('No tool call pattern found in content');
     return null;
   }
 
@@ -440,7 +606,7 @@ export class AgentSessionImpl implements AgentSession {
   }
 }
 
-export async function createAgentSession(args: CreateSessionArgs): Promise<AgentSession> {
+export async function createAgentSession(args: CreateSessionArgs = {}): Promise<AgentSession> {
   const session = await createSession(args);
   return new AgentSessionImpl(session);
 }

@@ -1,12 +1,6 @@
+import { DataType } from '@huggingface/transformers';
 import { type CreateSessionArgs, type GenerateArgs, type TaskType } from '../types/api';
 import { logger } from '../utils/logger';
-
-export interface WorkerConfig {
-  model: string;
-  engine?: string;
-  hfToken?: string;
-  quantization?: any;
-}
 
 export interface WorkerInstance {
   worker: Worker;
@@ -14,6 +8,11 @@ export interface WorkerInstance {
   initialized: boolean;
   disposed: boolean;
   inflightId: number;
+}
+
+export interface Model {
+  name: string;
+  quantization: DataType;
 }
 
 export class WorkerManager {
@@ -35,25 +34,30 @@ export class WorkerManager {
     };
   }
 
-  private getModelForTaskType(taskType: TaskType): string {
+  private getModelForTaskType(taskType: TaskType): Model {
     const models = this.args.models;
-    
     switch (taskType) {
       case 'function_calling':
-        return models?.function_calling || models?.chat || 'onnx-community/Qwen2.5-0.5B-Instruct';
+        return models?.function_calling || { name: 'onnx-community/Qwen3-0.6B-ONNX', quantization: 'q4f16' };
       case 'planning':
-        return models?.planning || models?.chat || 'onnx-community/gemma-3-270m-it-ONNX';
+        return models?.planning || { name: 'onnx-community/Qwen3-0.6B-ONNX', quantization: 'q4f16' };
       case 'reasoning':
-        return models?.reasoning || models?.chat || 'onnx-community/gemma-3-270m-it-ONNX';
+        return models?.reasoning || { name: 'onnx-community/Qwen3-0.6B-ONNX', quantization: 'q4f16' };
       case 'chat':
       default:
-        return models?.chat || 'onnx-community/gemma-3-270m-it-ONNX';
+        return models?.chat || { name: 'onnx-community/Qwen3-0.6B-ONNX', quantization: 'q4f16' };
     }
   }
 
   private determineTaskType(args: GenerateArgs): TaskType {
-    // If tools are provided, use function_calling worker, otherwise use chat worker
-    return (args.tools && args.tools.length > 0) ? 'function_calling' : 'chat';
+    if (args.taskType) {
+      return args.taskType;
+    }
+    else if (args.tools && args.tools.length > 0) {
+      return 'function_calling';
+    } else {
+      return 'chat';
+    }
   }
 
   private nextId(workerInstance: WorkerInstance): string {
@@ -86,34 +90,36 @@ export class WorkerManager {
     let workerInstance = this.workers.get(taskType);
     
     if (!workerInstance) {
-      logger.worker.info('Creating new worker instance', { taskType });
+      logger.workerManager.info('Creating new worker instance', { taskType });
       workerInstance = this.createWorkerInstance(taskType);
       this.workers.set(taskType, workerInstance);
     }
 
     if (!workerInstance.initialized && !workerInstance.disposed) {
       const model = this.getModelForTaskType(taskType);
+      logger.workerManager.debug('Model selected for task type', { taskType, model });
+
       const initId = this.nextId(workerInstance);
       
-      logger.worker.debug('Initializing worker', { taskType, model, initId });
-      
+      logger.workerManager.debug('Initializing worker', { taskType, model, initId });
+
       workerInstance.worker.postMessage({
         type: 'init',
         requestId: initId,
         args: {
-          model,
+          model: model.name,
           engine: this.args.engine,
           hfToken: this.args.hfToken,
-          quantization: this.args.quantization,
+          quantization: model.quantization,
         },
       });
       
       try {
         await this.once(workerInstance, initId);
         workerInstance.initialized = true;
-        logger.worker.info('Worker initialized successfully', { taskType, model });
+        logger.workerManager.info('Worker initialized successfully', { taskType, model });
       } catch (error: any) {
-        logger.worker.error('Worker initialization failed', { taskType, model, error: error.message });
+        logger.workerManager.error('Worker initialization failed', { taskType, model, error: error.message });
         throw error;
       }
     }
@@ -122,13 +128,12 @@ export class WorkerManager {
   }
 
   async getWorkerForGeneration(args: GenerateArgs): Promise<WorkerInstance> {
-    // TODO: Support worker selection for planning and reasoning
     const taskType = this.determineTaskType(args);
     return this.getWorkerForTask(taskType);
   }
 
   async disposeAll(): Promise<void> {
-    logger.worker.info('Disposing all workers', { workerCount: this.workers.size });
+    logger.workerManager.info('Disposing all workers', { workerCount: this.workers.size });
     
     const disposePromises: Promise<void>[] = [];
 
@@ -142,7 +147,7 @@ export class WorkerManager {
     await Promise.all(disposePromises);
     this.workers.clear();
     
-    logger.worker.info('All workers disposed successfully');
+    logger.workerManager.info('All workers disposed successfully');
   }
 
   private async disposeWorker(workerInstance: WorkerInstance): Promise<void> {

@@ -39,14 +39,6 @@
         "required": ["city"]
       }
     }
-  },
-  {
-    "type": "function",
-    "function": {
-      "name": "get_time",
-      "description": "Get the current time in ISO format.",
-      "parameters": { "type": "object", "properties": {} }
-    }
   }
 ]</textarea>
     </div>
@@ -80,12 +72,7 @@
         out.textContent = '';
         btn.disabled = true;
         try {
-          // const session = await createSession({ model: 'onnx-community/gemma-3-270m-it-ONNX', quantization: 'q4' });
-          const session = await createSession({ 
-            models: {
-            chat: 'onnx-community/gemma-3-270m-it-ONNX',
-            function_calling: 'onnx-community/Qwen2.5-0.5B-Instruct',
-          }, quantization: 'q4' });
+          const session = await createSession();
           const started = performance.now();
           let tools;
           if (useToolsEl.checked) {
@@ -100,7 +87,7 @@
           for await (const chunk of session.generate({ prompt: promptEl.value, tools })) {
             // Debug logging for chunks
             if (window.agentaryDebug) {
-              console.log('chunk', chunk);
+              // console.log('chunk', chunk);
             }
             if (chunk.isFirst && chunk.ttfbMs) {
               out.textContent += `TTFB: ${chunk.ttfbMs.toFixed(1)}ms\n`;
