@@ -10,8 +10,8 @@ import {
   type TokenStreamChunk
 } from '../types/api';
 import { createSession } from './session';
-import { WorkflowExecutor } from './workflow-executor';
-import { StepExecutor } from './step-executor';
+import { WorkflowExecutor } from '../workflow/executor';
+import { StepExecutor } from '../workflow/step-executor';
 
 export class AgentSessionImpl implements AgentSession {
   private session: Session;

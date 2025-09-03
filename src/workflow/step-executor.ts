@@ -2,13 +2,13 @@ import {
   type WorkflowStep, 
   type AgentStepResult, 
   type Tool, 
-  type Session,
-  type TaskType 
+  type Session
 } from '../types/api';
 import { logger } from '../utils/logger';
-import { PromptBuilder } from './prompt-builder';
-import { ToolCallParser } from './tool-call-parser';
-import { ContentProcessor } from './content-processor';
+import { PromptBuilder } from '../processing/prompts/builder';
+import { ToolCallParser } from '../processing/tools/parser';
+import { ContentProcessor } from '../processing/content/processor';
+import { getTaskTypeForStep, getResultType } from './step-configs';
 
 export class StepExecutor {
   private session: Session;
@@ -17,12 +17,18 @@ export class StepExecutor {
   private toolCallParser: ToolCallParser;
   private contentProcessor: ContentProcessor;
 
-  constructor(session: Session, tools: Map<string, Tool>) {
+  constructor(
+    session: Session, 
+    tools: Map<string, Tool>,
+    promptBuilder?: PromptBuilder,
+    toolCallParser?: ToolCallParser,
+    contentProcessor?: ContentProcessor
+  ) {
     this.session = session;
     this.tools = tools;
-    this.promptBuilder = new PromptBuilder();
-    this.toolCallParser = new ToolCallParser();
-    this.contentProcessor = new ContentProcessor();
+    this.promptBuilder = promptBuilder || new PromptBuilder();
+    this.toolCallParser = toolCallParser || new ToolCallParser();
+    this.contentProcessor = contentProcessor || new ContentProcessor();
   }
 
   async* execute(step: WorkflowStep, context: Record<string, any>): AsyncIterable<AgentStepResult> {
@@ -53,7 +59,7 @@ export class StepExecutor {
       let stepResult = '';
       let toolCallResult: any = undefined;
 
-      const taskType = this.getTaskTypeForStep(step);
+      const taskType = getTaskTypeForStep(step.type);
 
       // Generate response
       for await (const chunk of this.session.generate({
@@ -139,7 +145,7 @@ export class StepExecutor {
 
       const result: AgentStepResult = {
         stepId: step.id,
-        type: this.getResultType(step.type),
+        type: getResultType(step.type),
         content: cleanContent, // Use cleaned content without <think> tags
         isComplete: true,
         metadata: { 
@@ -167,20 +173,7 @@ export class StepExecutor {
     }
   }
 
-  private getTaskTypeForStep(step: WorkflowStep): TaskType {
-    switch (step.type) {
-      case 'think':
-        return 'reasoning';
-      case 'act':
-        return 'function_calling';
-      case 'decide':
-        return 'reasoning';
-      case 'respond':
-        return 'chat';
-      default:
-        return 'chat';
-    }
-  }
+
 
   private determineNextStep(step: WorkflowStep, result: string, toolResult: any): string | undefined {
     // Simple next step determination - in a real implementation, this could be more sophisticated
@@ -197,14 +190,6 @@ export class StepExecutor {
     return undefined;
   }
 
-  private getResultType(stepType: string): 'thinking' | 'tool_call' | 'decision' | 'response' | 'error' {
-    switch (stepType) {
-      case 'think': return 'thinking';
-      case 'act': return 'tool_call';
-      case 'decide': return 'decision';
-      case 'respond': return 'response';
-      default: return 'response';
-    }
-  }
+
 }
 

@@ -1,5 +1,5 @@
 import { type CreateSessionArgs, type GenerateArgs, type Session, type TokenStreamChunk } from '../types/api';
-import { WorkerManager, type WorkerInstance } from './worker-manager';
+import { WorkerManager, type WorkerInstance } from '../workers/manager';
 import { logger } from '../utils/logger';
 
 export async function createSession(args: CreateSessionArgs = {}): Promise<Session> {
