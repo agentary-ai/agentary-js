@@ -101,8 +101,6 @@ export class WorkerManager {
 
       const initId = this.nextId(workerInstance);
       
-      logger.workerManager.debug('Initializing worker', { taskType, model, initId });
-
       workerInstance.worker.postMessage({
         type: 'init',
         requestId: initId,
