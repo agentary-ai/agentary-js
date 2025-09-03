@@ -359,17 +359,46 @@ npm run dev
 
 ```
 src/
-├── index.ts              # Main library exports
-├── runtime/
-│   ├── session.ts        # Basic session management
-│   ├── agent-session.ts  # Agent workflow session
-│   ├── worker.ts         # Web Worker for model inference
-│   └── worker-manager.ts # Worker lifecycle management
+├── index.ts                           # Main library exports
+├── core/                             # Core session functionality
+│   ├── session.ts                    # Basic session management
+│   ├── agent-session.ts              # Agent workflow session
+│   └── index.ts                      # Core exports
+├── workers/                          # Worker management
+│   ├── manager.ts                    # Worker lifecycle management
+│   ├── worker.ts                     # Web Worker for model inference
+│   └── index.ts                      # Worker exports
+├── workflow/                         # Workflow execution engine
+│   ├── executor.ts                   # Workflow execution logic
+│   ├── step-executor.ts              # Individual step execution
+│   ├── step-configs.ts               # Step type configurations
+│   └── index.ts                      # Workflow exports
+├── processing/                       # Content and tool processing
+│   ├── content/
+│   │   ├── processor.ts              # Content processing utilities
+│   │   └── index.ts
+│   ├── prompts/
+│   │   ├── builder.ts                # Prompt construction
+│   │   ├── templates.ts              # Prompt templates
+│   │   └── index.ts
+│   ├── tools/
+│   │   ├── parser.ts                 # Main tool call parser
+│   │   ├── parsers/
+│   │   │   ├── xml-parser.ts         # XML format tool parser
+│   │   │   ├── json-parser.ts        # JSON format tool parser
+│   │   │   ├── function-parser.ts    # Function call parser
+│   │   │   ├── composite-parser.ts   # Combined parsing strategy
+│   │   │   └── index.ts
+│   │   └── index.ts
+│   └── index.ts                      # Processing exports
+├── engine/                           # Main runtime engine
+│   └── index.ts                      # Engine exports
 ├── types/
-│   ├── api.ts           # Public API types
-│   └── worker.ts        # Internal worker types
+│   ├── api.ts                        # Public API types
+│   └── worker.ts                     # Internal worker types
 └── utils/
-    └── logger.ts        # Logging utilities
+    ├── logger.ts                     # Logging utilities
+    └── logger-config.ts              # Logger configuration
 ```
 
 ### Running the Examples
