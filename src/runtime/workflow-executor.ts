@@ -93,7 +93,6 @@ export class WorkflowExecutor {
         let nextStepId: string | undefined;
 
         for await (const result of this.stepExecutor.execute(step, context)) {
-          logger.agent.debug('Step result', result);
           yield result;
           
           if (result.isComplete) {
