@@ -1,0 +1,42 @@
+# Source files
+src/
+tsconfig.json
+tsup.config.ts
+
+# Development files
+.gitignore
+.git/
+*.log
+npm-debug.log*
+
+# Testing
+test/
+tests/
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+
+# Documentation development
+docs/
+
+# Examples (optional - you may want to include these)
+examples/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts (keep only dist/)
+node_modules/
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
