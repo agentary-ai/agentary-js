@@ -31,7 +31,7 @@ jobs:
         run: npm run build
         
       - name: Run tests
-        run: npm test --if-present
+        run: npm test
         
       - name: Check package can be installed
         run: npm pack && npm install -g ./agentary-js-*.tgz
