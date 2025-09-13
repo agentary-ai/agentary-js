@@ -38,13 +38,13 @@
   "engines": {
     "node": ">=18"
   },
-  "homepage": "https://github.com/declanhealey/agentary-js#readme",
+  "homepage": "https://github.com/agentary-ai/agentary-js#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/declanhealey/agentary-js.git"
+    "url": "git+https://github.com/agentary-ai/agentary-js.git"
   },
   "bugs": {
-    "url": "https://github.com/declanhealey/agentary-js/issues"
+    "url": "https://github.com/agentary-ai/agentary-js/issues"
   },
   "keywords": [
     "ai",
