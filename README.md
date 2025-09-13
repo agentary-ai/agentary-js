@@ -33,9 +33,11 @@ import { createSession } from 'agentary-js';
 // Create a session with a quantized model
 const session = await createSession({
   models: {
-    chat: 'onnx-community/gemma-3-270m-it-ONNX'
+    chat: {
+      name: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4'
+    }
   },
-  quantization: 'q4',
   engine: 'webgpu' // or 'wasm'
 });
 
@@ -103,12 +105,23 @@ import { createAgentSession } from 'agentary-js';
 // Create an agent session with specialized models
 const agent = await createAgentSession({
   models: {
-    chat: 'onnx-community/gemma-3-270m-it-ONNX',
-    function_calling: 'onnx-community/Qwen2.5-0.5B-Instruct',
-    planning: 'onnx-community/gemma-3-270m-it-ONNX',
-    reasoning: 'onnx-community/gemma-3-270m-it-ONNX'
+    chat: {
+      name: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4'
+    },
+    function_calling: {
+      name: 'onnx-community/Qwen2.5-0.5B-Instruct',
+      quantization: 'q4'
+    },
+    planning: {
+      name: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4'
+    },
+    reasoning: {
+      name: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4'
+    }
   },
-  quantization: 'q4'
 });
 
 // Define a research workflow
@@ -187,18 +200,6 @@ for await (const step of agent.runWorkflow(researchWorkflow)) {
 }
 
 await agent.dispose();
-```
-
-### Using Private Hugging Face Models
-
-```javascript
-const session = await createSession({
-  models: {
-    chat: 'your-org/private-model'
-  },
-  hfToken: 'hf_your_token_here',
-  quantization: 'q4'
-});
 ```
 
 ## 🏗️ API Reference
@@ -342,7 +343,7 @@ Returns all currently registered tools.
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/agentary-js.git
+git clone https://github.com/agentary-ai/agentary-js.git
 cd agentary-js
 
 # Install dependencies
@@ -411,18 +412,28 @@ npm run build
 cd examples
 npx http-server . -c-1
 
-# Open examples in your browser:
-# http://localhost:8080/chat/          - Basic chat example
-# http://localhost:8080/agent/         - Agent workflow example
+# Open the demo in your browser:
+# http://localhost:8080/demo.html
 ```
 
 #### Available Examples
 
-- **Chat Example** (`examples/chat/`): Basic text generation and function calling
-- **Agent Example** (`examples/agent/`): Advanced agent workflows with multiple step types
-  - Research Assistant workflow
-  - Decision Making workflow  
-  - Math Calculator workflow
+The `examples/demo.html` file provides an interactive demonstration with two main sections:
+
+- **🔧 Agent Workflow Tab**: Advanced agent workflows with step-by-step execution
+  - Math Problem Solver workflow with calculator tool
+  - Demonstrates think → act → respond step pattern
+  - Real-time step visualization and tool call tracking
+  - Pre-loaded with sample math problems for testing
+
+- **💬 Direct Chat Tab**: Basic text generation and function calling
+  - Simple prompt-response interaction
+  - Optional tool integration with configurable JSON tools
+  - Pre-configured weather tool example
+  - Hugging Face token support for private models
+  - Streaming token generation with TTFB metrics
+
+
 
 ## 🧠 Agent Workflow Patterns
 
@@ -642,6 +653,6 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 ## 🙋‍♀️ Support
 
-- 📖 [Documentation](https://github.com/your-org/agentary-js/wiki)
-- 🐛 [Issue Tracker](https://github.com/your-org/agentary-js/issues)
-- 💬 [Discussions](https://github.com/your-org/agentary-js/discussions)
+- 📖 [Documentation](https://github.com/agentary-ai/agentary-js/wiki)
+- 🐛 [Issue Tracker](https://github.com/agentary-ai/agentary-js/issues)
+- 💬 [Discussions](https://github.com/agentary-ai/agentary-js/discussions)
