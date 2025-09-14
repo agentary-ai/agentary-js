@@ -29,7 +29,7 @@ Object.defineProperty(global, 'performance', {
 // Mock console methods to avoid noise in tests
 global.console = {
   ...console,
-  log: vi.fn(),
+  // log: vi.fn(),
   debug: vi.fn(),
   info: vi.fn(),
   warn: vi.fn(),

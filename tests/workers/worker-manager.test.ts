@@ -4,9 +4,48 @@ import type { TaskType, CreateSessionArgs } from '../../src/types/api'
 
 describe('WorkerManager', () => {
   let workerManager: WorkerManager
+  let mockWorkers: any[]
   
   beforeEach(() => {
     vi.clearAllMocks()
+    mockWorkers = []
+    
+    // Enhanced worker mock that simulates message responses
+    global.Worker = vi.fn().mockImplementation((scriptURL: string | URL) => {
+      const worker = {
+        postMessage: vi.fn().mockImplementation((message: any) => {
+          // Simulate worker responses asynchronously
+          setTimeout(() => {
+            if (message.type === 'init') {
+              // Simulate successful initialization
+              const handler = worker.onmessage as ((event: any) => void) | null
+              handler?.({ data: { type: 'ack', requestId: message.requestId } })
+            } else if (message.type === 'dispose') {
+              // Simulate successful disposal
+              const handler = worker.onmessage as ((event: any) => void) | null
+              handler?.({ data: { type: 'ack', requestId: message.requestId } })
+            }
+          }, 0)
+        }),
+        addEventListener: vi.fn().mockImplementation((event: string, handler: any) => {
+          if (event === 'message') {
+            worker.onmessage = handler
+          } else if (event === 'error') {
+            worker.onerror = handler
+          }
+        }),
+        removeEventListener: vi.fn(),
+        terminate: vi.fn(),
+        onmessage: null,
+        onerror: null,
+        onmessageerror: null,
+        close: vi.fn()
+      }
+      
+      mockWorkers.push(worker)
+      return worker
+    })
+    
     const config: CreateSessionArgs = {
       models: {
         chat: {
@@ -28,7 +67,7 @@ describe('WorkerManager', () => {
       
       expect(workerInstance).toBeDefined()
       expect(workerInstance.worker).toBeDefined()
-      expect(workerInstance.inflightId).toBe(0)
+      expect(workerInstance.inflightId).toBe(1) // inflightId is incremented during initialization
       expect(workerInstance.disposed).toBe(false)
     })
 
@@ -101,11 +140,11 @@ describe('WorkerManager', () => {
     it('should increment inflight ID for requests', async () => {
       const worker = await workerManager.getWorkerForTask('chat')
       
-      expect(worker.inflightId).toBe(0)
+      expect(worker.inflightId).toBe(1) // inflightId is incremented during initialization
       
       // Simulate request ID generation (this would happen in session)
       worker.inflightId += 1
-      expect(worker.inflightId).toBe(1)
+      expect(worker.inflightId).toBe(2)
     })
   })
 
@@ -130,22 +169,6 @@ describe('WorkerManager', () => {
 
     it('should mark workers as disposed after disposal', async () => {
       const worker = await workerManager.getWorkerForTask('chat')
-      
-      // Mock successful disposal response
-      const messageHandler = vi.mocked(worker.worker.addEventListener).mock.calls
-        .find(call => call[0] === 'message')?.[1]
-      
-      if (messageHandler) {
-        // Simulate dispose acknowledgment
-        setTimeout(() => {
-          messageHandler({
-            data: {
-              type: 'ack',
-              requestId: expect.any(String)
-            }
-          })
-        }, 0)
-      }
       
       await workerManager.disposeAll()
       

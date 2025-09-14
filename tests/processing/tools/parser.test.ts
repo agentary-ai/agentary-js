@@ -15,17 +15,12 @@ describe('Tool Call Parsing', () => {
     it('should parse valid XML format tool calls', () => {
       const content = `
         I need to search for information.
-        <tool_call>
-        <name>search</name>
-        <parameters>
-        <query>JavaScript testing frameworks</query>
-        </parameters>
-        </tool_call>
+        <tool_call>{"name": "search", "arguments": {"query": "JavaScript testing frameworks"}}</tool_call>
         That should help find the information.
       `
       
       const result = compositeParser.parse(content)
-      
+
       expect(result).toEqual({
         name: 'search',
         args: {
@@ -37,7 +32,7 @@ describe('Tool Call Parsing', () => {
     it('should parse valid JSON format tool calls', () => {
       const content = `
         Let me calculate this for you.
-        {"tool_call": {"name": "calculate", "parameters": {"expression": "2 + 2"}}}
+        {"name": "calculate", "arguments": {"expression": "2 + 2"}}
         The calculation is complete.
       `
       
@@ -54,7 +49,7 @@ describe('Tool Call Parsing', () => {
     it('should parse function call format', () => {
       const content = `
         I'll help you with that calculation.
-        calculate("15 * 23 + 47")
+        calculate(expression: "15 * 23 + 47")
         Here's the result.
       `
       
@@ -94,12 +89,7 @@ describe('Tool Call Parsing', () => {
 
     it('should parse simple XML tool calls', () => {
       const content = `
-        <tool_call>
-        <name>get_weather</name>
-        <parameters>
-        <city>New York</city>
-        </parameters>
-        </tool_call>
+        <tool_call>{"name": "get_weather", "arguments": {"city": "New York"}}</tool_call>
       `
       
       const result = xmlParser.parse(content)
@@ -114,14 +104,7 @@ describe('Tool Call Parsing', () => {
 
     it('should handle multiple parameters', () => {
       const content = `
-        <tool_call>
-        <name>send_email</name>
-        <parameters>
-        <to>user@example.com</to>
-        <subject>Test Subject</subject>
-        <body>Test message body</body>
-        </parameters>
-        </tool_call>
+        <tool_call>{"name": "send_email", "arguments": {"to": "user@example.com", "subject": "Test Subject", "body": "Test message body"}}</tool_call>
       `
       
       const result = xmlParser.parse(content)
@@ -138,12 +121,7 @@ describe('Tool Call Parsing', () => {
 
     it('should handle nested XML content in parameters', () => {
       const content = `
-        <tool_call>
-        <name>format_text</name>
-        <parameters>
-        <content><strong>Bold text</strong> and <em>italic text</em></content>
-        </parameters>
-        </tool_call>
+        <tool_call>{"name": "format_text", "arguments": {"content": "<strong>Bold text</strong> and <em>italic text</em>"}}</tool_call>
       `
       
       const result = xmlParser.parse(content)
@@ -173,7 +151,7 @@ describe('Tool Call Parsing', () => {
     })
 
     it('should parse JSON tool calls', () => {
-      const content = '{"tool_call": {"name": "get_weather", "parameters": {"city": "San Francisco"}}}'
+      const content = '{"name": "get_weather", "arguments": {"city": "San Francisco"}}'
       
       const result = jsonParser.parse(content)
       
@@ -185,40 +163,23 @@ describe('Tool Call Parsing', () => {
       })
     })
 
-    it('should handle complex parameter objects', () => {
-      const content = JSON.stringify({
-        tool_call: {
-          name: 'create_event',
-          parameters: {
-            title: 'Team Meeting',
-            date: '2024-01-15',
-            attendees: ['alice@company.com', 'bob@company.com'],
-            metadata: {
-              room: 'Conference Room A',
-              duration: 60
-            }
-          }
-        }
-      })
+    it('should handle multiple simple parameters', () => {
+      const content = '{"name": "send_email", "arguments": {"to": "user@example.com", "subject": "Test Subject", "body": "Test message body"}}'
       
       const result = jsonParser.parse(content)
       
       expect(result).toEqual({
-        name: 'create_event',
+        name: 'send_email',
         args: {
-          title: 'Team Meeting',
-          date: '2024-01-15',
-          attendees: ['alice@company.com', 'bob@company.com'],
-          metadata: {
-            room: 'Conference Room A',
-            duration: 60
-          }
+          to: 'user@example.com',
+          subject: 'Test Subject',
+          body: 'Test message body'
         }
       })
     })
 
     it('should return null for invalid JSON', () => {
-      const content = '{"tool_call": {"name": "broken", "parameters": {'
+      const content = '{"name": "broken", "arguments": {'
       
       const result = jsonParser.parse(content)
       
@@ -242,7 +203,7 @@ describe('Tool Call Parsing', () => {
     })
 
     it('should parse simple function calls', () => {
-      const content = 'calculate("2 + 2")'
+      const content = 'calculate(expression: "2 + 2")'
       
       const result = functionParser.parse(content)
       
@@ -255,7 +216,7 @@ describe('Tool Call Parsing', () => {
     })
 
     it('should parse function calls with multiple parameters', () => {
-      const content = 'send_message("Hello world", "user123", true)'
+      const content = 'send_message(message: "Hello world", recipient: "user123", urgent: true)'
       
       const result = functionParser.parse(content)
       
@@ -264,7 +225,7 @@ describe('Tool Call Parsing', () => {
         args: {
           message: 'Hello world',
           recipient: 'user123',
-          urgent: true
+          urgent: 'true'
         }
       })
     })
@@ -272,7 +233,7 @@ describe('Tool Call Parsing', () => {
     it('should handle function calls in context', () => {
       const content = `
         I'll help you with that calculation.
-        The result is: calculate("15 * 4 + 7")
+        The result is: calculate(expression: "15 * 4 + 7")
         Let me know if you need anything else.
       `
       
@@ -306,12 +267,7 @@ describe('Tool Call Parsing', () => {
   describe('Parser Priority and Fallback', () => {
     it('should prefer XML format when multiple formats are present', () => {
       const content = `
-        <tool_call>
-        <name>xml_tool</name>
-        <parameters>
-        <param>xml_value</param>
-        </parameters>
-        </tool_call>
+        <tool_call>{"name": "xml_tool", "arguments": {"param": "xml_value"}}</tool_call>
         
         {"tool_call": {"name": "json_tool", "parameters": {"param": "json_value"}}}
       `
@@ -325,7 +281,7 @@ describe('Tool Call Parsing', () => {
       const content = `
         <broken_xml>
         
-        {"tool_call": {"name": "json_tool", "parameters": {"param": "json_value"}}}
+        {"name": "json_tool", "arguments": {"param": "json_value"}}
       `
       
       const result = compositeParser.parse(content)

@@ -8,7 +8,7 @@ describe('Logger', () => {
 
   describe('Basic Logging', () => {
     it('should log messages with different levels', () => {
-      const consoleSpy = vi.spyOn(console, 'log')
+      const consoleSpy = vi.spyOn(console, 'info')
       
       logger.info('test', 'Test message')
       
@@ -16,17 +16,21 @@ describe('Logger', () => {
     })
 
     it('should use predefined category loggers', () => {
-      const consoleSpy = vi.spyOn(console, 'log')
+      const infoSpy = vi.spyOn(console, 'info')
+      const logSpy = vi.spyOn(console, 'log') // debug uses console.log
+      const warnSpy = vi.spyOn(console, 'warn')
       
       logger.session.info('Session created')
       logger.worker.debug('Worker initialized')
       logger.agent.warn('Step timeout')
       
-      expect(consoleSpy).toHaveBeenCalledTimes(3)
+      expect(infoSpy).toHaveBeenCalledTimes(1)
+      expect(logSpy).toHaveBeenCalledTimes(1)
+      expect(warnSpy).toHaveBeenCalledTimes(1)
     })
 
     it('should include request ID when provided', () => {
-      const consoleSpy = vi.spyOn(console, 'log')
+      const consoleSpy = vi.spyOn(console, 'info')
       
       logger.session.info('Test message', { data: 'test' }, 'req-123')
       
@@ -38,7 +42,7 @@ describe('Logger', () => {
 
   describe('Log Levels', () => {
     it('should respect log level filtering', () => {
-      const consoleSpy = vi.spyOn(console, 'log')
+      const warnSpy = vi.spyOn(console, 'warn')
       const customLogger = createLogger({ level: LogLevel.WARN })
       
       customLogger.debug('test', 'Debug message')
@@ -46,11 +50,11 @@ describe('Logger', () => {
       customLogger.warn('test', 'Warning message')
       
       // Only WARN level and above should be logged
-      expect(consoleSpy).toHaveBeenCalledTimes(1)
+      expect(warnSpy).toHaveBeenCalledTimes(1)
     })
 
     it('should allow changing global log level', () => {
-      const consoleSpy = vi.spyOn(console, 'log')
+      const errorSpy = vi.spyOn(console, 'error')
       
       setGlobalLogLevel(LogLevel.ERROR)
       
@@ -58,7 +62,7 @@ describe('Logger', () => {
       logger.error('test', 'Error message')
       
       // Only ERROR level should be logged
-      expect(consoleSpy).toHaveBeenCalledTimes(1)
+      expect(errorSpy).toHaveBeenCalledTimes(1)
       
       // Reset for other tests
       setGlobalLogLevel(LogLevel.DEBUG)
@@ -123,7 +127,7 @@ describe('Logger', () => {
 
   describe('Custom Formatters', () => {
     it('should use custom formatters when provided', () => {
-      const consoleSpy = vi.spyOn(console, 'log')
+      const consoleSpy = vi.spyOn(console, 'info')
       
       const customLogger = createLogger({
         customFormatters: {

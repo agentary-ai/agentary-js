@@ -1,4 +1,5 @@
 import { DataType, DeviceType } from "@huggingface/transformers";
+import { WorkerManager } from "../workers/manager";
 
 export type EngineKind = DeviceType;
 export type TaskType = 'chat' | 'function_calling' | 'planning' | 'reasoning';
@@ -58,6 +59,7 @@ export interface TokenStreamChunk {
 }
 
 export interface Session {
+  workerManager: WorkerManager;
   generate(args: GenerateArgs): AsyncIterable<TokenStreamChunk>;
   dispose(): Promise<void>;
 }

@@ -12,8 +12,10 @@ import {
 import { createSession } from './session';
 import { WorkflowExecutor } from '../workflow/executor';
 import { StepExecutor } from '../workflow/step-executor';
+import { WorkerManager } from '../workers/manager';
 
 export class AgentSessionImpl implements AgentSession {
+  workerManager: WorkerManager;
   private session: Session;
   private tools: Map<string, Tool> = new Map();
   private disposed = false;
@@ -24,6 +26,7 @@ export class AgentSessionImpl implements AgentSession {
     this.session = session;
     this.stepExecutor = new StepExecutor(session, this.tools);
     this.workflowExecutor = new WorkflowExecutor(this.stepExecutor, this.tools);
+    this.workerManager = session.workerManager;
   }
 
   // Delegate basic session methods

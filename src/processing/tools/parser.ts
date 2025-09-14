@@ -5,7 +5,7 @@ export interface ParsedToolCall {
   args: Record<string, any>;
 }
 
-export class ToolCallParser {
+export class ToolParser {
   private parser: ToolCallParser;
 
   constructor() {
