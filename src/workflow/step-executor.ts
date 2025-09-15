@@ -6,7 +6,7 @@ import {
 } from '../types/api';
 import { logger } from '../utils/logger';
 import { PromptBuilder } from '../processing/prompts/builder';
-import { ToolCallParser } from '../processing/tools/parser';
+import { ToolParser } from '../processing/tools/parser';
 import { ContentProcessor } from '../processing/content/processor';
 import { getTaskTypeForStep, getResultType } from './step-configs';
 
@@ -14,20 +14,20 @@ export class StepExecutor {
   private session: Session;
   private tools: Map<string, Tool>;
   private promptBuilder: PromptBuilder;
-  private toolCallParser: ToolCallParser;
+  private toolParser: ToolParser;
   private contentProcessor: ContentProcessor;
 
   constructor(
     session: Session, 
     tools: Map<string, Tool>,
     promptBuilder?: PromptBuilder,
-    toolCallParser?: ToolCallParser,
+    toolParser?: ToolParser,
     contentProcessor?: ContentProcessor
   ) {
     this.session = session;
     this.tools = tools;
     this.promptBuilder = promptBuilder || new PromptBuilder();
-    this.toolCallParser = toolCallParser || new ToolCallParser();
+    this.toolParser = toolParser || new ToolParser();
     this.contentProcessor = contentProcessor || new ContentProcessor();
   }
 
@@ -87,7 +87,7 @@ export class StepExecutor {
       const { cleanContent, thinkingContent } = this.contentProcessor.removeThinkTags(stepResult);
       
       // Parse potential tool calls from the clean content
-      const toolCall = this.toolCallParser.parse(cleanContent);
+      const toolCall = this.toolParser.parse(cleanContent);
       logger.agent.debug('Tool call parsing result', { 
         cleanContent, 
         toolCall, 

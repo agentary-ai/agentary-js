@@ -82,7 +82,7 @@ export async function createSession(args: CreateSessionArgs = {}): Promise<Sessi
     await workerManager.disposeAll();
   }
 
-  const session: Session = { generate, dispose };
+  const session: Session = { generate, dispose, workerManager };
   return session;
 }
 

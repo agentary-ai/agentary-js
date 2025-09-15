@@ -298,22 +298,24 @@
           <div class="tools-section" id="tools-section" style="display: none;">
             <div class="input-group column">
               <label for="tools-json">Tools JSON:</label>
-              <textarea id="tools-json">[
-  {
-    "type": "function",
-    "function": {
-      "name": "get_weather",
-      "description": "Get current weather for a city.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "city": { "type": "string", "description": "City name" }
-        },
-        "required": ["city"]
-      }
-    }
-  }
-]</textarea>
+              <textarea id="tools-json">
+                [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_weather",
+                      "description": "Get current weather for a city.",
+                      "parameters": {
+                        "type": "object",
+                        "properties": {
+                          "city": { "type": "string", "description": "City name" }
+                        },
+                        "required": ["city"]
+                      }
+                    }
+                  }
+                ]
+              </textarea>
             </div>
           </div>
           
@@ -463,12 +465,6 @@
         maxIterations: 4,
         timeout: 50000,
         steps: [
-          {
-            id: 'understand',
-            type: 'think',
-            description: 'Understand the math problem and identify the steps that must be taken to solve it. You do not need to calculate the final answer.',
-            nextSteps: ['calculate']
-          },
           {
             id: 'calculate',
             type: 'act',

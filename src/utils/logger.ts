@@ -263,53 +263,53 @@ class Logger {
   // Convenience methods for common categories
   worker = {
     debug: (message: string, data?: unknown, requestId?: string) => 
-      this.debug('worker', message, data, requestId !== undefined ? { requestId } : undefined),
+      this.debug('worker', message, data, requestId ? { requestId } : undefined),
     info: (message: string, data?: unknown, requestId?: string) => 
-      this.info('worker', message, data, requestId !== undefined ? { requestId } : undefined),
+      this.info('worker', message, data, requestId ? { requestId } : undefined),
     warn: (message: string, data?: unknown, requestId?: string) => 
-      this.warn('worker', message, data, requestId !== undefined ? { requestId } : undefined),
+      this.warn('worker', message, data, requestId ? { requestId } : undefined),
     error: (message: string, data?: unknown, requestId?: string) => 
-      this.error('worker', message, data, requestId !== undefined ? { requestId } : undefined),
+      this.error('worker', message, data, requestId ? { requestId } : undefined),
   };
 
   session = {
     debug: (message: string, data?: unknown, requestId?: string) => 
-      this.debug('session', message, data, requestId !== undefined ? { requestId } : undefined),
+      this.debug('session', message, data, requestId ? { requestId } : undefined),
     info: (message: string, data?: unknown, requestId?: string) => 
-      this.info('session', message, data, requestId !== undefined ? { requestId } : undefined),
+      this.info('session', message, data, requestId ? { requestId } : undefined),
     warn: (message: string, data?: unknown, requestId?: string) => 
-      this.warn('session', message, data, requestId !== undefined ? { requestId } : undefined),
+      this.warn('session', message, data, requestId ? { requestId } : undefined),
     error: (message: string, data?: unknown, requestId?: string) => 
-      this.error('session', message, data, requestId !== undefined ? { requestId } : undefined),
+      this.error('session', message, data, requestId ? { requestId } : undefined),
   };
 
   agent = {
     debug: (message: string, data?: unknown, context?: Record<string, unknown>) => 
-      this.debug('agent', message, data, context !== undefined ? { context } : undefined),
+      this.debug('agent', message, data, context ? { context } : undefined),
     info: (message: string, data?: unknown, context?: Record<string, unknown>) => 
-      this.info('agent', message, data, context !== undefined ? { context } : undefined),
+      this.info('agent', message, data, context ? { context } : undefined),
     warn: (message: string, data?: unknown, context?: Record<string, unknown>) => 
-      this.warn('agent', message, data, context !== undefined ? { context } : undefined),
+      this.warn('agent', message, data, context ? { context } : undefined),
     error: (message: string, data?: unknown, context?: Record<string, unknown>) => 
-      this.error('agent', message, data, context !== undefined ? { context } : undefined),
+      this.error('agent', message, data, context ? { context } : undefined),
   };
 
   workerManager = {
     debug: (message: string, data?: unknown, requestId?: string) => 
-      this.debug('worker-manager', message, data, requestId !== undefined ? { requestId } : undefined),
+      this.debug('worker-manager', message, data, requestId ? { requestId } : undefined),
     info: (message: string, data?: unknown, requestId?: string) => 
-      this.info('worker-manager', message, data, requestId !== undefined ? { requestId } : undefined),
+      this.info('worker-manager', message, data, requestId ? { requestId } : undefined),
     warn: (message: string, data?: unknown, requestId?: string) => 
-      this.warn('worker-manager', message, data, requestId !== undefined ? { requestId } : undefined),
+      this.warn('worker-manager', message, data, requestId ? { requestId } : undefined),
     error: (message: string, data?: unknown, requestId?: string) => 
-      this.error('worker-manager', message, data, requestId !== undefined ? { requestId } : undefined),
+      this.error('worker-manager', message, data, requestId ? { requestId } : undefined),
   };
 
   performance = {
     debug: (message: string, data?: unknown, context?: Record<string, unknown>) => 
-      this.debug('performance', message, data, context !== undefined ? { context } : undefined),
+      this.debug('performance', message, data, context ? { context } : undefined),
     info: (message: string, data?: unknown, context?: Record<string, unknown>) => 
-      this.info('performance', message, data, context !== undefined ? { context } : undefined),
+      this.info('performance', message, data, context ? { context } : undefined),
   };
 
   // Utility methods
@@ -351,9 +351,24 @@ export function createLogger(config?: Partial<LoggerConfig>): Logger {
 
 // Helper to set global log level via URL or localStorage (browser only)
 export function setGlobalLogLevel(level: LogLevel | string): void {
+  const parseLogLevel = (level: string): LogLevel => {
+    const normalizedLevel = level.toUpperCase();
+    switch (normalizedLevel) {
+      case 'DEBUG': return LogLevel.DEBUG;
+      case 'INFO': return LogLevel.INFO;
+      case 'WARN': case 'WARNING': return LogLevel.WARN;
+      case 'ERROR': return LogLevel.ERROR;
+      case 'SILENT': case 'NONE': return LogLevel.SILENT;
+      default: return LogLevel.INFO;
+    }
+  };
+
   if (typeof window !== 'undefined') {
     const levelStr = typeof level === 'string' ? level : LogLevel[level].toLowerCase();
     localStorage.setItem('agentary_log_level', levelStr);
-    logger.setLevel(typeof level === 'string' ? logger['parseLogLevel'](level) : level);
+    logger.setLevel(typeof level === 'string' ? parseLogLevel(level) : level);
+  } else {
+    // For non-browser environments (like tests), just set the level directly
+    logger.setLevel(typeof level === 'string' ? parseLogLevel(level) : level);
   }
 }
