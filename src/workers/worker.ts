@@ -2,11 +2,11 @@ import { pipeline, TextStreamer, env as hfEnv } from '@huggingface/transformers'
 import { InboundMessage, OutboundMessage } from '../types/worker';
 import { logger } from '../utils/logger';
 
-(hfEnv as any).backends = {
-  onnx: {
-    wasmPaths: 'https://unpkg.com/onnxruntime-web@1.22.0/dist/',
-  },
-};
+// (hfEnv as any).backends = {
+//   onnx: {
+//     wasmPaths: 'https://unpkg.com/onnxruntime-web@1.22.0/dist/',
+//   },
+// };
 
 let generator: any | null = null;
 let disposed = false;
