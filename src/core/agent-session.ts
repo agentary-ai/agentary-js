@@ -6,9 +6,10 @@ import {
   type Tool, 
   type Session,
   type CreateSessionArgs,
-  type GenerateArgs,
-  type TokenStreamChunk
+  type TokenStreamChunk,
+  type GenerationTask
 } from '../types/api';
+import { GenerateArgs } from '../types/worker';
 import { createSession } from './session';
 import { WorkflowExecutor } from '../workflow/executor';
 import { StepExecutor } from '../workflow/step-executor';
@@ -30,7 +31,7 @@ export class AgentSessionImpl implements AgentSession {
   }
 
   // Delegate basic session methods
-  async* generate(args: GenerateArgs): AsyncIterable<TokenStreamChunk> {
+  async* createResponse(args: GenerateArgs, generationTask?: GenerationTask): AsyncIterable<TokenStreamChunk> {
     if (this.disposed) throw new Error('Agent session disposed');
     
     // Add registered tools to the generation args
@@ -50,7 +51,7 @@ export class AgentSessionImpl implements AgentSession {
     if (toolsArray.length > 0) {
       generateArgs.tools = toolsArray;
     }
-    yield* this.session.generate(generateArgs);
+    yield* this.session.createResponse(generateArgs, generationTask);
   }
 
   async dispose(): Promise<void> {
@@ -70,9 +71,9 @@ export class AgentSessionImpl implements AgentSession {
     return Array.from(this.tools.values());
   }
 
-  async* runWorkflow(workflow: WorkflowDefinition): AsyncIterable<AgentStepResult> {
+  async* runWorkflow(prompt: string, workflow: WorkflowDefinition): AsyncIterable<AgentStepResult> {
     if (this.disposed) throw new Error('Agent session disposed');
-    yield* this.workflowExecutor.execute(workflow);
+    yield* this.workflowExecutor.execute(prompt, workflow);
   }
 
   async* executeStep(step: WorkflowStep, context: Record<string, any>): AsyncIterable<AgentStepResult> {

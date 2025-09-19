@@ -4,10 +4,9 @@ export { logger, createLogger, setGlobalLogLevel, LogLevel } from './utils/logge
 export { LogConfigs, getEnvironmentConfig, enableDebuggingMode, disableDebuggingMode, isDebuggingMode } from './utils/logger-config';
 export type { 
   CreateSessionArgs, 
-  GenerateArgs, 
   TokenStreamChunk, 
   Session, 
-  TaskType,
+  GenerationTask,
   Tool,
   WorkflowStep,
   WorkflowDefinition,
@@ -15,3 +14,4 @@ export type {
   AgentWorkflowResult,
   AgentSession
 } from './types/api';
+export type { GenerateArgs } from './types/worker';

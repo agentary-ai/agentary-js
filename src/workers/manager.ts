@@ -87,10 +87,9 @@ export class WorkerManager {
         type: 'init',
         requestId: initId,
         args: {
-          model: model.name,
+          model,
           engine: this.args.engine,
           hfToken: this.args.hfToken,
-          quantization: model.quantization,
         },
       });
       

@@ -35,9 +35,9 @@ function postDebug(requestId: string, message: string, data?: unknown) {
   try {
     if (msg.type === 'init') {
       if (disposed) throw new Error('Worker disposed');
-      const { model, engine, hfToken, quantization } = msg.args as InitArgs;
+      const { model, engine, hfToken } = msg.args as InitArgs;
 
-      logger.worker.info('Initializing worker', { model, engine, quantization }, msg.requestId);
+      logger.worker.info('Initializing worker', { model:model.name, quantization:model.quantization, engine }, msg.requestId);
 
       if (hfToken) {
         (hfEnv as any).HF_TOKEN = hfToken;
@@ -46,9 +46,9 @@ function postDebug(requestId: string, message: string, data?: unknown) {
       const device = engine && engine !== 'auto' ? engine : 'webgpu';
 
       // TODO: Add support for other tasks
-      const pipelineResult = await pipeline('text-generation', model, {
+      const pipelineResult = await pipeline('text-generation', model.name, {
         device: device || "auto",
-        dtype: quantization || "auto",
+        dtype: model.quantization || "auto",
         progress_callback: (_info: any) => {},
       });
       generator = pipelineResult as TextGenerationPipeline;

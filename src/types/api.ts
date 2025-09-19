@@ -56,7 +56,7 @@ export interface TokenStreamChunk {
 
 export interface Session {
   workerManager: WorkerManager;
-  createResponse(args: GenerateArgs): AsyncIterable<TokenStreamChunk>;
+  createResponse(args: GenerateArgs, generationTask?: GenerationTask): AsyncIterable<TokenStreamChunk>;
   dispose(): Promise<void>;
 }
 

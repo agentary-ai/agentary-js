@@ -1,13 +1,11 @@
-import { DataType } from "@huggingface/transformers";
 import { Model } from "./api";
 
 export type EngineKind = 'auto' | 'webgpu' | 'wasm' | 'webnn';
 
 export interface InitArgs {
-  model: string;
+  model: Model;
   engine?: EngineKind;
   hfToken?: string;
-  quantization?: DataType;
 }
 
 export interface Message {
