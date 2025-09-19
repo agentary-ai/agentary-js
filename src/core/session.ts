@@ -1,7 +1,13 @@
-import { type CreateSessionArgs, type GenerateArgs, type Session, type TokenStreamChunk } from '../types/api';
-import { WorkerManager, type WorkerInstance } from '../workers/manager';
+import { type CreateSessionArgs, type Session, type TokenStreamChunk, type GenerationTask, type WorkerInstance } from '../types/api';
+import { GenerateArgs } from '../types/worker';
+import { WorkerManager } from '../workers/manager';
 import { logger } from '../utils/logger';
 
+/**
+ * Creates a new session with the specified configuration.
+ * @param args - The configuration for the session.
+ * @returns A new session.
+ */
 export async function createSession(args: CreateSessionArgs = {}): Promise<Session> {
   const workerManager = new WorkerManager(args);
   let disposed = false;
@@ -11,11 +17,11 @@ export async function createSession(args: CreateSessionArgs = {}): Promise<Sessi
     return String(workerInstance.inflightId); 
   }
 
-  async function* generate(gen: GenerateArgs): AsyncIterable<TokenStreamChunk> {
+  async function* createResponse(args: GenerateArgs, generationTask?: GenerationTask): AsyncIterable<TokenStreamChunk> {
     if (disposed) throw new Error('Session disposed');
     
-    // Get the appropriate worker for this generation task
-    const workerInstance = await workerManager.getWorkerForGeneration(gen);
+    // Retrieve worker for model generation
+    const workerInstance = await workerManager.getWorker(args, generationTask);
     const requestId = nextId(workerInstance);
 
     const queue: TokenStreamChunk[] = [];
@@ -26,7 +32,7 @@ export async function createSession(args: CreateSessionArgs = {}): Promise<Sessi
       if (!msg || msg.requestId !== requestId) return;
 
       if (msg.type === 'chunk') {
-        const { token, tokenId, isFirst, isLast, ttfbMs } = msg.payload;
+        const { token, tokenId, isFirst, isLast, ttfbMs } = msg.args;
         queue.push({ token, tokenId, isFirst, isLast, ...(ttfbMs !== undefined ? { ttfbMs } : {}) });
 
       } else if (msg.type === 'done') {
@@ -39,27 +45,15 @@ export async function createSession(args: CreateSessionArgs = {}): Promise<Sessi
         logger.session.error('Generation error', msg.error, requestId);
         
       } else if (msg.type === 'debug') {
-        // logger.session.debug('Worker debug message', msg.payload, requestId);
+        // logger.session.debug('Worker debug message', msg.args, requestId);
       }
     };
-
     workerInstance.worker.addEventListener('message', onMessage as any);
-
+    
     workerInstance.worker.postMessage({
       type: 'generate',
       requestId,
-      args: {
-        prompt: gen.prompt,
-        system: gen.system,
-        tools: gen.tools,
-        stop: gen.stop,
-        temperature: gen.temperature,
-        top_p: gen.top_p,
-        top_k: gen.top_k,
-        repetition_penalty: gen.repetition_penalty,
-        seed: gen.seed,
-        deterministic: gen.deterministic,
-      },
+      args,
     });
 
     try {
@@ -82,7 +76,7 @@ export async function createSession(args: CreateSessionArgs = {}): Promise<Sessi
     await workerManager.disposeAll();
   }
 
-  const session: Session = { generate, dispose, workerManager };
+  const session: Session = { createResponse, dispose, workerManager };
   return session;
 }
 

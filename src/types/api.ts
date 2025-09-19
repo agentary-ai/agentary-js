@@ -1,8 +1,9 @@
 import { DataType, DeviceType } from "@huggingface/transformers";
 import { WorkerManager } from "../workers/manager";
+import { GenerateArgs } from "./worker";
 
 export type EngineKind = DeviceType;
-export type TaskType = 'chat' | 'function_calling' | 'planning' | 'reasoning';
+export type GenerationTask = 'chat' | 'function_calling' | 'planning' | 'reasoning';
 
 export interface CreateSessionArgs {
   models?: {
@@ -31,22 +32,17 @@ export interface CreateSessionArgs {
   hfToken?: string;
 }
 
-export interface GenerateArgs {
-  taskType?: TaskType;
-  prompt?: string;
-  system?: string;
-  tools?: unknown[];
-  stop?: string[];
-  temperature?: number;
-  top_p?: number;
-  top_k?: number;
-  repetition_penalty?: number;
-  seed?: number;
-  deterministic?: boolean;
-  retrieval?: {
-    queryFn?: (q: string, k: number) => Promise<string[]> | string[];
-    k?: number;
-  } | null;
+export interface WorkerInstance {
+  worker: Worker;
+  model: Model;
+  initialized: boolean;
+  disposed: boolean;
+  inflightId: number;
+}
+
+export interface Model {
+  name: string;
+  quantization: DataType;
 }
 
 export interface TokenStreamChunk {
@@ -60,7 +56,7 @@ export interface TokenStreamChunk {
 
 export interface Session {
   workerManager: WorkerManager;
-  generate(args: GenerateArgs): AsyncIterable<TokenStreamChunk>;
+  createResponse(args: GenerateArgs): AsyncIterable<TokenStreamChunk>;
   dispose(): Promise<void>;
 }
 
@@ -121,7 +117,7 @@ export interface AgentWorkflowResult {
 }
 
 export interface AgentSession extends Session {
-  runWorkflow(workflow: WorkflowDefinition): AsyncIterable<AgentStepResult>;
+  runWorkflow(prompt: string, workflow: WorkflowDefinition): AsyncIterable<AgentStepResult>;
   executeStep(step: WorkflowStep, context: Record<string, any>): AsyncIterable<AgentStepResult>;
   registerTool(tool: Tool): void;
   getRegisteredTools(): Tool[];

@@ -1,42 +1,23 @@
-import { DataType } from '@huggingface/transformers';
-import { type CreateSessionArgs, type GenerateArgs, type TaskType } from '../types/api';
+import {
+  type CreateSessionArgs,
+  type GenerationTask,
+  type WorkerInstance,
+  type Model
+} from '../types/api';
+import { GenerateArgs } from '../types/worker';
 import { logger } from '../utils/logger';
 
-export interface WorkerInstance {
-  worker: Worker;
-  taskType: TaskType;
-  initialized: boolean;
-  disposed: boolean;
-  inflightId: number;
-}
-
-export interface Model {
-  name: string;
-  quantization: DataType;
-}
-
 export class WorkerManager {
-  private workers: Map<TaskType, WorkerInstance> = new Map();
+  private workers: Map<string, WorkerInstance> = new Map();
   private readonly args: CreateSessionArgs;
 
   constructor(args: CreateSessionArgs) {
     this.args = args;
   }
 
-  private createWorkerInstance(taskType: TaskType): WorkerInstance {
-    const worker = new Worker(new URL('./runtime/worker.js', import.meta.url), { type: 'module' });
-    return {
-      worker,
-      taskType,
-      initialized: false,
-      disposed: false,
-      inflightId: 0,
-    };
-  }
-
-  private getModelForTaskType(taskType: TaskType): Model {
+  private getModel(generationTask?: GenerationTask): Model {
     const models = this.args.models;
-    switch (taskType) {
+    switch (generationTask) {
       case 'function_calling':
         return models?.function_calling || { name: 'onnx-community/Qwen3-0.6B-ONNX', quantization: 'q4f16' };
       case 'planning':
@@ -49,15 +30,15 @@ export class WorkerManager {
     }
   }
 
-  private determineTaskType(args: GenerateArgs): TaskType {
-    if (args.taskType) {
-      return args.taskType;
-    }
-    else if (args.tools && args.tools.length > 0) {
-      return 'function_calling';
-    } else {
-      return 'chat';
-    }
+  private createWorkerInstance(model: Model): WorkerInstance {
+    const worker = new Worker(new URL('./runtime/worker.js', import.meta.url), { type: 'module' });
+    return {
+      worker,
+      model,
+      initialized: false,
+      disposed: false,
+      inflightId: 0,
+    };
   }
 
   private nextId(workerInstance: WorkerInstance): string {
@@ -86,21 +67,22 @@ export class WorkerManager {
     });
   }
 
-  async getWorkerForTask(taskType: TaskType): Promise<WorkerInstance> {
-    let workerInstance = this.workers.get(taskType);
+  async getWorker(args: GenerateArgs, generationTask?: GenerationTask): Promise<WorkerInstance> {
+    // Determine model to use based on generation task or provided model
+    let model: Model = args.model || this.getModel(generationTask);
+    let workerInstance = this.workers.get(model.name);
     
     if (!workerInstance) {
-      logger.workerManager.info('Creating new worker instance', { taskType });
-      workerInstance = this.createWorkerInstance(taskType);
-      this.workers.set(taskType, workerInstance);
+      // Assign worker instance to model
+      logger.workerManager.info('Creating new worker instance', { model });
+      workerInstance = this.createWorkerInstance(model);
+      this.workers.set(model.name, workerInstance);
     }
 
     if (!workerInstance.initialized && !workerInstance.disposed) {
-      const model = this.getModelForTaskType(taskType);
-      logger.workerManager.debug('Model selected for task type', { taskType, model });
+      logger.workerManager.debug('Model selected for generation', { model });
 
       const initId = this.nextId(workerInstance);
-      
       workerInstance.worker.postMessage({
         type: 'init',
         requestId: initId,
@@ -115,19 +97,13 @@ export class WorkerManager {
       try {
         await this.once(workerInstance, initId);
         workerInstance.initialized = true;
-        logger.workerManager.info('Worker initialized successfully', { taskType, model });
+        logger.workerManager.info('Worker initialized successfully', { model });
       } catch (error: any) {
-        logger.workerManager.error('Worker initialization failed', { taskType, model, error: error.message });
+        logger.workerManager.error('Worker initialization failed', { model, error: error.message });
         throw error;
       }
     }
-
     return workerInstance;
-  }
-
-  async getWorkerForGeneration(args: GenerateArgs): Promise<WorkerInstance> {
-    const taskType = this.determineTaskType(args);
-    return this.getWorkerForTask(taskType);
   }
 
   async disposeAll(): Promise<void> {
@@ -135,7 +111,7 @@ export class WorkerManager {
     
     const disposePromises: Promise<void>[] = [];
 
-    for (const [taskType, workerInstance] of this.workers) {
+    for (const [modelName, workerInstance] of this.workers) {
       if (!workerInstance.disposed) {
         const disposePromise = this.disposeWorker(workerInstance);
         disposePromises.push(disposePromise);
@@ -157,15 +133,5 @@ export class WorkerManager {
     workerInstance.worker.postMessage({ type: 'dispose', requestId });
     await this.once(workerInstance, requestId).catch(() => {});
     workerInstance.worker.terminate();
-  }
-
-  getInitializedWorkers(): TaskType[] {
-    const initializedWorkers: TaskType[] = [];
-    for (const [taskType, workerInstance] of this.workers) {
-      if (workerInstance.initialized && !workerInstance.disposed) {
-        initializedWorkers.push(taskType);
-      }
-    }
-    return initializedWorkers;
   }
 }

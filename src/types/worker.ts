@@ -1,4 +1,5 @@
 import { DataType } from "@huggingface/transformers";
+import { Model } from "./api";
 
 export type EngineKind = 'auto' | 'webgpu' | 'wasm' | 'webnn';
 
@@ -15,6 +16,7 @@ export interface Message {
 }
 
 export interface GenerateArgs {
+  model?: Model;
   messages: Message[];
   max_new_tokens?: number;
   tools?: unknown[];
