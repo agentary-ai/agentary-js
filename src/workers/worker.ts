@@ -1,14 +1,15 @@
-import { pipeline, TextStreamer, env as hfEnv } from '@huggingface/transformers';
+import { pipeline, TextStreamer, env as hfEnv, DataType, TextGenerationPipeline, TextGenerationConfig } from '@huggingface/transformers';
 import { InboundMessage, OutboundMessage } from '../types/worker';
 import { logger } from '../utils/logger';
+import { InitArgs, GenerateArgs } from '../types/worker';
 
-(hfEnv as any).backends = {
-  onnx: {
-    wasmPaths: 'https://unpkg.com/onnxruntime-web@1.22.0/dist/',
-  },
-};
+// (hfEnv as any).backends = {
+//   onnx: {
+//     wasmPaths: 'https://unpkg.com/onnxruntime-web@1.22.0/dist/',
+//   },
+// };
 
-let generator: any | null = null;
+let generator: TextGenerationPipeline | null = null;
 let disposed = false;
 let isGenerating = false;
 
@@ -18,21 +19,25 @@ function post(message: OutboundMessage) {
 }
 
 function postDebug(requestId: string, message: string, data?: unknown) {
-  const payload = { message, ...(data !== undefined ? { data } : {}) } as const;
-  post({ type: 'debug', requestId, payload });
-  // Also log locally in worker for immediate visibility
+  const debugMessage: OutboundMessage = {
+    type: 'debug',
+    requestId,
+    args: { message, ...(data !== undefined ? { data } : {}) } as const,
+  };
+  post(debugMessage);
   logger.worker.debug(message, data, requestId);
 }
 
 // eslint-disable-next-line no-restricted-globals
 (self as unknown as DedicatedWorkerGlobalScope).onmessage = async (ev: MessageEvent<InboundMessage>) => {
   const msg = ev.data;
+  
   try {
     if (msg.type === 'init') {
       if (disposed) throw new Error('Worker disposed');
-      const { model, engine, hfToken } = msg.args;
+      const { model, engine, hfToken, quantization } = msg.args as InitArgs;
 
-      logger.worker.info('Initializing worker', { model, engine, quantization: msg.args.quantization }, msg.requestId);
+      logger.worker.info('Initializing worker', { model, engine, quantization }, msg.requestId);
 
       if (hfToken) {
         (hfEnv as any).HF_TOKEN = hfToken;
@@ -40,11 +45,13 @@ function postDebug(requestId: string, message: string, data?: unknown) {
 
       const device = engine && engine !== 'auto' ? engine : 'webgpu';
 
-      generator = await pipeline('text-generation', model, {
-        device,
-        dtype: msg.args.quantization || "auto",
+      // TODO: Add support for other tasks
+      const pipelineResult = await pipeline('text-generation', model, {
+        device: device || "auto",
+        dtype: quantization || "auto",
         progress_callback: (_info: any) => {},
       });
+      generator = pipelineResult as TextGenerationPipeline;
 
       logger.worker.info('Worker initialized successfully', { model, device }, msg.requestId);
       post({ type: 'ack', requestId: msg.requestId });
@@ -61,22 +68,20 @@ function postDebug(requestId: string, message: string, data?: unknown) {
 
       isGenerating = true;
 
-      const { prompt, system, temperature, top_p, top_k, stop, tools, repetition_penalty } = msg.args as any;
-
-      const messages = [
-        { role: 'system', content: system ?? '' },
-        { role: 'user', content: prompt ?? '' },
-      ];
+      const { messages, max_new_tokens, temperature, top_p, top_k, stop, tools, repetition_penalty } = msg.args as GenerateArgs;
+      if (!messages) throw new Error('Messages are required');
 
       // If tools are provided, or even if not, pre-apply the chat template so we can
       // pass tool schemas to the tokenizer. Disable special tokens when generating.
-      const renderedPrompt: string = (generator as any).tokenizer.apply_chat_template(messages, {
+      const applyTemplateOptions: any = {
         tokenize: false,
         add_generation_prompt: true,
-        tools: Array.isArray(tools) && tools.length ? tools : null,
-      });
-
-      
+      };
+      if (Array.isArray(tools) && tools.length) {
+        applyTemplateOptions.tools = tools;
+      }
+      const renderedPrompt: string = generator.tokenizer.apply_chat_template(messages, applyTemplateOptions) as string;
+      // TODO: Add warning if tools aren't supported in rendered prompt
       postDebug(msg.requestId, 'rendered_prompt', renderedPrompt);
 
       let first = true;
@@ -85,7 +90,7 @@ function postDebug(requestId: string, message: string, data?: unknown) {
       const streamer = new TextStreamer(generator.tokenizer, {
         skip_prompt: true,
         callback_function: (text: string) => {
-          const payload = {
+          const args = {
             token: text,
             tokenId: -1,
             isFirst: first,
@@ -93,7 +98,7 @@ function postDebug(requestId: string, message: string, data?: unknown) {
             ...(first ? { ttfbMs: performance.now() - ttfbStart } : {}),
           } as const;
           first = false;
-          post({ type: 'chunk', requestId: msg.requestId, payload });
+          post({ type: 'chunk', requestId: msg.requestId, args });
         },
       });
 
@@ -101,20 +106,17 @@ function postDebug(requestId: string, message: string, data?: unknown) {
         const generationOptions = {
           add_special_tokens: false,
           // TODO: Make this configurable
-          max_new_tokens: 1024,
+          max_new_tokens: max_new_tokens ?? 1024,
           do_sample: temperature !== undefined ? temperature > 0 : false,
-          temperature,
-          top_p,
-          top_k,
+          ...(temperature !== undefined && { temperature }),
+          ...(top_p !== undefined && { top_p }),
+          ...(top_k !== undefined && { top_k }),
           repetition_penalty: repetition_penalty || 1.1,
           streamer,
-          stop,
+          ...(stop !== undefined && { stop }),
         };
-        
-        logger.worker.debug('Starting generation', generationOptions, msg.requestId);
-        
         await generator(renderedPrompt, generationOptions);
-        
+        logger.worker.debug('Starting generation', generationOptions, msg.requestId);
         logger.worker.debug('Generation completed successfully', undefined, msg.requestId);
       } finally {
         isGenerating = false;
@@ -151,7 +153,7 @@ function postDebug(requestId: string, message: string, data?: unknown) {
     const errorMessage = error?.message ?? String(error);
     
     logger.worker.error('Worker error', { error: errorMessage, stack: error?.stack }, requestId);
-    post({ type: 'error', requestId, error: errorMessage });
+    post({ type: 'error', requestId, args: { error: errorMessage } });
   }
 };
 
