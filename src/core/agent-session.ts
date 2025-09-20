@@ -1,15 +1,11 @@
-import { 
-  type AgentSession, 
-  type WorkflowDefinition, 
-  type WorkflowStep,
-  type AgentStepResult, 
-  type Tool, 
-  type Session,
-  type CreateSessionArgs,
-  type TokenStreamChunk,
-  type GenerationTask
-} from '../types/api';
-import { GenerateArgs } from '../types/worker';
+import type { 
+  AgentSession, 
+  AgentWorkflow,
+  WorkflowStepResult, 
+} from '../types/agent-session';
+import type { Session, CreateSessionArgs, TokenStreamChunk, GenerationTask } from '../types/session';
+import type { GenerateArgs, Tool } from '../types/worker';
+import { logger } from '../utils/logger';
 import { createSession } from './session';
 import { WorkflowExecutor } from '../workflow/executor';
 import { StepExecutor } from '../workflow/step-executor';
@@ -25,32 +21,17 @@ export class AgentSessionImpl implements AgentSession {
 
   constructor(session: Session) {
     this.session = session;
-    this.stepExecutor = new StepExecutor(session, this.tools);
+    this.stepExecutor = new StepExecutor(session);
     this.workflowExecutor = new WorkflowExecutor(this.stepExecutor, this.tools);
     this.workerManager = session.workerManager;
   }
 
   // Delegate basic session methods
-  async* createResponse(args: GenerateArgs, generationTask?: GenerationTask): AsyncIterable<TokenStreamChunk> {
-    if (this.disposed) throw new Error('Agent session disposed');
-    
-    // Add registered tools to the generation args
-    const toolsArray = args.tools ? [...args.tools] : [];
-    for (const tool of this.tools.values()) {
-      toolsArray.push({
-        type: tool.type,
-        function: {
-          name: tool.function.name,
-          description: tool.function.description,
-          parameters: tool.function.parameters
-        }
-      });
-    }
-
-    const generateArgs: GenerateArgs = { ...args };
-    if (toolsArray.length > 0) {
-      generateArgs.tools = toolsArray;
-    }
+  async* createResponse(
+    generateArgs: GenerateArgs, 
+    generationTask?: GenerationTask
+  ): AsyncIterable<TokenStreamChunk> {
+    logger.agent.debug('Creating agent session response', { generateArgs, generationTask });
     yield* this.session.createResponse(generateArgs, generationTask);
   }
 
@@ -61,7 +42,6 @@ export class AgentSessionImpl implements AgentSession {
     this.tools.clear();
   }
 
-  // Agent-specific methods
   registerTool(tool: Tool): void {
     if (this.disposed) throw new Error('Agent session disposed');
     this.tools.set(tool.function.name, tool);
@@ -71,14 +51,11 @@ export class AgentSessionImpl implements AgentSession {
     return Array.from(this.tools.values());
   }
 
-  async* runWorkflow(prompt: string, workflow: WorkflowDefinition): AsyncIterable<AgentStepResult> {
+  async* runWorkflow(
+    prompt: string, workflow: AgentWorkflow
+  ): AsyncIterable<WorkflowStepResult> {
     if (this.disposed) throw new Error('Agent session disposed');
     yield* this.workflowExecutor.execute(prompt, workflow);
-  }
-
-  async* executeStep(step: WorkflowStep, context: Record<string, any>): AsyncIterable<AgentStepResult> {
-    if (this.disposed) throw new Error('Agent session disposed');
-    yield* this.stepExecutor.execute(step, context);
   }
 }
 

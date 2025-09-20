@@ -1,10 +1,8 @@
 import {
   type CreateSessionArgs,
   type GenerationTask,
-  type WorkerInstance,
-  type Model
-} from '../types/api';
-import { GenerateArgs } from '../types/worker';
+} from '../types/session';
+import { GenerateArgs, WorkerInstance, Model } from '../types/worker';
 import { logger } from '../utils/logger';
 
 export class WorkerManager {
@@ -18,10 +16,8 @@ export class WorkerManager {
   private getModel(generationTask?: GenerationTask): Model {
     const models = this.args.models;
     switch (generationTask) {
-      case 'function_calling':
-        return models?.function_calling || { name: 'onnx-community/Qwen3-0.6B-ONNX', quantization: 'q4f16' };
-      case 'planning':
-        return models?.planning || { name: 'onnx-community/Qwen3-0.6B-ONNX', quantization: 'q4f16' };
+      case 'tool_use':
+        return models?.tool_use || { name: 'onnx-community/Qwen3-0.6B-ONNX', quantization: 'q4f16' };
       case 'reasoning':
         return models?.reasoning || { name: 'onnx-community/Qwen3-0.6B-ONNX', quantization: 'q4f16' };
       case 'chat':

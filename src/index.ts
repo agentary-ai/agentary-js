@@ -1,17 +1,16 @@
 export { createSession } from './core/session.js';
 export { createAgentSession } from './core/agent-session.js';
+
 export { logger, createLogger, setGlobalLogLevel, LogLevel } from './utils/logger';
 export { LogConfigs, getEnvironmentConfig, enableDebuggingMode, disableDebuggingMode, isDebuggingMode } from './utils/logger-config';
-export type { 
-  CreateSessionArgs, 
-  TokenStreamChunk, 
-  Session, 
-  GenerationTask,
-  Tool,
+
+export { 
   WorkflowStep,
-  WorkflowDefinition,
-  AgentStepResult,
-  AgentWorkflowResult,
+  AgentWorkflow,
+  WorkflowStepResult,
+  AgentMemory,
+  AgentState,
   AgentSession
-} from './types/api';
-export type { GenerateArgs } from './types/worker';
+} from './types/agent-session';
+export { CreateSessionArgs, TokenStreamChunk, Session, GenerationTask } from './types/session';
+export { GenerateArgs, Tool } from './types/worker';

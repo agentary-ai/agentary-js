@@ -1,5 +1,5 @@
-import { type CreateSessionArgs, type Session, type TokenStreamChunk, type GenerationTask, type WorkerInstance } from '../types/api';
-import { GenerateArgs } from '../types/worker';
+import { type CreateSessionArgs, type Session, type TokenStreamChunk, type GenerationTask } from '../types/session';
+import { GenerateArgs, WorkerInstance } from '../types/worker';
 import { WorkerManager } from '../workers/manager';
 import { logger } from '../utils/logger';
 
@@ -49,7 +49,7 @@ export async function createSession(args: CreateSessionArgs = {}): Promise<Sessi
       }
     };
     workerInstance.worker.addEventListener('message', onMessage as any);
-    
+
     workerInstance.worker.postMessage({
       type: 'generate',
       requestId,
