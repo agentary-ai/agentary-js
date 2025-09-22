@@ -7,9 +7,9 @@ export type GenerationTask = 'chat' | 'tool_use' | 'reasoning';
 export interface CreateSessionArgs {
   models?: {
     default?: Model;
-    tool_use: Model;
-    chat: Model;
-    reasoning: Model;
+    tool_use?: Model;
+    chat?: Model;
+    reasoning?: Model;
   }
   ctx?: number;
   engine?: DeviceType;

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createSession } from '../../src/core/session'
-import type { CreateSessionArgs, GenerateArgs } from '../../src/types/api'
+import type { CreateSessionArgs } from '../../src/types/session'
+import type { GenerateArgs } from '../../src/types/worker'
 
 // Mock the WorkerManager with more realistic behavior
 vi.mock('../../src/workers/manager', () => {
@@ -19,14 +20,14 @@ vi.mock('../../src/workers/manager', () => {
               handler({ data: { 
                 type: 'chunk', 
                 requestId: msg.requestId,
-                payload: { token: 'Hello', tokenId: 1, isFirst: true, isLast: false, ttfbMs: 100 }
+                args: { token: 'Hello', tokenId: 1, isFirst: true, isLast: false, ttfbMs: 100 }
               }} as MessageEvent)
               
               // Send middle chunk
               handler({ data: { 
                 type: 'chunk', 
                 requestId: msg.requestId,
-                payload: { token: ' world', tokenId: 2, isFirst: false, isLast: false }
+                args: { token: ' world', tokenId: 2, isFirst: false, isLast: false }
               }} as MessageEvent)
               
               // Send done
@@ -60,7 +61,7 @@ vi.mock('../../src/workers/manager', () => {
 
   return {
     WorkerManager: vi.fn().mockImplementation(() => ({
-      getWorkerForGeneration: vi.fn().mockResolvedValue(createMockWorkerInstance()),
+      getWorker: vi.fn().mockResolvedValue(createMockWorkerInstance()),
       disposeAll: vi.fn().mockResolvedValue(undefined)
     }))
   }
@@ -76,7 +77,7 @@ describe('Session Management', () => {
       const session = await createSession()
       
       expect(session).toBeDefined()
-      expect(session.generate).toBeTypeOf('function')
+      expect(session.createResponse).toBeTypeOf('function')
       expect(session.dispose).toBeTypeOf('function')
     })
 
@@ -94,7 +95,7 @@ describe('Session Management', () => {
       const session = await createSession(config)
       
       expect(session).toBeDefined()
-      expect(session.generate).toBeTypeOf('function')
+      expect(session.createResponse).toBeTypeOf('function')
       expect(session.dispose).toBeTypeOf('function')
     })
 
@@ -105,12 +106,12 @@ describe('Session Management', () => {
             name: 'chat-model',
             quantization: 'q4'
           },
-          function_calling: {
-            name: 'function-model',
+          tool_use: {
+            name: 'tool-model',
             quantization: 'q8'
           },
-          planning: {
-            name: 'planning-model',
+          reasoning: {
+            name: 'reasoning-model',
             quantization: 'q4'
           }
         }
@@ -122,13 +123,13 @@ describe('Session Management', () => {
     })
   })
 
-  describe('Session.generate', () => {
+  describe('Session.createResponse', () => {
     it('should throw error when generating on disposed session', async () => {
       const session = await createSession()
       await session.dispose()
 
       await expect(async () => {
-        for await (const chunk of session.generate({ prompt: 'test' })) {
+        for await (const chunk of session.createResponse({ messages: [{ role: 'user', content: 'test' }] })) {
           // This should not execute
         }
       }).rejects.toThrow('Session disposed')
@@ -137,11 +138,11 @@ describe('Session Management', () => {
     it('should handle basic generation request', async () => {
       const session = await createSession()
       const generateArgs: GenerateArgs = {
-        prompt: 'Hello, world!'
+        messages: [{ role: 'user', content: 'Hello, world!' }]
       }
 
       // Verify the generator can be created and has the expected API
-      const generator = session.generate(generateArgs)
+      const generator = session.createResponse(generateArgs)
       expect(generator).toBeDefined()
       expect(typeof generator[Symbol.asyncIterator]).toBe('function')
       
@@ -165,11 +166,11 @@ describe('Session Management', () => {
       }]
 
       const generateArgs: GenerateArgs = {
-        prompt: 'Use the test tool',
+        messages: [{ role: 'user', content: 'Use the test tool' }],
         tools
       }
 
-      const generator = session.generate(generateArgs)
+      const generator = session.createResponse(generateArgs)
       
       // Verify generator was created successfully
       expect(generator).toBeDefined()
@@ -180,8 +181,10 @@ describe('Session Management', () => {
     it('should handle generation parameters', async () => {
       const session = await createSession()
       const generateArgs: GenerateArgs = {
-        prompt: 'Test prompt',
-        system: 'Test system message',
+        messages: [
+          { role: 'system', content: 'Test system message' },
+          { role: 'user', content: 'Test prompt' }
+        ],
         temperature: 0.7,
         top_p: 0.9,
         top_k: 50,
@@ -190,7 +193,7 @@ describe('Session Management', () => {
         seed: 42
       }
 
-      const generator = session.generate(generateArgs)
+      const generator = session.createResponse(generateArgs)
       
       // Verify generator was created successfully
       expect(generator).toBeDefined()
@@ -219,7 +222,7 @@ describe('Session Management', () => {
       const session = await createSession()
       
       const chunks: any[] = []
-      for await (const chunk of session.generate({ prompt: 'test' })) {
+      for await (const chunk of session.createResponse({ messages: [{ role: 'user', content: 'test' }] })) {
         chunks.push(chunk)
       }
       
@@ -250,13 +253,13 @@ describe('Session Management', () => {
     it('should handle generation parameters correctly', async () => {
       const session = await createSession()
       const generateArgs = {
-        prompt: 'test',
+        messages: [{ role: 'user', content: 'test' }],
         temperature: 0.7,
         top_p: 0.9,
         stop: ['</s>']
       }
       
-      const generator = session.generate(generateArgs)
+      const generator = session.createResponse(generateArgs)
       expect(generator).toBeDefined()
       
       await session.dispose()
@@ -301,14 +304,14 @@ describe('Session Management', () => {
       // Override the mock for this specific test
       const WorkerManager = (await import('../../src/workers/manager')).WorkerManager as any
       WorkerManager.mockImplementationOnce(() => ({
-        getWorkerForGeneration: vi.fn().mockResolvedValue(errorWorkerInstance),
+        getWorker: vi.fn().mockResolvedValue(errorWorkerInstance),
         disposeAll: vi.fn().mockResolvedValue(undefined)
       }))
       
       const session = await createSession()
       const chunks: any[] = []
       
-      for await (const chunk of session.generate({ prompt: 'test' })) {
+      for await (const chunk of session.createResponse({ messages: [{ role: 'user', content: 'test' }] })) {
         chunks.push(chunk)
       }
       
@@ -338,13 +341,13 @@ describe('Session Management', () => {
                   messageHandler({ data: { 
                     type: 'debug', 
                     requestId: msg.requestId,
-                    payload: { message: 'Model loaded successfully' }
+                    args: { message: 'Model loaded successfully' }
                   }} as MessageEvent)
                   // Then send normal chunks
                   messageHandler({ data: { 
                     type: 'chunk', 
                     requestId: msg.requestId,
-                    payload: { token: 'Test', tokenId: 1, isFirst: true, isLast: false }
+                    args: { token: 'Test', tokenId: 1, isFirst: true, isLast: false }
                   }} as MessageEvent)
                   messageHandler({ data: { 
                     type: 'done', 
@@ -371,14 +374,14 @@ describe('Session Management', () => {
       // Override the mock for this test
       const WorkerManager = (await import('../../src/workers/manager')).WorkerManager as any
       WorkerManager.mockImplementationOnce(() => ({
-        getWorkerForGeneration: vi.fn().mockResolvedValue(debugWorkerInstance),
+        getWorker: vi.fn().mockResolvedValue(debugWorkerInstance),
         disposeAll: vi.fn().mockResolvedValue(undefined)
       }))
       
       const session = await createSession()
       const chunks: any[] = []
       
-      for await (const chunk of session.generate({ prompt: 'test' })) {
+      for await (const chunk of session.createResponse({ messages: [{ role: 'user', content: 'test' }] })) {
         chunks.push(chunk)
       }
       
@@ -398,7 +401,7 @@ describe('Session Management', () => {
       // Override the mock to track workers
       const WorkerManager = (await import('../../src/workers/manager')).WorkerManager as any
       WorkerManager.mockImplementationOnce(() => ({
-        getWorkerForGeneration: vi.fn().mockImplementation(() => {
+        getWorker: vi.fn().mockImplementation(() => {
           const messageHandlers = new Map()
           const worker = {
             postMessage: vi.fn().mockImplementation((msg: any) => {
@@ -407,13 +410,14 @@ describe('Session Management', () => {
                 setTimeout(() => {
                   const handler = messageHandlers.get('message')
                   if (handler) {
-                    // Send unique content based on the prompt to verify correct routing
-                    const prefix = msg.args.prompt === 'test1' ? 'First' : 'Second'
+                    // Send unique content based on the message content to verify correct routing
+                    const userMessage = msg.args.messages?.find((m: any) => m.role === 'user')?.content || ''
+                    const prefix = userMessage === 'test1' ? 'First' : 'Second'
                     
                     handler({ data: { 
                       type: 'chunk', 
                       requestId: msg.requestId,
-                      payload: { token: `${prefix} response`, tokenId: 1, isFirst: true, isLast: false }
+                      args: { token: `${prefix} response`, tokenId: 1, isFirst: true, isLast: false }
                     }})
                     
                     handler({ data: { 
@@ -448,8 +452,8 @@ describe('Session Management', () => {
       const session = await createSession()
       
       // Start multiple generations concurrently
-      const gen1 = session.generate({ prompt: 'test1' })
-      const gen2 = session.generate({ prompt: 'test2' })
+      const gen1 = session.createResponse({ messages: [{ role: 'user', content: 'test1' }] })
+      const gen2 = session.createResponse({ messages: [{ role: 'user', content: 'test2' }] })
       
       const chunks1: any[] = []
       const chunks2: any[] = []
@@ -488,7 +492,7 @@ describe('Session Management', () => {
       const session = await createSession()
       const WorkerManager = (await import('../../src/workers/manager')).WorkerManager as any
       const mockInstance = WorkerManager.mock.results[0].value
-      const workerInstance = await mockInstance.getWorkerForGeneration()
+      const workerInstance = await mockInstance.getWorker()
       
       // Clear previous calls
       workerInstance.worker.addEventListener.mockClear()
@@ -496,7 +500,7 @@ describe('Session Management', () => {
       
       // Generate and consume all chunks
       const chunks: any[] = []
-      for await (const chunk of session.generate({ prompt: 'test' })) {
+      for await (const chunk of session.createResponse({ messages: [{ role: 'user', content: 'test' }] })) {
         chunks.push(chunk)
       }
       
@@ -513,13 +517,13 @@ describe('Session Management', () => {
       const session = await createSession()
       const WorkerManager = (await import('../../src/workers/manager')).WorkerManager as any
       const mockInstance = WorkerManager.mock.results[0].value
-      const workerInstance = await mockInstance.getWorkerForGeneration()
+      const workerInstance = await mockInstance.getWorker()
       
       // Clear previous calls
       workerInstance.worker.removeEventListener.mockClear()
       
       // Start generation but break early
-      const generator = session.generate({ prompt: 'test' })
+      const generator = session.createResponse({ messages: [{ role: 'user', content: 'test' }] })
       const iterator = generator[Symbol.asyncIterator]()
       
       // Get first chunk then break
