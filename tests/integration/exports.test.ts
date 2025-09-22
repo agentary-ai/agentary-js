@@ -11,9 +11,13 @@ describe('Library Exports', () => {
 
   it('should export types', async () => {
     // Test that types can be imported
-    const types = await import('../../src/types/api')
+    const sessionTypes = await import('../../src/types/session')
+    const workerTypes = await import('../../src/types/worker')
+    const agentTypes = await import('../../src/types/agent-session')
     
-    expect(types).toBeDefined()
+    expect(sessionTypes).toBeDefined()
+    expect(workerTypes).toBeDefined()
+    expect(agentTypes).toBeDefined()
   })
 
   it('should export logger utilities', async () => {

@@ -1,195 +1,231 @@
-import { 
-  type WorkflowStep, 
-  type AgentStepResult, 
-  type Tool, 
-  type Session
-} from '../types/api';
+import type { Session } from '../types/session'
+import type { Tool, GenerateArgs } from '../types/worker';
+import type { 
+  WorkflowStep,
+  AgentMemory,
+} from '../types/agent-session';
+
 import { logger } from '../utils/logger';
-import { PromptBuilder } from '../processing/prompts/builder';
 import { ToolParser } from '../processing/tools/parser';
 import { ContentProcessor } from '../processing/content/processor';
-import { getTaskTypeForStep, getResultType } from './step-configs';
+import { getPromptSuffix } from '../processing/prompts/templates';
 
 export class StepExecutor {
   private session: Session;
-  private tools: Map<string, Tool>;
-  private promptBuilder: PromptBuilder;
   private toolParser: ToolParser;
   private contentProcessor: ContentProcessor;
 
   constructor(
     session: Session, 
-    tools: Map<string, Tool>,
-    promptBuilder?: PromptBuilder,
-    toolParser?: ToolParser,
-    contentProcessor?: ContentProcessor
   ) {
     this.session = session;
-    this.tools = tools;
-    this.promptBuilder = promptBuilder || new PromptBuilder();
-    this.toolParser = toolParser || new ToolParser();
-    this.contentProcessor = contentProcessor || new ContentProcessor();
+    this.toolParser = new ToolParser();
+    this.contentProcessor = new ContentProcessor();
   }
 
-  async* execute(step: WorkflowStep, context: Record<string, any>): AsyncIterable<AgentStepResult> {
+  async execute(
+    step: WorkflowStep, agentMemory: AgentMemory, tools: Tool[]
+  ): Promise<void> {
     const stepStartTime = Date.now();
+    logger.agent.debug('Executing step', { step, agentMemory, tools });
 
     try {
-      const availableTools = step.tools?.map(toolName => this.tools.get(toolName)).filter(Boolean) || [];
+      if (step.attempts && step.maxAttempts && step.attempts >= step.maxAttempts) {
+        step.complete = false;
+        step.response = {
+          error: 'Max retries exceeded',
+          content: '',
+          toolCall: {},
+        };
+      }
+
+      // Reset step state
+      step.attempts = step.attempts ? step.attempts + 1 : 1;
+      step.complete = false;
+      step.response = {
+        error: '',
+        content: '',
+        toolCall: {},
+        metadata: {}
+      };
+
+      // Prepare prompt and add to agent memory
+      let prompt = step.prompt;
+      if (step.generationTask) {
+        prompt = `${step.prompt} ${getPromptSuffix(step.generationTask)}`;
+      } else if (step.toolChoice && step.toolChoice.length > 0) {
+        // Add tool use prompt suffix by default if tool choice is provided
+        step.generationTask = 'tool_use';
+        prompt = `${step.prompt} ${getPromptSuffix('tool_use')}`;
+      }
+
+      agentMemory.messages.push({
+        role: 'user',
+        content: prompt
+      });
+
+      // Select tools: if toolChoice specified, filter by names; otherwise include all registered tools
+      tools = (step.toolChoice && step.toolChoice.length > 0)
+        ? tools.filter(tool => step.toolChoice!.includes(tool.function.name))
+        : tools;
+      
+      const generateArgs: GenerateArgs = {
+        messages: agentMemory.messages,
+        temperature: step.temperature ?? 0.1,
+        max_new_tokens: step.maxTokens ?? 1024,
+      };
+      if (tools.length > 0) {
+        generateArgs.tools = tools;
+      }
+
+      logger.agent.debug('Generating step response', {
+        generateArgs,
+        generationTask: step.generationTask,
+      });
         
-      // Build step context
-      const stepContext = {
-        ...context,
-        currentStep: step,
-        availableTools,
-      };
-
-      yield {
-        stepId: step.id,
-        type: 'thinking',
-        content: `Starting step: ${step.description}`,
-        isComplete: false,
-        metadata: { startTime: stepStartTime }
-      };
-
-      // Create system and user prompts
-      const systemPrompt = this.promptBuilder.buildSystemPrompt(step, stepContext);
-      const userPrompt = this.promptBuilder.buildUserPrompt(step, stepContext);
-
-      let stepResult = '';
-      let toolCallResult: any = undefined;
-
-      const taskType = getTaskTypeForStep(step.type);
-
       // Generate response
-      for await (const chunk of this.session.generate({
-        system: systemPrompt,
-        prompt: userPrompt,
-        taskType,
-        tools: availableTools.map(tool => ({
-          type: tool!.type,
-          function: {
-            name: tool!.function.name,
-            description: tool!.function.description,
-            parameters: tool!.function.parameters
-          }
-        })),
-        temperature: 0.1 // Lower temperature for more focused agent behavior
-      })) {
+      let stepResult = '';
+      for await (const chunk of this.session.createResponse(
+        generateArgs, step.generationTask
+      )) {
         if (!chunk.isLast) {
           stepResult += chunk.token;
         }
       }
-
-      logger.agent.debug('Step result', { stepResult, stepType: step.type, availableToolNames: availableTools.map(t => t?.function.name) });
+      logger.agent.debug('Step result', {
+        stepResult,
+        generationTask: step.generationTask,
+      });
 
       // Filter out thinking tags and extract clean content
       const { cleanContent, thinkingContent } = this.contentProcessor.removeThinkTags(stepResult);
       
-      // Parse potential tool calls from the clean content
-      const toolCall = this.toolParser.parse(cleanContent);
-      logger.agent.debug('Tool call parsing result', { 
-        cleanContent, 
-        toolCall, 
-        availableToolsCount: availableTools.length,
-        availableToolNames: availableTools.map(t => t?.function.name)
-      });
-
-      if (toolCall && availableTools.length > 0) {
-        const tool = availableTools.find(t => t!.function.name === toolCall.name);
-        logger.agent.debug('Tool found', { tool });
-        if (tool?.function.implementation) {
-          yield {
-            stepId: step.id,
-            type: 'tool_call',
-            content: `Calling tool: ${toolCall.name}`,
-            isComplete: false,
-            toolCall: toolCall
-          };
-
-          try {
-            logger.agent.debug('Calling tool', { toolCall });
-            const result = await tool.function.implementation(...Object.values(toolCall.args));
-            toolCallResult = result;
-            logger.agent.debug('Tool execution result', { result });
-
-            yield {
-              stepId: step.id,
-              type: 'tool_call',
-              content: `Tool result: ${JSON.stringify(result)}`,
-              isComplete: false,
-              toolCall: { ...toolCall, result }
-            };
-          } catch (error: any) {
-            logger.agent.error('Tool execution failed', { error });
-            yield {
-              stepId: step.id,
-              type: 'error',
-              content: `Tool execution failed: ${error.message}`,
-              isComplete: true,
-              error: error.message
-            };
-            return;
-          }
-        }
-      } else {
+      if (step.generationTask === 'tool_use') {
+        // Parse potential tool calls from the clean content
+        const toolCall = this.toolParser.parse(cleanContent);
+        logger.agent.debug('Tool call parsing result', { 
+          cleanContent, 
+          toolCall, 
+        });
         if (!toolCall) {
-          logger.agent.debug('No tool call detected in content', { cleanContent });
-        } else if (availableTools.length === 0) {
-          logger.agent.debug('Tool call detected but no tools available', { toolCall });
+          step.complete = false;
+          step.response = {
+            error: 'No tool call detected in response',
+            content: cleanContent,
+            toolCall: {},
+            metadata: {
+              duration: Date.now() - stepStartTime,
+              stepType: step.generationTask,
+            }
+          };
+          return;
         }
-      }
-
-      // Determine next step based on step type and result
-      const nextStepId = this.determineNextStep(step, cleanContent, toolCallResult);
-
-      const result: AgentStepResult = {
-        stepId: step.id,
-        type: getResultType(step.type),
-        content: cleanContent, // Use cleaned content without <think> tags
-        isComplete: true,
-        metadata: { 
-          duration: Date.now() - stepStartTime,
-          stepType: step.type,
-          ...(thinkingContent ? { thinkingContent } : {}) // Store thinking separately in metadata
+        
+        // Find tool in tools array
+        logger.agent.debug('Finding tool in tools array', { toolCall, tools });
+        const toolSelected = tools.find(tool => tool.function.name === toolCall.name);
+        if (!toolSelected) {
+          step.complete = false;
+          step.response = {
+            error: `Tool ${toolCall.name} not found`,
+            metadata: {
+              duration: Date.now() - stepStartTime,
+              stepType: step.generationTask,
+              toolCall: toolCall,
+            }
+          };
+          return;
         }
-      };
-      if (nextStepId) {
-        result.nextStepId = nextStepId;
-      }
-      if (toolCall) {
-        result.toolCall = { ...toolCall, result: toolCallResult };
-      }
-      yield result;
 
+        if (toolSelected.function.implementation) {
+          const toolResult = await toolSelected.function.implementation(toolCall.args);
+          logger.agent.debug('Tool execution result', {
+            toolResult,
+            toolCall: toolCall,
+          });
+          step.complete = true;
+          step.response = {
+            toolCall: {
+              name: toolCall.name,
+              args: toolCall.args,
+              result: toolResult,
+            },
+            metadata: {
+              duration: Date.now() - stepStartTime,
+              stepType: step.generationTask,
+              ...(thinkingContent ? { thinkingContent } : {}),
+            }
+          };
+          // Add tool use and result to memory
+          agentMemory.messages.push(
+            {
+              role: 'assistant',
+              content: JSON.stringify({
+                type: 'tool_use',
+                name: toolCall.name,
+                args: toolCall.args,
+              })
+            },
+            {
+              role: 'user',
+              content: JSON.stringify({
+                type: 'tool_result',
+                name: toolCall.name,
+                content: JSON.stringify(toolResult),
+              })
+            }
+          );
+
+          return;
+
+        } else {
+          logger.agent.warn('Tool implementation not found', {
+            toolCall: toolCall,
+          });
+          step.complete = false;
+          step.response = {
+            error: 'Tool implementation not found',
+            toolCall: toolCall,
+            metadata: { 
+              duration: Date.now() - stepStartTime,
+              stepType: step.generationTask,
+              ...(thinkingContent ? { thinkingContent } : {}),
+            }
+          };
+          return;
+        }
+        
+      } else {
+        step.complete = true;
+        step.response = {
+          content: cleanContent,
+          metadata: {
+            duration: Date.now() - stepStartTime,
+            ...(thinkingContent ? { thinkingContent } : {}),
+            stepType: step.generationTask,
+          }
+        };
+
+        // Add tool use and result to memory
+        agentMemory.messages.push({
+          role: 'assistant',
+          content: cleanContent
+        });
+        
+        return;
+      }
     } catch (error: any) {
-      yield {
-        stepId: step.id,
-        type: 'error',
-        content: `Step execution failed: ${error.message}`,
-        isComplete: true,
-        error: error.message
+      // TODO: Improve error typing
+      step.complete = false;
+      step.response = {
+        error: error.message,
+        metadata: {
+          duration: Date.now() - stepStartTime,
+          stepType: step.generationTask,
+        }
       };
+      return;
     }
   }
-
-
-
-  private determineNextStep(step: WorkflowStep, result: string, toolResult: any): string | undefined {
-    // Simple next step determination - in a real implementation, this could be more sophisticated
-    if (step.nextSteps && step.nextSteps.length === 1) {
-      return step.nextSteps[0];
-    }
-    
-    if (step.nextSteps && step.nextSteps.length > 1) {
-      // For now, just return the first option
-      // In the future, this could involve analyzing the result to choose the appropriate path
-      return step.nextSteps[0];
-    }
-    
-    return undefined;
-  }
-
-
 }
 

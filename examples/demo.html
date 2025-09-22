@@ -402,7 +402,10 @@
             }
           }
           
-          for await (const chunk of session.generate({ prompt: chatPromptEl.value, tools })) {
+          for await (const chunk of session.createResponse({
+            messages: [{ role: 'user', content: chatPromptEl.value }],
+            tools
+          })) {
             if (chunk.isFirst && chunk.ttfbMs) {
               chatOutput.textContent += `TTFB: ${chunk.ttfbMs.toFixed(1)}ms\n`;
             }
@@ -445,11 +448,15 @@
             },
             required: ['expression']
           },
-          implementation: (expression) => {
+          implementation: ({ expression }) => {
             try {
-              console.log('Calculating', expression);
+              console.debug('--------------------------------');
+              console.debug('Calculating', expression);
               const sanitized = expression.replace(/[^0-9+\-*/(). ]/g, '');
+              console.debug('Sanitized expression:', sanitized);
               const result = eval(sanitized);
+              console.debug('Result:', result);
+              console.debug('--------------------------------');
               return `${expression} = ${result}`;
             } catch (error) {
               return `Error: Could not calculate "${expression}"`;
@@ -461,21 +468,27 @@
       const mathWorkflow = {
         id: 'math-problem-solver',
         name: 'Math Problem Solver',
-        description: 'Solves math problems step by step',
+        systemPrompt: 'You are a math problem solver. You will be given a math problem and you will need to solve it step by step. ' +
+          'Break down each problem into clear steps, showing your work. ' +
+          'Use the calculator tool when needed to perform calculations. ' +
+          'Do not attempt to determine the answer yourself.',
         maxIterations: 4,
         timeout: 50000,
         steps: [
           {
-            id: 'calculate',
-            type: 'act',
-            description: 'Use the calculator tool to calculate the answer, based on the steps outlined.',
+            id: 1,
+            generationTask: 'tool_use',
+            maxTokens: 2048,
+            prompt: 'Use the calculator tool to calculate the answer to the math problem.',
             tools: ['calculate'],
             nextSteps: ['explain']
           },
           {
-            id: 'explain',
-            type: 'respond',
-            description: 'Explain the solution in a clear and friendly way.'
+            id: 2,
+            name: 'Read solution',
+            prompt: 'Read the solution from the calculate tool and a share a brief explanation of the method.',
+            generationTask: 'chat',
+            nextSteps: ['done']
           }
         ],
         tools: [calculatorTool]
@@ -543,16 +556,8 @@
           const agent = await createAgentSession();
           updateAgentStatus('Agent running...', 'running');
 
-          const taskWorkflow = {
-            ...mathWorkflow,
-            steps: mathWorkflow.steps.map(step => ({
-              ...step,
-              description: step.description + `\n\nUser's task: "${task}"`
-            }))
-          };
-
           let stepCount = 0;
-          for await (const stepResult of agent.runWorkflow(taskWorkflow)) {
+          for await (const stepResult of agent.runWorkflow(task, mathWorkflow)) {
             stepCount++;
             addStep(stepResult);
             

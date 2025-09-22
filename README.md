@@ -42,8 +42,8 @@ const session = await createSession({
 });
 
 // Generate text with streaming
-for await (const chunk of session.generate({ 
-  prompt: 'Hello, how are you today?' 
+for await (const chunk of session.createResponse({ 
+  messages: [{ role: 'user', content: 'Hello, how are you today?' }]
 })) {
   if (chunk.isFirst && chunk.ttfbMs) {
     console.log(`Time to first byte: ${chunk.ttfbMs}ms`);
@@ -87,8 +87,8 @@ const tools = [
   }
 ];
 
-for await (const chunk of session.generate({ 
-  prompt: 'What is the weather in New York?',
+for await (const chunk of session.createResponse({ 
+  messages: [{ role: 'user', content: 'What is the weather in New York?' }],
   tools
 })) {
   process.stdout.write(chunk.token);
@@ -97,7 +97,7 @@ for await (const chunk of session.generate({
 
 ### Agentic Workflows
 
-Create sophisticated multi-step agent workflows that can think, reason, and take actions autonomously.
+Create multi-step agent workflows that can think, reason, and take actions autonomously.
 
 ```javascript
 import { createAgentSession } from 'agentary-js';
@@ -109,16 +109,12 @@ const agent = await createAgentSession({
       name: 'onnx-community/gemma-3-270m-it-ONNX',
       quantization: 'q4'
     },
-    function_calling: {
+    tool_use: {
       name: 'onnx-community/Qwen2.5-0.5B-Instruct',
       quantization: 'q4'
     },
-    planning: {
-      name: 'onnx-community/gemma-3-270m-it-ONNX',
-      quantization: 'q4'
-    },
-    reasoning: {
-      name: 'onnx-community/gemma-3-270m-it-ONNX',
+    default: {
+      name: 'onnx-community/Qwen2.5-0.5B-Instruct',
       quantization: 'q4'
     }
   },
@@ -128,33 +124,36 @@ const agent = await createAgentSession({
 const researchWorkflow = {
   id: 'research-assistant',
   name: 'Research Assistant Workflow',
-  description: 'Analyzes a topic and provides comprehensive insights',
+  systemPrompt: 'You are a helpful research assistant.',
   maxIterations: 5,
   timeout: 30000,
   steps: [
     {
-      id: 'understand-topic',
-      type: 'think',
-      description: 'Understand and break down the research topic',
-      nextSteps: ['gather-information']
+      id: 1,
+      prompt: 'Understand and break down the research topic',
+      maxTokens: 200,
+      temperature: 0.7,
+      generationTask: 'reasoning'
     },
     {
-      id: 'gather-information',
-      type: 'act',
-      description: 'Search for relevant information',
-      tools: ['web_search'],
-      nextSteps: ['analyze-findings']
+      id: 2,
+      prompt: 'Search for relevant information using available tools',
+      toolChoice: ['web_search'],
+      maxTokens: 300,
+      generationTask: 'tool_use'
     },
     {
-      id: 'analyze-findings',
-      type: 'think',
-      description: 'Analyze gathered information for insights',
-      nextSteps: ['provide-summary']
+      id: 3,
+      prompt: 'Analyze the gathered information for insights',
+      maxTokens: 400,
+      temperature: 0.8,
+      generationTask: 'reasoning'
     },
     {
-      id: 'provide-summary',
-      type: 'respond',
-      description: 'Provide a comprehensive summary and recommendations'
+      id: 4,
+      prompt: 'Provide a comprehensive summary and recommendations',
+      maxTokens: 500,
+      generationTask: 'chat'
     }
   ],
   tools: [
@@ -182,18 +181,22 @@ const researchWorkflow = {
 // Execute the workflow
 console.log('🤖 Starting research workflow...\n');
 
-for await (const step of agent.runWorkflow(researchWorkflow)) {
-  console.log(`[${step.type.toUpperCase()}] ${step.stepId}: ${step.content}`);
+for await (const step of agent.runWorkflow('Research the benefits of renewable energy', researchWorkflow)) {
+  console.log(`[STEP ${step.id}] ${step.prompt}`);
   
-  if (step.toolCall) {
-    console.log(`  🔧 Tool: ${step.toolCall.name}(${JSON.stringify(step.toolCall.args)})`);
-    if (step.toolCall.result) {
-      console.log(`  📄 Result: ${step.toolCall.result}`);
+  if (step.response?.content) {
+    console.log(`  📝 Content: ${step.response.content}`);
+  }
+  
+  if (step.response?.toolCall) {
+    console.log(`  🔧 Tool: ${step.response.toolCall.name}(${JSON.stringify(step.response.toolCall.args)})`);
+    if (step.response.toolCall.result) {
+      console.log(`  📄 Result: ${step.response.toolCall.result}`);
     }
   }
   
-  if (step.error) {
-    console.log(`  ❌ Error: ${step.error}`);
+  if (step.response?.error) {
+    console.log(`  ❌ Error: ${step.response.error}`);
   }
   
   console.log(''); // Empty line for readability
@@ -216,35 +219,50 @@ Creates a new agent session with workflow capabilities, extending the basic sess
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `models` | `object` | Model configuration for different tasks |
-| `models.chat` | `string` | Model ID for chat/text generation |
-| `models.function_calling` | `string` | Model ID for function calling tasks |
-| `models.planning` | `string` | Model ID for planning tasks (optional) |
-| `models.reasoning` | `string` | Model ID for reasoning tasks (optional) |
-| `engine` | `'webgpu' \| 'wasm' \| 'auto'` | Inference engine (default: 'auto') |
-| `quantization` | `'q4' \| 'q8' \| 'auto'` | Model quantization level |
-| `hfToken` | `string` | Hugging Face token for private models |
-| `ctx` | `number` | Context length override |
+| `models` | `object` | Model configuration for different tasks (optional) |
+| `models.default` | `Model` | Default model configuration (optional) |
+| `models.tool_use` | `Model` | Model for tool/function calling |
+| `models.chat` | `Model` | Model for chat/text generation |
+| `models.reasoning` | `Model` | Model for reasoning tasks |
+| `engine` | `DeviceType` | Inference engine - 'auto', 'webgpu', 'wasm', 'webnn' (optional) |
+| `hfToken` | `string` | Hugging Face token for private models (optional) |
+| `ctx` | `number` | Context length override (optional) |
 
 ### `Session`
 
-#### `generate(args: GenerateArgs): AsyncIterable<TokenStreamChunk>`
+#### `createResponse(args: GenerateArgs, generationTask?: GenerationTask): AsyncIterable<TokenStreamChunk>`
 
-Generates text with streaming output.
+Generates text with streaming output using the specified generation task.
 
 ##### GenerateArgs
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `prompt` | `string` | Input prompt for generation |
-| `system` | `string` | System message (optional) |
-| `tools` | `object[]` | Function calling tools (optional) |
+| `messages` | `Message[]` | Array of conversation messages |
+| `model` | `Model` | Override model for this generation (optional) |
+| `max_new_tokens` | `number` | Maximum number of tokens to generate |
+| `tools` | `Tool[]` | Function calling tools (optional) |
 | `temperature` | `number` | Sampling temperature (0.0-2.0) |
 | `top_p` | `number` | Nucleus sampling parameter |
 | `top_k` | `number` | Top-k sampling parameter |
 | `repetition_penalty` | `number` | Repetition penalty (default: 1.1) |
 | `stop` | `string[]` | Stop sequences |
 | `seed` | `number` | Random seed for reproducible output |
+| `deterministic` | `boolean` | Use deterministic generation |
+
+##### Message
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `role` | `'user' \| 'assistant' \| 'system'` | Role of the message sender |
+| `content` | `string` | The message content |
+
+##### Model
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `string` | Model identifier (e.g., HuggingFace model name) |
+| `quantization` | `DataType` | Model quantization level |
 
 ##### TokenStreamChunk
 
@@ -254,7 +272,8 @@ Generates text with streaming output.
 | `tokenId` | `number` | Token ID |
 | `isFirst` | `boolean` | Whether this is the first token |
 | `isLast` | `boolean` | Whether this is the last token |
-| `ttfbMs` | `number` | Time to first byte in milliseconds |
+| `ttfbMs` | `number` | Time to first byte in milliseconds (optional) |
+| `tokensPerSecond` | `number` | Tokens per second rate (optional) |
 
 #### `dispose(): Promise<void>`
 
@@ -264,13 +283,9 @@ Cleans up the session and releases all resources.
 
 Extends `Session` with additional methods for workflow execution and tool management.
 
-#### `runWorkflow(workflow: WorkflowDefinition): AsyncIterable<AgentStepResult>`
+#### `runWorkflow(prompt: string, workflow: AgentWorkflow): AsyncIterable<WorkflowStep>`
 
-Executes a multi-step agent workflow with real-time step results.
-
-#### `executeStep(step: WorkflowStep, context: Record<string, any>): AsyncIterable<AgentStepResult>`
-
-Executes a single workflow step with the given context.
+Executes a multi-step agent workflow with the given prompt and workflow definition.
 
 #### `registerTool(tool: Tool): void`
 
@@ -280,45 +295,58 @@ Registers a custom tool for use in workflows and generation.
 
 Returns all currently registered tools.
 
-#### AgentStepResult
+#### WorkflowStep
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `stepId` | `string` | Unique identifier for the step |
-| `type` | `'thinking' \| 'tool_call' \| 'decision' \| 'response' \| 'error'` | Type of step result |
-| `content` | `string` | Generated content or result description |
-| `isComplete` | `boolean` | Whether this step is finished |
-| `toolCall` | `object` | Tool call information (if applicable) |
-| `toolCall.name` | `string` | Name of the called tool |
-| `toolCall.args` | `Record<string, any>` | Arguments passed to the tool |
-| `toolCall.result` | `any` | Tool execution result |
-| `nextStepId` | `string` | ID of the next step to execute |
-| `error` | `string` | Error message (if step failed) |
-| `metadata` | `Record<string, any>` | Additional step metadata |
+| `id` | `number` | Unique identifier for the step |
+| `prompt` | `string` | The prompt or description for this step |
+| `maxTokens` | `number` | Maximum tokens to generate (optional) |
+| `temperature` | `number` | Temperature for generation (optional) |
+| `generationTask` | `GenerationTask` | Type of generation task (optional) |
+| `toolChoice` | `string[]` | Available tools for this step (optional) |
+| `maxAttempts` | `number` | Maximum retry attempts (optional) |
+| `attempts` | `number` | Current attempt count (optional) |
+| `complete` | `boolean` | Whether this step is finished (optional) |
+| `response` | `WorkflowStepResponse` | Step execution result (optional) |
 
-#### WorkflowDefinition
+#### WorkflowStepResponse
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `error` | `string` | Error message if step failed (optional) |
+| `content` | `string` | Generated content (optional) |
+| `toolCall` | `object` | Tool call information (optional) |
+| `toolCall.name` | `string` | Name of the called tool (optional) |
+| `toolCall.args` | `Record<string, any>` | Arguments passed to the tool (optional) |
+| `toolCall.result` | `string` | Tool execution result (optional) |
+| `metadata` | `Record<string, any>` | Additional step metadata (optional) |
+
+#### AgentWorkflow
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `id` | `string` | Unique workflow identifier |
 | `name` | `string` | Human-readable workflow name |
-| `description` | `string` | Workflow description |
+| `systemPrompt` | `string` | System prompt for the workflow (optional) |
+| `state` | `AgentState` | Current workflow state |
+| `memory` | `AgentMemory` | Workflow memory (optional) |
 | `steps` | `WorkflowStep[]` | Array of workflow steps |
 | `tools` | `Tool[]` | Tools available to the workflow |
-| `maxIterations` | `number` | Maximum number of steps to execute |
-| `timeout` | `number` | Workflow timeout in milliseconds |
+| `currentIteration` | `number` | Current iteration number (optional) |
+| `maxIterations` | `number` | Maximum number of iterations (optional) |
+| `timeout` | `number` | Workflow timeout in milliseconds (optional) |
 
-#### WorkflowStep
+#### AgentState
+
+Workflow state: `'idle' \| 'running' \| 'completed' \| 'failed'`
+
+#### AgentMemory
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `id` | `string` | Unique step identifier |
-| `type` | `'think' \| 'act' \| 'decide' \| 'respond'` | Type of step |
-| `description` | `string` | Step description/prompt |
-| `tools` | `string[]` | Tools available for this step |
-| `nextSteps` | `string[]` | Possible next step IDs |
-| `maxRetries` | `number` | Maximum retry attempts |
-| `condition` | `string` | Conditional logic for step execution |
+| `messages` | `Message[]` | Conversation messages |
+| `context` | `Record<string, any>` | Workflow context data |
 
 #### Tool
 
@@ -328,8 +356,11 @@ Returns all currently registered tools.
 | `function` | `object` | Function definition |
 | `function.name` | `string` | Function name |
 | `function.description` | `string` | Function description |
-| `function.parameters` | `Record<string, any>` | JSON Schema for parameters |
-| `function.implementation` | `Function` | JavaScript implementation |
+| `function.parameters` | `object` | JSON Schema for parameters |
+| `function.parameters.type` | `'object'` | Parameter schema type |
+| `function.parameters.properties` | `Record<string, any>` | Parameter properties |
+| `function.parameters.required` | `string[]` | Required parameter names |
+| `function.implementation` | `Function` | JavaScript implementation (optional) |
 
 ## 🌐 Browser Support
 
@@ -503,9 +534,8 @@ const researchPattern = {
 - Use structured data in step metadata
 
 #### 4. Model Selection
-- Use planning models for strategic, forward-thinking steps
 - Use reasoning models for analysis and inference
-- Use function calling models for tool-heavy workflows
+- Use tool_use models for tool-specific workflows
 - Consider using specialized models for domain-specific tasks
 
 ## 🔍 Logging & Debugging
@@ -640,7 +670,7 @@ logger.performance.info('Model loading completed', { duration: 2341 });
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions! Please see our [Contributing Guide](.github/CONTRIBUTING.md) for details.
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)

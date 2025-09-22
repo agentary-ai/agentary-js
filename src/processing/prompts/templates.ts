@@ -1,65 +1,25 @@
-import { type Tool } from '../../types/api';
+import { GenerationTask } from "../../types/session";
 
-export interface PromptTemplate {
-  buildSystemPrompt(stepId: string, stepType: string, description: string, context: Record<string, any>): string;
-  buildUserPrompt(stepId: string, description: string, context: Record<string, any>): string;
-}
-
-export class BasePromptTemplate implements PromptTemplate {
-  buildSystemPrompt(stepId: string, stepType: string, description: string, context: Record<string, any>): string {
-    let systemPrompt = `
-      You are an AI agent executing workflows step by step.
-
-      Current Workflow: ${context.workflowName || 'Unknown'}
-      Current Step: ${stepId} (${stepType})
-      Step Objective: ${description}
-    `;
-
-    // Add available tools to system context
-    if (context.availableTools && context.availableTools.length > 0) {
-      systemPrompt += `Available Tools: ${context.availableTools.map((t: Tool) => t.function.name).join(', ')}\n\n`;
+export const getPromptSuffix = (stepType: GenerationTask): string => {
+    switch (stepType) {
+      case 'reasoning':
+        return '<instructions>' +
+          'Think through this step carefully using <think></think> tags ' +
+          'for internal reasoning. Analyze the situation, consider different ' +
+          'approaches, and provide clear logical conclusions outside the tags. ' +
+          'Do not use tools in this step.' +
+          '</instructions>';
+      case 'tool_use':
+        return '<instructions>' +
+          `Use available tools to complete this action. Use <think></think> ` +
+          'tags to plan your approach and determine which tools to use.\n\n' +
+          'When you need to call a tool, use this exact format:\n' +
+          '<tool_call>\n' +
+          '{"name": "tool_name", "arguments": {"param": "value"}}\n' +
+          `</tool_call>\n\n` +
+          'Make sure to call the appropriate tools with proper parameters ' +
+          'to complete the required actions.' +
+          '</instructions>';
     }
-
-    // Add thinking tags instruction
-    systemPrompt += `\nIMPORTANT: You can use <think></think> tags to show your internal reasoning. Content within these tags will be visible in this step but filtered out before being passed to subsequent steps.\n\n`;
-
-    return systemPrompt;
+    return '';
   }
-
-  buildUserPrompt(stepId: string, description: string, context: Record<string, any>): string {
-    let userPrompt = '';
-
-    // Add context from previous steps
-    const previousSteps = Object.keys(context).filter(key => 
-      key !== 'workflowId' && key !== 'workflowName' && key !== 'startTime' && 
-      key !== 'iteration' && key !== 'currentStep' && key !== 'availableTools'
-    );
-
-    if (previousSteps.length > 0) {
-      userPrompt += `Previous work completed:\n`;
-      for (const stepId of previousSteps) {
-        const stepData = context[stepId];
-        userPrompt += `- ${stepId}: ${stepData.result}\n`;
-      }
-      userPrompt += '\n';
-    }
-
-    // Extract the actual user task from step description
-    // This assumes the user task is appended to step descriptions
-    const userTaskMatch = description.match(/User's task: "(.+?)"/);
-    if (userTaskMatch) {
-      userPrompt += `User's original request: "${userTaskMatch[1]}"\n\n`;
-    }
-
-    userPrompt += `Please complete the current step: ${stepId}`;
-
-    return userPrompt;
-  }
-}
-
-export const PROMPT_TEMPLATES = {
-  reasoning: new BasePromptTemplate(),
-  action: new BasePromptTemplate(),
-  decision: new BasePromptTemplate(),
-  response: new BasePromptTemplate()
-};
