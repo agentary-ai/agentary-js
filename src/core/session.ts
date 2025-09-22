@@ -20,6 +20,27 @@ export async function createSession(args: CreateSessionArgs = {}): Promise<Sessi
   async function* createResponse(args: GenerateArgs, generationTask?: GenerationTask): AsyncIterable<TokenStreamChunk> {
     if (disposed) throw new Error('Session disposed');
     
+    // Remove implementation field from tools before passing to worker
+    args = {
+      ...args,
+      ...(args.tools && args.tools.length > 0 ? {
+        tools: args.tools.map(tool => {
+          const { implementation, ...functionWithoutImpl } = tool.function;
+          return {
+            ...tool,
+            function: functionWithoutImpl
+          };
+        })
+      } : {})
+    };
+
+    logger.session.debug('Cleaned args', args);
+    
+    // Default to tool use if no generation task is specified and tools are provided
+    if (!generationTask && args.tools && args.tools.length > 0) {
+      generationTask = 'tool_use';
+    }
+
     // Retrieve worker for model generation
     const workerInstance = await workerManager.getWorker(args, generationTask);
     const requestId = nextId(workerInstance);

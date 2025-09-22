@@ -1,11 +1,10 @@
 import type { 
   AgentSession, 
   AgentWorkflow,
-  WorkflowStepResult, 
+  WorkflowStep, 
 } from '../types/agent-session';
 import type { Session, CreateSessionArgs, TokenStreamChunk, GenerationTask } from '../types/session';
 import type { GenerateArgs, Tool } from '../types/worker';
-import { logger } from '../utils/logger';
 import { createSession } from './session';
 import { WorkflowExecutor } from '../workflow/executor';
 import { StepExecutor } from '../workflow/step-executor';
@@ -14,7 +13,7 @@ import { WorkerManager } from '../workers/manager';
 export class AgentSessionImpl implements AgentSession {
   workerManager: WorkerManager;
   private session: Session;
-  private tools: Map<string, Tool> = new Map();
+  private tools: Tool[] = [];
   private disposed = false;
   private stepExecutor: StepExecutor;
   private workflowExecutor: WorkflowExecutor;
@@ -31,7 +30,6 @@ export class AgentSessionImpl implements AgentSession {
     generateArgs: GenerateArgs, 
     generationTask?: GenerationTask
   ): AsyncIterable<TokenStreamChunk> {
-    logger.agent.debug('Creating agent session response', { generateArgs, generationTask });
     yield* this.session.createResponse(generateArgs, generationTask);
   }
 
@@ -39,21 +37,21 @@ export class AgentSessionImpl implements AgentSession {
     if (this.disposed) return;
     this.disposed = true;
     await this.session.dispose();
-    this.tools.clear();
+    this.tools = [];
   }
 
   registerTool(tool: Tool): void {
     if (this.disposed) throw new Error('Agent session disposed');
-    this.tools.set(tool.function.name, tool);
+    this.tools.push(tool);
   }
 
   getRegisteredTools(): Tool[] {
-    return Array.from(this.tools.values());
+    return this.tools;
   }
 
   async* runWorkflow(
     prompt: string, workflow: AgentWorkflow
-  ): AsyncIterable<WorkflowStepResult> {
+  ): AsyncIterable<WorkflowStep> {
     if (this.disposed) throw new Error('Agent session disposed');
     yield* this.workflowExecutor.execute(prompt, workflow);
   }

@@ -3,16 +3,36 @@ import { GenerationTask, Session } from "./session";
 
 export type AgentState = 'idle' | 'running' | 'completed' | 'failed';
 
+export interface WorkflowStepResponse {
+  error?: string;
+  content?: string;
+  toolCall?: {
+    name?: string;
+    args?: Record<string, any>;
+    result?: string;
+  };
+  metadata?: Record<string, any>;
+}
+
+export interface WorkflowStepError {
+  id: number;
+  message: string;
+  metadata?: Record<string, any>;
+}
+
 export interface WorkflowStep {
   id: number;
-  name: string;
-  generationTask?: GenerationTask;
   prompt: string;
-  dependentSteps?: number[]; // Step IDs that must complete before this step
-  nextSteps?: number[];    // Possible next step IDs after this step
+  maxTokens?: number;
+  temperature?: number;
+  generationTask?: GenerationTask;
+//   dependentSteps?: number[]; // TODO: Step IDs that must complete before this step
+//   nextSteps?: number[];    // TODO: Possible next step IDs after this step
   toolChoice?: string[];
-  maxRetries?: number;
-  condition?: string;
+  maxAttempts?: number;
+  attempts?: number;
+  complete?: boolean;
+  response?: WorkflowStepResponse;
 }
 
 export interface AgentMemory {
@@ -21,11 +41,9 @@ export interface AgentMemory {
 }
 
 export interface AgentWorkflow {
-  id: number
+  id: string
   name: string;
-//   description: string;
   systemPrompt?: string;
-  userPrompt: string;
   state: AgentState;
   memory?: AgentMemory;
   steps: WorkflowStep[];
@@ -35,19 +53,19 @@ export interface AgentWorkflow {
   timeout?: number;
 }
 
-export interface WorkflowStepResult {
-  stepId: number;
-  content: string;
-  toolCall?: {
-    name: string;
-    args: Record<string, any>;
-    result?: string;
-  };
-  isComplete: boolean;
-  nextStepId?: number;  // Changed from string to number for consistency
-  error?: string;
-  metadata?: Record<string, any>;
-}
+// export interface WorkflowStepResult {
+//   stepId: number;
+//   content?: string;
+//   toolCall?: {
+//     name: string;
+//     args: Record<string, any>;
+//     result?: string;
+//   };
+//   nextStepId?: number; // TODO: use model to determine next step based response if multiple options are specified in step.nextSteps
+//   complete: boolean;
+//   error?: string;
+//   metadata?: Record<string, any>;
+// }
 
 // export interface AgentWorkflowResult {
 //   workflowId: string;
@@ -60,7 +78,7 @@ export interface WorkflowStepResult {
 // }
 
 export interface AgentSession extends Session {
-  runWorkflow(prompt: string, workflow: AgentWorkflow): AsyncIterable<WorkflowStepResult>;
+  runWorkflow(prompt: string, workflow: AgentWorkflow): AsyncIterable<WorkflowStep>;
   registerTool(tool: Tool): void;
   getRegisteredTools(): Tool[];
 }

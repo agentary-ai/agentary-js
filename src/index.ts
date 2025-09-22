@@ -7,7 +7,7 @@ export { LogConfigs, getEnvironmentConfig, enableDebuggingMode, disableDebugging
 export { 
   WorkflowStep,
   AgentWorkflow,
-  WorkflowStepResult,
+  WorkflowStepResponse,
   AgentMemory,
   AgentState,
   AgentSession

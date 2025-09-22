@@ -41,6 +41,7 @@ export interface Tool {
       properties: Record<string, any>;
       required: string[];
     };
+    implementation?: (...args: any[]) => any;
   };
 }
 

@@ -59,8 +59,7 @@ function postDebug(requestId: string, message: string, data?: unknown) {
     }
 
     if (msg.type === 'generate') {
-
-      postDebug(msg.requestId, 'generate request received', msg.args);
+      postDebug(msg.requestId, 'Generate request received', msg.args);
 
       if (!generator) throw new Error('Generator not initialized');
       if (disposed) throw new Error('Worker disposed');
@@ -82,7 +81,7 @@ function postDebug(requestId: string, message: string, data?: unknown) {
       }
       const renderedPrompt: string = generator.tokenizer.apply_chat_template(messages, applyTemplateOptions) as string;
       // TODO: Add warning if tools aren't supported in rendered prompt
-      postDebug(msg.requestId, 'rendered_prompt', renderedPrompt);
+      postDebug(msg.requestId, 'Rendered chat template', renderedPrompt);
 
       let first = true;
       const ttfbStart = performance.now();
@@ -115,8 +114,8 @@ function postDebug(requestId: string, message: string, data?: unknown) {
           streamer,
           ...(stop !== undefined && { stop }),
         };
-        await generator(renderedPrompt, generationOptions);
         logger.worker.debug('Starting generation', generationOptions, msg.requestId);
+        await generator(renderedPrompt, generationOptions);
         logger.worker.debug('Generation completed successfully', undefined, msg.requestId);
       } finally {
         isGenerating = false;

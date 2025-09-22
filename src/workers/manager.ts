@@ -76,7 +76,7 @@ export class WorkerManager {
     }
 
     if (!workerInstance.initialized && !workerInstance.disposed) {
-      logger.workerManager.debug('Model selected for generation', { model });
+      logger.workerManager.debug('Model selected for generation', { model, generationTask });
 
       const initId = this.nextId(workerInstance);
       workerInstance.worker.postMessage({
@@ -92,7 +92,6 @@ export class WorkerManager {
       try {
         await this.once(workerInstance, initId);
         workerInstance.initialized = true;
-        logger.workerManager.info('Worker initialized successfully', { model });
       } catch (error: any) {
         logger.workerManager.error('Worker initialization failed', { model, error: error.message });
         throw error;
