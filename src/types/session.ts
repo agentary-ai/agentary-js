@@ -11,7 +11,6 @@ export interface CreateSessionArgs {
     chat: Model;
     reasoning: Model;
   }
-  adapters?: string[];
   ctx?: number;
   engine?: DeviceType;
   // Optional: Hugging Face access token for private models when using the
