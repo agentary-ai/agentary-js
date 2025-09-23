@@ -13,4 +13,13 @@ export {
   AgentSession
 } from './types/agent-session';
 export { CreateSessionArgs, TokenStreamChunk, Session, GenerationTask } from './types/session';
-export { GenerateArgs, Tool } from './types/worker';
+export { 
+  EngineKind,
+  WorkerInstance,
+  InitArgs,
+  MessageContent,
+  Message,
+  Model,
+  Tool,
+  GenerateArgs
+} from './types/worker';
