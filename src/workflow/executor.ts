@@ -104,6 +104,7 @@ export class WorkflowExecutor {
           currentStep
         });
         if (currentStep.complete) {
+          yield currentStep;
           completedSteps.add(currentStep.id);
         } else {
           break;
