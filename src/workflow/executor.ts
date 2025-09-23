@@ -69,18 +69,18 @@ export class WorkflowExecutor {
             elapsedMs: Date.now() - startTime,
             timeoutMs: timeout 
           });
-        yield {
-          id: currentStep.id,
-          prompt: currentStep.prompt,
-          complete: true,
-          response: {
-            error: 'Workflow timeout exceeded',
-            metadata: {
-              duration: Date.now() - startTime,
-              stepType: currentStep.generationTask,
-            }
-          },
-        };
+          yield {
+            id: currentStep.id,
+            prompt: currentStep.prompt,
+            complete: true,
+            response: {
+              error: 'Workflow timeout exceeded',
+              metadata: {
+                duration: Date.now() - startTime,
+                stepType: currentStep.generationTask,
+              }
+            },
+          };
           break;
         }
 
@@ -107,7 +107,7 @@ export class WorkflowExecutor {
           yield currentStep;
           completedSteps.add(currentStep.id);
         } else {
-          break;
+          continue;
         }
         iteration++;
       }

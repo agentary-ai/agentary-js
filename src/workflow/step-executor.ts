@@ -52,11 +52,11 @@ export class StepExecutor {
       // Prepare prompt and add to agent memory
       let prompt = step.prompt;
       if (step.generationTask) {
-        prompt = `${step.prompt} ${getPromptSuffix(step.generationTask)}`;
+        // prompt = `${step.prompt} ${getPromptSuffix(step.generationTask)}`;
       } else if (step.toolChoice && step.toolChoice.length > 0) {
         // Add tool use prompt suffix by default if tool choice is provided
         step.generationTask = 'tool_use';
-        prompt = `${step.prompt} ${getPromptSuffix('tool_use')}`;
+        // prompt = `${step.prompt} ${getPromptSuffix('tool_use')}`;
       }
 
       agentMemory.messages.push({
