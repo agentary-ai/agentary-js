@@ -75,15 +75,29 @@ describe('WorkflowExecutor', () => {
         results.push(result)
       }
 
-      // Successful execution doesn't yield results - check that steps were executed
-      expect(results).toHaveLength(0)
+      // Successful execution yields completed steps
+      expect(results).toHaveLength(2)
       expect(mockStepExecutor.execute).toHaveBeenCalledTimes(2)
+      
+      // Verify steps were completed and yielded
+      expect(results[0]).toMatchObject({
+        id: 1,
+        complete: true,
+        response: expect.objectContaining({
+          content: 'Thinking about the problem'
+        })
+      })
+      expect(results[1]).toMatchObject({
+        id: 2,
+        complete: true,
+        response: expect.objectContaining({
+          content: 'Final response'
+        })
+      })
       
       // Verify steps were completed in the workflow
       expect(workflow.steps[0].complete).toBe(true)
       expect(workflow.steps[1].complete).toBe(true)
-      expect(workflow.steps[0].response?.content).toBe('Thinking about the problem')
-      expect(workflow.steps[1].response?.content).toBe('Final response')
     })
 
     it('should pass context between steps', async () => {
@@ -127,9 +141,25 @@ describe('WorkflowExecutor', () => {
         results.push(result)
       }
 
-      // Successful execution doesn't yield results - check that steps were executed
-      expect(results).toHaveLength(0)
+      // Successful execution yields completed steps
+      expect(results).toHaveLength(2)
       expect(mockStepExecutor.execute).toHaveBeenCalledTimes(2)
+      
+      // Verify steps were completed and yielded
+      expect(results[0]).toMatchObject({
+        id: 1,
+        complete: true,
+        response: expect.objectContaining({
+          content: 'Analyzed the problem'
+        })
+      })
+      expect(results[1]).toMatchObject({
+        id: 2,
+        complete: true,
+        response: expect.objectContaining({
+          content: 'Response based on analysis'
+        })
+      })
       
       // Verify context was passed to second step - the execute method gets step, memory, tools
       const secondStepCall = mockStepExecutor.execute.mock.calls[1]
@@ -196,9 +226,21 @@ describe('WorkflowExecutor', () => {
         results.push(result)
       }
 
-      // Successful execution doesn't yield results - check that step was executed
-      expect(results).toHaveLength(0)
+      // Successful execution yields completed step
+      expect(results).toHaveLength(1)
       expect(mockStepExecutor.execute).toHaveBeenCalledTimes(1)
+      
+      // Verify step was completed and yielded
+      expect(results[0]).toMatchObject({
+        id: 1,
+        complete: true,
+        response: expect.objectContaining({
+          content: 'Using test tool',
+          toolCall: expect.objectContaining({
+            name: 'test_tool'
+          })
+        })
+      })
       
       // Verify tool was added to the tools array (WorkflowExecutor uses Tool[] not Map)
       expect(mockTools).toContain(testTool)
@@ -329,17 +371,28 @@ describe('WorkflowExecutor', () => {
         results.push(result)
       }
 
-      // Should yield 1 error result for max iterations exceeded
-      expect(results).toHaveLength(1)
+      // Should yield 1 completed step + 1 error result for max iterations exceeded
+      expect(results).toHaveLength(2)
+      
+      // First result should be the completed step
       expect(results[0]).toMatchObject({
+        id: 1,
+        complete: true,
+        response: expect.objectContaining({
+          content: 'Completed step'
+        })
+      })
+      
+      // Second result should be the max iterations error
+      expect(results[1]).toMatchObject({
         complete: true,
         response: expect.objectContaining({
           error: 'Workflow exceeded maximum iterations'
         })
       })
       
-      // Should have executed 2 steps (maxIterations - 1)
-      expect(mockStepExecutor.execute).toHaveBeenCalledTimes(1) // maxIterations = 2, so while loop runs 1 time (iteration < maxIterations)
+      // Should have executed 1 step (maxIterations = 2, so while loop runs 1 time: iteration 1 < maxIterations 2)
+      expect(mockStepExecutor.execute).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -373,9 +426,18 @@ describe('WorkflowExecutor', () => {
         results.push(result)
       }
 
-      // Successful execution doesn't yield results - check that step was executed  
-      expect(results).toHaveLength(0)
+      // Successful execution yields completed step  
+      expect(results).toHaveLength(1)
       expect(mockStepExecutor.execute).toHaveBeenCalledTimes(1)
+      
+      // Verify step was completed and yielded
+      expect(results[0]).toMatchObject({
+        id: 1,
+        complete: true,
+        response: expect.objectContaining({
+          content: 'Completed'
+        })
+      })
       
       // Verify step was completed
       expect(workflow.steps[0].complete).toBe(true)

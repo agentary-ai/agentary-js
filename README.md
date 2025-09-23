@@ -57,17 +57,22 @@ for await (const chunk of session.createResponse({
 await session.dispose();
 ```
 
-### Function Calling
+### Tool Calling
 
 ```javascript
 import { createSession } from 'agentary-js';
 
 const session = await createSession({
   models: {
-    chat: 'onnx-community/gemma-3-270m-it-ONNX',
-    function_calling: 'onnx-community/Qwen2.5-0.5B-Instruct'
-  },
-  quantization: 'q4'
+    chat: {
+      name: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4'
+    },
+    tool_use: {
+      name: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4'
+    }
+  }
 });
 
 const tools = [
@@ -249,6 +254,11 @@ Generates text with streaming output using the specified generation task.
 | `stop` | `string[]` | Stop sequences |
 | `seed` | `number` | Random seed for reproducible output |
 | `deterministic` | `boolean` | Use deterministic generation |
+
+
+##### GenerationTask
+
+Generation task: `'chat' \| 'tool_use' \| 'reasoning'`
 
 ##### Message
 

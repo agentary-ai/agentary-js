@@ -33,8 +33,6 @@ export async function createSession(args: CreateSessionArgs = {}): Promise<Sessi
         })
       } : {})
     };
-
-    logger.session.debug('Cleaned args', args);
     
     // Default to tool use if no generation task is specified and tools are provided
     if (!generationTask && args.tools && args.tools.length > 0) {

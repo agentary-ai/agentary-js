@@ -64,10 +64,17 @@ export class StepExecutor {
         content: prompt
       });
 
-      // Select tools: if toolChoice specified, filter by names; otherwise include all registered tools
-      tools = (step.toolChoice && step.toolChoice.length > 0)
-        ? tools.filter(tool => step.toolChoice!.includes(tool.function.name))
-        : tools;
+      // Select tools based on generationTask and toolChoice
+      if (step.generationTask !== 'tool_use') {
+        // Include no tools if generation task is not tool_use
+        tools = [];
+      } else if (!step.toolChoice || step.toolChoice.length === 0) {
+        // Include all tools if toolChoice is empty for tool_use tasks
+        // tools array remains unchanged (contains all tools)
+      } else {
+        // Filter tools by toolChoice names for tool_use tasks
+        tools = tools.filter(tool => step.toolChoice!.includes(tool.function.name));
+      }
       
       const generateArgs: GenerateArgs = {
         messages: agentMemory.messages,
@@ -78,11 +85,6 @@ export class StepExecutor {
         generateArgs.tools = tools;
       }
 
-      logger.agent.debug('Generating step response', {
-        generateArgs,
-        generationTask: step.generationTask,
-      });
-        
       // Generate response
       let stepResult = '';
       for await (const chunk of this.session.createResponse(
@@ -122,7 +124,6 @@ export class StepExecutor {
         }
         
         // Find tool in tools array
-        logger.agent.debug('Finding tool in tools array', { toolCall, tools });
         const toolSelected = tools.find(tool => tool.function.name === toolCall.name);
         if (!toolSelected) {
           step.complete = false;
