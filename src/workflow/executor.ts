@@ -89,7 +89,7 @@ export class WorkflowExecutor {
         currentStep.attempts = currentStep.attempts ?? 0;
 
         // Execute step
-        logger.agent.debug('Executing workflow step', { 
+        logger.agent.info('Executing workflow step', { 
           workflowId: agentWorkflow.id, 
           stepId: currentStep.id, 
           stepType: currentStep.generationTask,
@@ -100,7 +100,7 @@ export class WorkflowExecutor {
         await this.stepExecutor.execute(
           currentStep, agentWorkflow.memory, this.tools
         );
-        logger.agent.debug('Step execution result', {
+        logger.agent.info('Step execution result', {
           currentStep
         });
         if (currentStep.complete) {
