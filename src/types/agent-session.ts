@@ -44,7 +44,7 @@ export interface AgentWorkflow {
   id: string
   name: string;
   systemPrompt?: string;
-  state: AgentState;
+  state?: AgentState;
   memory?: AgentMemory;
   steps: WorkflowStep[];
   tools: Tool[];
