@@ -1,6 +1,6 @@
 {
   "name": "agentary-js",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "JS SDK for running quantized small language models in the browser",
   "type": "module",
   "private": false,
