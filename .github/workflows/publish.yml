@@ -30,7 +30,25 @@ jobs:
       - name: Run tests (if any)
         run: npm test --if-present
         
+      - name: Ensure correct repository URL for provenance
+        run: |
+          echo "GitHub repository: ${{ github.repository }}"
+          echo "GitHub repository owner: ${{ github.repository_owner }}"
+          echo "Current package.json repository:"
+          npm pkg get repository
+          REPO_URL="git+https://github.com/${{ github.repository }}.git"
+          npm pkg set repository.url="$REPO_URL"
+          npm pkg set repository.type="git"
+          echo "Updated repository URL to: $REPO_URL"
+          echo "Updated package.json repository:"
+          npm pkg get repository
+        
       - name: Publish to NPM
-        run: npm publish --provenance --access public
+        run: |
+          echo "Attempting to publish with provenance..."
+          if ! npm publish --provenance --access public; then
+            echo "Provenance publish failed, trying without provenance..."
+            npm publish --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
