@@ -8,7 +8,7 @@ import type {
 import { logger } from '../utils/logger';
 import { ToolParser } from '../processing/tools/parser';
 import { ContentProcessor } from '../processing/content/processor';
-import { getPromptSuffix } from '../processing/prompts/templates';
+// import { getPromptSuffix } from '../processing/prompts/templates';
 
 export class StepExecutor {
   private session: Session;
@@ -27,7 +27,11 @@ export class StepExecutor {
     step: WorkflowStep, agentMemory: AgentMemory, tools: Tool[]
   ): Promise<void> {
     const stepStartTime = Date.now();
-    logger.agent.debug('Executing step', { step, agentMemory, tools });
+    logger.agent.debug('Executing step', { 
+      stepId: step.id,
+      messageCount: agentMemory.messages.length,
+      hasToolChoice: !!step.toolChoice
+    });
 
     try {
       if (step.attempts && step.maxAttempts && step.attempts >= step.maxAttempts) {
@@ -95,7 +99,8 @@ export class StepExecutor {
         }
       }
       logger.agent.debug('Step result', {
-        stepResult,
+        stepId: step.id,
+        resultLength: stepResult.length,
         generationTask: step.generationTask,
       });
 
@@ -106,8 +111,9 @@ export class StepExecutor {
         // Parse potential tool calls from the clean content
         const toolCall = this.toolParser.parse(cleanContent);
         logger.agent.debug('Tool call parsing result', { 
-          cleanContent, 
-          toolCall, 
+          stepId: step.id,
+          toolName: toolCall?.name,
+          hasArgs: !!toolCall?.args
         });
         if (!toolCall) {
           step.complete = false;
@@ -141,8 +147,9 @@ export class StepExecutor {
         if (toolSelected.function.implementation) {
           const toolResult = await toolSelected.function.implementation(toolCall.args);
           logger.agent.debug('Tool execution result', {
-            toolResult,
-            toolCall: toolCall,
+            stepId: step.id,
+            toolName: toolCall.name,
+            resultType: typeof toolResult
           });
           step.complete = true;
           step.response = {
@@ -157,23 +164,18 @@ export class StepExecutor {
               ...(thinkingContent ? { thinkingContent } : {}),
             }
           };
-          // Add tool use and result to memory
+          // Add concise tool use messages to memory
+          const argsStr = JSON.stringify(toolCall.args);
+          const shortArgs = argsStr.length > 100 ? argsStr.substring(0, 97) + '...' : argsStr;
+          
           agentMemory.messages.push(
             {
               role: 'assistant',
-              content: JSON.stringify({
-                type: 'tool_use',
-                name: toolCall.name,
-                args: toolCall.args,
-              })
+              content: `[Tool Use] ${toolCall.name}(${shortArgs})`
             },
             {
               role: 'user',
-              content: JSON.stringify({
-                type: 'tool_result',
-                name: toolCall.name,
-                content: JSON.stringify(toolResult),
-              })
+              content: `[Tool Result] ${this.formatToolResult(toolResult)}`
             }
           );
 
@@ -181,7 +183,8 @@ export class StepExecutor {
 
         } else {
           logger.agent.warn('Tool implementation not found', {
-            toolCall: toolCall,
+            stepId: step.id,
+            toolName: toolCall.name
           });
           step.complete = false;
           step.response = {
@@ -228,5 +231,44 @@ export class StepExecutor {
       return;
     }
   }
+
+  private formatToolResult(result: any): string {
+    if (typeof result === 'string') {
+      return result.length > 200 ? result.substring(0, 197) + '...' : result;
+    }
+    const str = JSON.stringify(result);
+    return str.length > 200 ? str.substring(0, 197) + '...' : str;
+  }
+
+  // === FUTURE ENHANCEMENTS ===
+  
+  // TODO: Implement intelligent prompt compression
+  // private compressPrompt(prompt: string, context: AgentMemory): string {
+  //   // Use LLM to compress/summarize long prompts while preserving key information
+  // }
+  
+  // TODO: Implement parallel tool execution
+  // private async executeParallelTools(toolCalls: ToolCall[], tools: Tool[]): Promise<ToolResult[]> {
+  //   // Execute multiple independent tool calls in parallel
+  // }
+  
+  // TODO: Implement tool result caching
+  // private toolCache: Map<string, { result: any, timestamp: Date }>;
+  // private getCachedToolResult(toolName: string, args: any): any | null {
+  //   // Return cached result if available and not stale
+  // }
+  
+  // TODO: Implement step-specific context requirements
+  // private filterContextForStep(memory: AgentMemory, step: WorkflowStep): AgentMemory {
+  //   // Filter memory based on step.contextRequirements
+  // }
+  
+  // TODO: Implement automatic retry with backoff
+  // private async retryWithBackoff<T>(
+  //   fn: () => Promise<T>, 
+  //   maxRetries: number = 3
+  // ): Promise<T> {
+  //   // Exponential backoff for transient failures
+  // }
 }
 

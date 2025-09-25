@@ -1,0 +1,932 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Weather Activity Planner - Agentary JS Demo</title>
+    <style>
+      body { 
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+        margin: 0;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: #334155;
+        min-height: 100vh;
+      }
+      .container { 
+        max-width: 1200px; 
+        margin: 0 auto; 
+        padding: 40px;
+      }
+      h1 { 
+        color: white; 
+        text-align: center; 
+        margin-bottom: 8px;
+        font-size: 2.5rem;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+      }
+      .subtitle {
+        text-align: center;
+        color: rgba(255, 255, 255, 0.9);
+        margin-bottom: 32px;
+        font-size: 18px;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+      }
+      
+      .demo-panel {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        padding: 32px;
+        backdrop-filter: blur(10px);
+      }
+      
+      /* Input Section Styles */
+      .input-section {
+        margin-bottom: 32px;
+        padding: 24px;
+        background: linear-gradient(145deg, #f8fafc, #e2e8f0);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+      }
+      .input-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-bottom: 20px;
+      }
+      .input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .input-group.full-width {
+        grid-column: 1 / -1;
+      }
+      label {
+        font-weight: 600;
+        color: #475569;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      input, select, textarea {
+        padding: 12px 16px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+        font-family: inherit;
+        transition: all 0.2s;
+        background: white;
+      }
+      input:focus, select:focus, textarea:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        transform: translateY(-1px);
+      }
+      
+      .time-inputs {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      
+      .example-buttons {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+      .example-btn {
+        background: #667eea;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        transition: all 0.2s;
+      }
+      .example-btn:hover {
+        background: #5a67d8;
+        transform: translateY(-1px);
+      }
+      
+      .run-section {
+        text-align: center;
+        margin-top: 24px;
+      }
+      .run-btn {
+        background: linear-gradient(145deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        padding: 16px 32px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 16px;
+        transition: all 0.3s;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+      }
+      .run-btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+      }
+      .run-btn:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+      .clear-btn {
+        background: #6b7280;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 500;
+        margin-left: 12px;
+        transition: all 0.2s;
+      }
+      .clear-btn:hover {
+        background: #4b5563;
+      }
+      
+      /* Output Styles */
+      .output-section {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+      .output-header {
+        background: linear-gradient(145deg, #1e293b, #334155);
+        color: white;
+        padding: 16px 20px;
+        font-weight: 600;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .status {
+        font-size: 12px;
+        padding: 4px 12px;
+        border-radius: 16px;
+        background: #374151;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 500;
+      }
+      .status.running {
+        background: linear-gradient(145deg, #059669, #047857);
+        animation: pulse 2s infinite;
+      }
+      .status.completed {
+        background: linear-gradient(145deg, #059669, #047857);
+      }
+      .status.error {
+        background: linear-gradient(145deg, #dc2626, #b91c1c);
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+      .output-content {
+        padding: 20px;
+        max-height: 600px;
+        overflow-y: auto;
+        background: white;
+      }
+      
+      /* Step Styles */
+      .step {
+        margin-bottom: 20px;
+        padding: 16px;
+        border-radius: 12px;
+        border-left: 4px solid #e2e8f0;
+        background: #fafafa;
+        transition: all 0.3s;
+      }
+      .step:hover {
+        transform: translateX(4px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      }
+      .step.thinking {
+        background: linear-gradient(145deg, #eff6ff, #dbeafe);
+        border-left-color: #3b82f6;
+      }
+      .step.tool_call {
+        background: linear-gradient(145deg, #fff7ed, #fed7aa);
+        border-left-color: #f59e0b;
+      }
+      .step.response {
+        background: linear-gradient(145deg, #ecfdf5, #d1fae5);
+        border-left-color: #10b981;
+      }
+      .step.error {
+        background: linear-gradient(145deg, #fef2f2, #fecaca);
+        border-left-color: #ef4444;
+      }
+      .step-header {
+        font-weight: 700;
+        margin-bottom: 8px;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .step-content {
+        color: #4b5563;
+        line-height: 1.6;
+        font-size: 14px;
+      }
+      .tool-info {
+        background: rgba(0, 0, 0, 0.05);
+        padding: 12px;
+        border-radius: 8px;
+        margin-top: 12px;
+        font-family: 'SF Mono', Monaco, monospace;
+        font-size: 12px;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+      }
+      
+      .empty-state {
+        text-align: center;
+        color: #9ca3af;
+        padding: 80px 20px;
+      }
+      .empty-state h3 {
+        margin-bottom: 12px;
+        color: #6b7280;
+      }
+      
+      /* Weather Icons */
+      .weather-icon {
+        font-size: 1.2em;
+        margin-right: 4px;
+      }
+      
+      /* Responsive */
+      @media (max-width: 768px) {
+        .input-grid {
+          grid-template-columns: 1fr;
+        }
+        .time-inputs {
+          grid-template-columns: 1fr;
+        }
+        .example-buttons {
+          justify-content: center;
+        }
+        .run-section {
+          flex-direction: column;
+          align-items: center;
+          gap: 12px;
+        }
+        .clear-btn {
+          margin-left: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🌤️ Weather Activity Planner</h1>
+      <p class="subtitle">AI-powered activity planning based on weather conditions and your preferences</p>
+      
+      <div class="demo-panel">
+        <div class="input-section">
+          <div class="input-grid">
+            <div class="input-group">
+              <label for="city">📍 City</label>
+              <input 
+                id="city" 
+                type="text" 
+                placeholder="e.g., San Francisco, New York, London"
+                value="San Francisco"
+              />
+            </div>
+            
+            <div class="input-group">
+              <label for="date">📅 Date</label>
+              <input 
+                id="date" 
+                type="date" 
+                value=""
+              />
+            </div>
+            
+            <div class="input-group">
+              <label for="budget">💰 Budget</label>
+              <select id="budget">
+                <option value="any">Any Budget</option>
+                <option value="free">Free Activities</option>
+                <option value="cheap">Budget-Friendly</option>
+              </select>
+            </div>
+            
+            <div class="input-group">
+              <label>⏰ Time Window (Optional)</label>
+              <div class="time-inputs">
+                <input id="start-time" type="time" placeholder="Start time" value="09:00" />
+                <input id="end-time" type="time" placeholder="End time" value="17:00" />
+              </div>
+            </div>
+          </div>
+          
+          <div class="example-buttons">
+            <button class="example-btn" onclick="loadExample('sf')">🌉 San Francisco Today</button>
+            <button class="example-btn" onclick="loadExample('nyc')">🗽 NYC Weekend</button>
+            <button class="example-btn" onclick="loadExample('london')">🏛️ London Museums</button>
+            <button class="example-btn" onclick="loadExample('custom')">🎯 Custom Request</button>
+          </div>
+          
+          <div class="run-section">
+            <button id="run-btn" class="run-btn">🚀 Plan My Day</button>
+            <button id="clear-btn" class="clear-btn">🗑️ Clear</button>
+          </div>
+        </div>
+
+        <div class="output-section">
+          <div class="output-header">
+            <span>🤖 Activity Planning Agent</span>
+            <span id="status" class="status">Ready</span>
+          </div>
+          <div class="output-content" id="output">
+            <div class="empty-state">
+              <h3>Ready to plan your perfect day!</h3>
+              <p>Fill in your preferences above and click "Plan My Day" to see the AI agent work through:</p>
+              <ul style="text-align: left; display: inline-block; margin-top: 20px;">
+                <li>🗺️ Geocoding your location</li>
+                <li>🌦️ Fetching weather forecast</li>
+                <li>🏃 Determining indoor vs outdoor activities</li>
+                <li>📍 Finding nearby points of interest</li>
+                <li>💡 Filtering by budget and preferences</li>
+                <li>📅 Creating a scheduled itinerary</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { createAgentSession, enableDebuggingMode } from '../dist/index.js';
+      
+      // Enable debugging mode
+      enableDebuggingMode();
+
+      // Get DOM elements
+      const cityInput = document.getElementById('city');
+      const dateInput = document.getElementById('date');
+      const budgetSelect = document.getElementById('budget');
+      const startTimeInput = document.getElementById('start-time');
+      const endTimeInput = document.getElementById('end-time');
+      const runBtn = document.getElementById('run-btn');
+      const clearBtn = document.getElementById('clear-btn');
+      const output = document.getElementById('output');
+      const status = document.getElementById('status');
+
+      // Set default date to today
+      const today = new Date().toISOString().split('T')[0];
+      dateInput.value = today;
+
+      // Example presets
+      window.loadExample = function(type) {
+        const examples = {
+          sf: {
+            city: 'San Francisco',
+            date: today,
+            budget: 'any',
+            startTime: '10:00',
+            endTime: '16:00'
+          },
+          nyc: {
+            city: 'New York',
+            date: today,
+            budget: 'cheap',
+            startTime: '09:00',
+            endTime: '18:00'
+          },
+          london: {
+            city: 'London',
+            date: today,
+            budget: 'free',
+            startTime: '11:00',
+            endTime: '15:00'
+          },
+          custom: {
+            city: 'Tokyo',
+            date: today,
+            budget: 'any',
+            startTime: '12:00',
+            endTime: '20:00'
+          }
+        };
+        
+        const example = examples[type];
+        if (example) {
+          cityInput.value = example.city;
+          dateInput.value = example.date;
+          budgetSelect.value = example.budget;
+          startTimeInput.value = example.startTime;
+          endTimeInput.value = example.endTime;
+        }
+      };
+
+      // Weather Activity Workflow Definition
+      const weatherActivityWorkflow = {
+        id: "weather-activity-planner",
+        name: "Weather & Activity Planner",
+        systemPrompt: "You are an agent that plans weather-appropriate activities with nearby places and a schedule that fits the user's time and budget.",
+        maxIterations: 10,
+        timeout: 180000,
+        steps: [
+          {
+            id: 1,
+            prompt: "From userMessage, extract city, date (YYYY-MM-DD or 'today'), budget ('free'|'cheap'|'any'), and an optional timeWindow { start:'HH:MM', end:'HH:MM' }.",
+            temperature: 0.1,
+            generationTask: "chat",
+            maxAttempts: 2,
+          },
+          {
+            id: 2,
+            prompt: "Use geocode tool to resolve { city } into { lat, lon, resolvedName, country }.",
+            temperature: 0.1,
+            generationTask: "tool_use",
+            toolChoice: ["geocode"],
+            maxAttempts: 2,
+          },
+          {
+            id: 3,
+            prompt: "Use the weather_forecast tool to fetch the forecast for { lat, lon, date }.",
+            temperature: 0.1,
+            generationTask: "tool_use",
+            toolChoice: ["weather_forecast"],
+            maxAttempts: 2,
+          },
+          {
+            id: 4,
+            prompt: "Use the determine_activity_type tool to analyze the weather forecast from step 3 and determine whether to plan indoor or outdoor activities.",
+            temperature: 0.1,
+            generationTask: "tool_use",
+            toolChoice: ["determine_activity_type"],
+            maxAttempts: 2,
+          },
+          {
+            id: 5,
+            prompt: "Use the places_search tool to find nearby POIs using the lat and lon coordinates from step 2. " +
+              "Use the activity type from step 4 to determine appropriate categories: " +
+              "For outdoor: use categories like ['parks', 'hiking', 'beaches', 'outdoor recreation']. " +
+              "For indoor: use categories like ['museums', 'shopping', 'restaurants', 'entertainment'].",
+            temperature: 0.1,
+            generationTask: "tool_use",
+            toolChoice: ["places_search"],
+            maxAttempts: 2,
+          },
+          {
+            id: 6,
+            prompt: "Use the budget_filter tool to filter and rank the POIs by { budget } and distance practicality.",
+            temperature: 0.1,
+            generationTask: "tool_use",
+            toolChoice: ["budget_filter"],
+            maxAttempts: 2,
+          },
+          {
+            id: 7,
+            prompt: "Use the calendar_events tool to produce an itinerary with start/end times.",
+            temperature: 0.1,
+            generationTask: "tool_use",
+            toolChoice: ["calendar_events"],
+            maxAttempts: 2,
+          },
+          {
+            id: 8,
+            prompt: "Compose weather summary, rationale (indoor/outdoor), bullet itinerary with times/links, and 1-2 alternates.",
+            temperature: 0.1,
+            generationTask: "chat",
+            maxAttempts: 2,
+          },
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "geocode",
+              description: "Geocode a city using server endpoint. Returns { lat, lon, resolvedName, country }.",
+              parameters: {
+                type: "object",
+                properties: { 
+                  city: { 
+                    type: "string",
+                    description: "The name of the city to geocode (e.g., 'San Francisco', 'New York', 'London')"
+                  }
+                },
+                required: ["city"]
+              },
+              implementation: async ({ city }) => {
+                // Mock implementation for demo
+                const locations = {
+                  'san francisco': { lat: 37.7749, lon: -122.4194, resolvedName: 'San Francisco', country: 'USA' },
+                  'new york': { lat: 40.7128, lon: -74.0060, resolvedName: 'New York', country: 'USA' },
+                  'london': { lat: 51.5074, lon: -0.1278, resolvedName: 'London', country: 'UK' },
+                  'tokyo': { lat: 35.6762, lon: 139.6503, resolvedName: 'Tokyo', country: 'Japan' },
+                  'paris': { lat: 48.8566, lon: 2.3522, resolvedName: 'Paris', country: 'France' }
+                };
+                
+                const key = city.toLowerCase();
+                if (locations[key]) {
+                  return locations[key];
+                }
+                
+                // Default fallback
+                return { lat: 37.7749, lon: -122.4194, resolvedName: city, country: 'Unknown' };
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "weather_forecast",
+              description: "Get normalized forecast for {lat, lon, date}. Returns { summary, tempC, precipitationMm, windKph, condition, comfort }.",
+              parameters: {
+                type: "object",
+                properties: {
+                  lat: { 
+                    type: "number",
+                    description: "Latitude coordinate in decimal degrees (e.g., 37.7749)"
+                  },
+                  lon: { 
+                    type: "number",
+                    description: "Longitude coordinate in decimal degrees (e.g., -122.4194)"
+                  },
+                  date: { 
+                    type: "string",
+                    description: "Date for the forecast in YYYY-MM-DD format or 'today'"
+                  }
+                },
+                required: ["lat", "lon", "date"]
+              },
+              implementation: async ({ lat, lon, date }) => {
+                // Mock weather data based on location
+                const conditions = ['sunny', 'cloudy', 'mixed', 'rainy'];
+                const condition = conditions[Math.floor(Math.random() * conditions.length)];
+                const tempC = Math.round(15 + Math.random() * 15); // 15-30°C
+                const precipitationMm = condition === 'rainy' ? Math.round(Math.random() * 10) : Math.round(Math.random() * 2);
+                const windKph = Math.round(5 + Math.random() * 20);
+                const comfort = condition === 'sunny' ? 85 : condition === 'cloudy' ? 70 : condition === 'mixed' ? 60 : 40;
+                
+                return {
+                  summary: `${condition.charAt(0).toUpperCase() + condition.slice(1)} with ${tempC}°C`,
+                  tempC,
+                  precipitationMm,
+                  windKph,
+                  condition,
+                  comfort
+                };
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "determine_activity_type",
+              description: "Analyze weather forecast data to determine whether to plan indoor or outdoor activities. Returns { activityType, reasoning }.",
+              parameters: {
+                type: "object",
+                properties: {
+                  precipitationMm: { 
+                    type: "number",
+                    description: "Expected precipitation in millimeters (0 = no rain, >5 = heavy rain)"
+                  },
+                  condition: { 
+                    type: "string",
+                    description: "Weather condition description (e.g., 'sunny', 'cloudy', 'rainy', 'mixed')"
+                  },
+                  comfort: { 
+                    type: "number",
+                    description: "Comfort level score from 0-100 (higher = more comfortable for outdoor activities)"
+                  }
+                },
+                required: ["precipitationMm", "condition", "comfort"]
+              },
+              implementation: async ({ precipitationMm, condition, comfort }) => {
+                const isGoodWeather = precipitationMm <= 1 && 
+                                   ["sunny", "cloudy", "mixed"].includes(condition.toLowerCase()) && 
+                                   comfort >= 60;
+                
+                return {
+                  activityType: isGoodWeather ? "outdoor" : "indoor",
+                  reasoning: isGoodWeather 
+                    ? `Weather is suitable for outdoor activities (${condition}, ${precipitationMm}mm rain, comfort: ${comfort}/100)`
+                    : `Weather suggests indoor activities (${condition}, ${precipitationMm}mm rain, comfort: ${comfort}/100)`
+                };
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "places_search",
+              description: "Find nearby POIs. Returns array of POIs with priceTier and duration estimates.",
+              parameters: {
+                type: "object",
+                properties: {
+                  lat: { 
+                    type: "number",
+                    description: "Latitude coordinate for the search center in decimal degrees"
+                  },
+                  lon: { 
+                    type: "number",
+                    description: "Longitude coordinate for the search center in decimal degrees"
+                  },
+                  categories: { 
+                    type: "array", 
+                    items: { 
+                      type: "string", 
+                      enum: ["parks", "hiking", "beaches", "outdoor recreation", "museums", "shopping", "restaurants", "entertainment"]
+                    },
+                    description: "Array of POI categories to search for. Use outdoor categories for good weather, indoor for poor weather."
+                  },
+                },
+                required: ["lat", "lon", "categories"]
+              },
+              implementation: async ({ lat, lon, categories }) => {
+                // Mock POI data
+                const outdoorPOIs = [
+                  { name: 'Golden Gate Park', category: 'parks', priceTier: 'free', distanceKm: 2.1, rating: 4.6, durationMin: 120 },
+                  { name: 'Crissy Field', category: 'outdoor recreation', priceTier: 'free', distanceKm: 3.2, rating: 4.4, durationMin: 90 },
+                  { name: 'Baker Beach', category: 'beaches', priceTier: 'free', distanceKm: 4.1, rating: 4.3, durationMin: 60 },
+                  { name: 'Lands End Hike', category: 'hiking', priceTier: 'free', distanceKm: 5.2, rating: 4.7, durationMin: 150 },
+                ];
+                
+                const indoorPOIs = [
+                  { name: 'SFMOMA', category: 'museums', priceTier: 'paid', distanceKm: 1.5, rating: 4.5, durationMin: 180 },
+                  { name: 'Exploratorium', category: 'museums', priceTier: 'paid', distanceKm: 2.8, rating: 4.7, durationMin: 120 },
+                  { name: 'Union Square Shopping', category: 'shopping', priceTier: 'cheap', distanceKm: 1.2, rating: 4.2, durationMin: 90 },
+                  { name: 'Ferry Building Marketplace', category: 'restaurants', priceTier: 'cheap', distanceKm: 2.1, rating: 4.4, durationMin: 60 },
+                  { name: 'Alcatraz Audio Tour', category: 'entertainment', priceTier: 'paid', distanceKm: 3.5, rating: 4.6, durationMin: 180 }
+                ];
+                
+                const isOutdoor = categories.some(cat => ['parks', 'hiking', 'beaches', 'outdoor recreation'].includes(cat));
+                return isOutdoor ? outdoorPOIs : indoorPOIs;
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "budget_filter",
+              description: "Rank and filter POIs based on user budget ('free'|'cheap'|'any') and distance practicality. Returns shortlist array.",
+              parameters: {
+                type: "object",
+                properties: {
+                  budget: { 
+                    type: "string", 
+                    enum: ["free", "cheap", "any"],
+                    description: "User's budget preference: 'free' for no-cost activities, 'cheap' for low-cost options, 'any' for all price ranges"
+                  },
+                  pois: { 
+                    type: "array", 
+                    items: { type: "object" },
+                    description: "Array of POI objects from places_search to filter and rank by budget and distance"
+                  }
+                },
+                required: ["budget", "pois"]
+              },
+              implementation: async ({ budget, pois }) => {
+                const preferFree = budget === "free";
+                const preferCheap = budget === "cheap";
+                const scored = (pois || []).map((p) => {
+                  let score = 0;
+                  score += p.distanceKm != null ? Math.max(0, 10 - Math.min(10, p.distanceKm)) : 0;
+                  score += (p.rating || 0) * 2;
+                  if (preferFree) score += p.priceTier === "free" ? 6 : p.priceTier === "cheap" ? 2 : -4;
+                  else if (preferCheap) score += p.priceTier !== "paid" ? 3 : -1;
+                  if (p.durationMin) {
+                    if (p.durationMin >= 45 && p.durationMin <= 120) score += 2;
+                  }
+                  return { ...p, _score: score };
+                });
+                scored.sort((a, b) => b._score - a._score);
+                return scored.slice(0, 4);
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "calendar_events",
+              description: "Build a simple itinerary given a shortlist and optional timeWindow.",
+              parameters: {
+                type: "object",
+                properties: {
+                  date: { 
+                    type: "string",
+                    description: "Date for the itinerary in YYYY-MM-DD format"
+                  },
+                  timeWindow: {
+                    type: "object",
+                    properties: {
+                      start: { 
+                        type: "string",
+                        description: "Start time in HH:MM format (24-hour)"
+                      },
+                      end: { 
+                        type: "string",
+                        description: "End time in HH:MM format (24-hour)"
+                      }
+                    },
+                    description: "Optional time constraints for the itinerary. If not provided, uses default day hours."
+                  },
+                  shortlist: { 
+                    type: "array", 
+                    items: { type: "object" },
+                    description: "Array of filtered POI objects from budget_filter to schedule into an itinerary"
+                  }
+                },
+                required: ["date", "shortlist"]
+              },
+              implementation: async ({ date, timeWindow, shortlist }) => {
+                const startTime = timeWindow?.start || "09:00";
+                const endTime = timeWindow?.end || "17:00";
+                
+                const events = [];
+                let currentTime = startTime;
+                
+                shortlist.forEach((poi, index) => {
+                  const [hours, minutes] = currentTime.split(':').map(Number);
+                  const startDate = new Date();
+                  startDate.setHours(hours, minutes);
+                  
+                  const endDate = new Date(startDate);
+                  endDate.setMinutes(endDate.getMinutes() + poi.durationMin);
+                  
+                  events.push({
+                    title: poi.name,
+                    start: startDate.toTimeString().slice(0, 5),
+                    end: endDate.toTimeString().slice(0, 5),
+                    location: poi.name,
+                    category: poi.category,
+                    duration: poi.durationMin
+                  });
+                  
+                  // Add 30 min buffer between activities
+                  endDate.setMinutes(endDate.getMinutes() + 30);
+                  currentTime = endDate.toTimeString().slice(0, 5);
+                });
+                
+                return { events, totalDuration: events.reduce((sum, e) => sum + e.duration, 0) };
+              }
+            }
+          }
+        ]
+      };
+
+      function updateStatus(text, className = '') {
+        status.textContent = text;
+        status.className = `status ${className}`;
+      }
+
+      function addStep(stepResult) {
+        const stepDiv = document.createElement('div');
+        stepDiv.className = `step ${stepResult.type}`;
+        
+        const header = document.createElement('div');
+        header.className = 'step-header';
+        
+        const typeIcons = {
+          thinking: '🤔',
+          tool_call: '🔧',
+          response: '💬',
+          error: '❌'
+        };
+        
+        header.innerHTML = `${typeIcons[stepResult.type] || '•'} <strong>Step ${stepResult.stepId}:</strong> ${getStepDescription(stepResult.stepId)}`;
+        
+        const content = document.createElement('div');
+        content.className = 'step-content';
+        content.textContent = stepResult.content;
+        
+        stepDiv.appendChild(header);
+        stepDiv.appendChild(content);
+        
+        if (stepResult.toolCall) {
+          const toolInfo = document.createElement('div');
+          toolInfo.className = 'tool-info';
+          toolInfo.innerHTML = `<strong>🔧 ${stepResult.toolCall.name}</strong><br/>${JSON.stringify(stepResult.toolCall.args, null, 2)}`;
+          if (stepResult.toolCall.result) {
+            toolInfo.innerHTML += `<br/><br/><strong>Result:</strong><br/>${JSON.stringify(stepResult.toolCall.result, null, 2)}`;
+          }
+          stepDiv.appendChild(toolInfo);
+        }
+        
+        output.appendChild(stepDiv);
+        output.scrollTop = output.scrollHeight;
+      }
+
+      function getStepDescription(stepId) {
+        const descriptions = {
+          1: 'Parsing user request',
+          2: 'Geocoding location',
+          3: 'Fetching weather forecast',
+          4: 'Determining activity type',
+          5: 'Searching for places',
+          6: 'Filtering by budget',
+          7: 'Creating itinerary',
+          8: 'Composing final plan'
+        };
+        return descriptions[stepId] || 'Processing';
+      }
+
+      function clearOutput() {
+        output.innerHTML = `
+          <div class="empty-state">
+            <h3>Ready for your next adventure!</h3>
+            <p>Set your preferences and click "Plan My Day" to get started.</p>
+          </div>
+        `;
+        updateStatus('Ready');
+      }
+
+      function createUserMessage() {
+        const city = cityInput.value.trim();
+        const date = dateInput.value || 'today';
+        const budget = budgetSelect.value;
+        const startTime = startTimeInput.value;
+        const endTime = endTimeInput.value;
+        
+        let message = `Plan activities for ${city} on ${date} with a ${budget} budget.`;
+        
+        if (startTime && endTime) {
+          message += ` I'm available from ${startTime} to ${endTime}.`;
+        }
+        
+        return message;
+      }
+
+      async function runAgent() {
+        const city = cityInput.value.trim();
+        if (!city) {
+          alert('Please enter a city!');
+          return;
+        }
+
+        runBtn.disabled = true;
+        clearOutput();
+        updateStatus('Starting weather planner...', 'running');
+
+        try {
+          const agent = await createAgentSession();
+          updateStatus('Agent running...', 'running');
+
+          const userMessage = createUserMessage();
+          let stepCount = 0;
+          
+          for await (const stepResult of agent.runWorkflow(userMessage, weatherActivityWorkflow)) {
+            stepCount++;
+            addStep(stepResult);
+            
+            if (stepResult.error) {
+              updateStatus('Error occurred', 'error');
+              break;
+            }
+          }
+
+          updateStatus(`Planning completed! (${stepCount} steps)`, 'completed');
+          await agent.dispose();
+
+        } catch (error) {
+          console.error('Agent error:', error);
+          updateStatus('Planning failed', 'error');
+          
+          const errorDiv = document.createElement('div');
+          errorDiv.className = 'step error';
+          errorDiv.innerHTML = `
+            <div class="step-header">❌ <strong>Error</strong></div>
+            <div class="step-content">Failed to run weather planner: ${error.message}</div>
+          `;
+          output.appendChild(errorDiv);
+        } finally {
+          runBtn.disabled = false;
+        }
+      }
+
+      // Event listeners
+      runBtn.addEventListener('click', runAgent);
+      clearBtn.addEventListener('click', clearOutput);
+      
+      // Enter key support
+      [cityInput, dateInput].forEach(input => {
+        input.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') {
+            runAgent();
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

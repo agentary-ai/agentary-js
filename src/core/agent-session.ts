@@ -21,7 +21,7 @@ export class AgentSessionImpl implements AgentSession {
   constructor(session: Session) {
     this.session = session;
     this.stepExecutor = new StepExecutor(session);
-    this.workflowExecutor = new WorkflowExecutor(this.stepExecutor, this.tools);
+    this.workflowExecutor = new WorkflowExecutor(this.stepExecutor, this.tools, session);
     this.workerManager = session.workerManager;
   }
 
