@@ -446,14 +446,16 @@
         timeout: 180000,
         steps: [
           {
-            id: 1,
+            id: "extract-user-input",
+            description: "Extract key information from user's prompt",
             prompt: "From userMessage, extract city, date (YYYY-MM-DD or 'today'), budget ('free'|'cheap'|'any'), and an optional timeWindow { start:'HH:MM', end:'HH:MM' }.",
             temperature: 0.1,
             generationTask: "chat",
             maxAttempts: 2,
           },
           {
-            id: 2,
+            id: "get-geocode-city",
+            description: "Resolve city into latitude, longitude, resolved name, and country",
             prompt: "Use geocode tool to resolve { city } into { lat, lon, resolvedName, country }.",
             temperature: 0.1,
             generationTask: "tool_use",
@@ -461,7 +463,8 @@
             maxAttempts: 2,
           },
           {
-            id: 3,
+            id: 'get-weather-forecast',
+            description: "Fetch the weather forecast for the given city and date",
             prompt: "Use the weather_forecast tool to fetch the forecast for { lat, lon, date }.",
             temperature: 0.1,
             generationTask: "tool_use",
@@ -469,7 +472,8 @@
             maxAttempts: 2,
           },
           {
-            id: 4,
+            id: 'determine-activity-type',
+            description: "Determine whether to plan indoor or outdoor activities based on the weather forecast",
             prompt: "Use the determine_activity_type tool to analyze the weather forecast from step 3 and determine whether to plan indoor or outdoor activities.",
             temperature: 0.1,
             generationTask: "tool_use",
@@ -477,7 +481,8 @@
             maxAttempts: 2,
           },
           {
-            id: 5,
+            id: 'poi-search',
+            description: "Find nearby POIs based on the weather forecast and activity type",
             prompt: "Use the places_search tool to find nearby POIs using the lat and lon coordinates from step 2. " +
               "Use the activity type from step 4 to determine appropriate categories: " +
               "For outdoor: use categories like ['parks', 'hiking', 'beaches', 'outdoor recreation']. " +
@@ -488,7 +493,8 @@
             maxAttempts: 2,
           },
           {
-            id: 6,
+            id: 'filter-pois-by-budget',
+            description: "Filter and rank the POIs by budget and distance practicality",
             prompt: "Use the budget_filter tool to filter and rank the POIs by { budget } and distance practicality.",
             temperature: 0.1,
             generationTask: "tool_use",
@@ -496,7 +502,8 @@
             maxAttempts: 2,
           },
           {
-            id: 7,
+            id: 'generate-itinerary',
+            description: "Generate an itinerary with start/end times",
             prompt: "Use the calendar_events tool to produce an itinerary with start/end times.",
             temperature: 0.1,
             generationTask: "tool_use",
@@ -504,7 +511,8 @@
             maxAttempts: 2,
           },
           {
-            id: 8,
+            id: 'compose-final-plan',
+            description: "Compose a final plan with weather summary, rationale (indoor/outdoor), bullet itinerary with times/links, and 1-2 alternates",
             prompt: "Compose weather summary, rationale (indoor/outdoor), bullet itinerary with times/links, and 1-2 alternates.",
             temperature: 0.1,
             generationTask: "chat",
@@ -887,6 +895,8 @@
           let stepCount = 0;
           
           for await (const stepResult of agent.runWorkflow(userMessage, weatherActivityWorkflow)) {
+            console.log(JSON.stringify(stepResult, null, 2));
+            
             stepCount++;
             addStep(stepResult);
             

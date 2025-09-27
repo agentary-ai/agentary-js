@@ -1,7 +1,7 @@
 import type { 
   AgentSession, 
   AgentWorkflow,
-  WorkflowStep, 
+  WorkflowStepResponse, 
 } from '../types/agent-session';
 import type { Session, CreateSessionArgs, TokenStreamChunk, GenerationTask } from '../types/session';
 import type { GenerateArgs, Tool } from '../types/worker';
@@ -9,6 +9,8 @@ import { createSession } from './session';
 import { WorkflowExecutor } from '../workflow/executor';
 import { StepExecutor } from '../workflow/step-executor';
 import { WorkerManager } from '../workers/manager';
+// import { MemoryOptimizer } from '../workflow/memory/memory-optimizer';
+import { WorkflowStateManager } from '../workflow/workflow-state';
 
 export class AgentSessionImpl implements AgentSession {
   workerManager: WorkerManager;
@@ -17,11 +19,15 @@ export class AgentSessionImpl implements AgentSession {
   private disposed = false;
   private stepExecutor: StepExecutor;
   private workflowExecutor: WorkflowExecutor;
+  // private memoryOptimizer: MemoryOptimizer;
+  private workflowStateManager: WorkflowStateManager;
 
   constructor(session: Session) {
     this.session = session;
-    this.stepExecutor = new StepExecutor(session);
-    this.workflowExecutor = new WorkflowExecutor(this.stepExecutor, this.tools, session);
+    // this.memoryOptimizer = new MemoryOptimizer(session);
+    this.workflowStateManager = new WorkflowStateManager();
+    this.stepExecutor = new StepExecutor(session, this.workflowStateManager);
+    this.workflowExecutor = new WorkflowExecutor(this.stepExecutor, this.tools, this.workflowStateManager);
     this.workerManager = session.workerManager;
   }
 
@@ -51,7 +57,7 @@ export class AgentSessionImpl implements AgentSession {
 
   async* runWorkflow(
     prompt: string, workflow: AgentWorkflow
-  ): AsyncIterable<WorkflowStep> {
+  ): AsyncIterable<WorkflowStepResponse> {
     if (this.disposed) throw new Error('Agent session disposed');
     yield* this.workflowExecutor.execute(prompt, workflow);
   }

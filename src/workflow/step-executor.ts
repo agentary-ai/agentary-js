@@ -1,72 +1,61 @@
 import type { Session } from '../types/session'
-import type { Tool, GenerateArgs } from '../types/worker';
+import type { Tool, GenerateArgs, Message } from '../types/worker';
 import type { 
   WorkflowStep,
-  AgentMemory,
 } from '../types/agent-session';
 
 import { logger } from '../utils/logger';
 import { ToolParser } from '../processing/tools/parser';
 import { ContentProcessor } from '../processing/content/processor';
-// import { getPromptSuffix } from '../processing/prompts/templates';
+import { WorkflowStateManager } from './workflow-state';
+import { WorkflowStepResponse } from '../types/agent-session';
 
 export class StepExecutor {
   private session: Session;
   private toolParser: ToolParser;
   private contentProcessor: ContentProcessor;
+  private workflowStateManager: WorkflowStateManager;
 
   constructor(
     session: Session, 
+    workflowStateManager: WorkflowStateManager,
   ) {
     this.session = session;
     this.toolParser = new ToolParser();
     this.contentProcessor = new ContentProcessor();
+    this.workflowStateManager = workflowStateManager;
   }
 
   async execute(
-    step: WorkflowStep, agentMemory: AgentMemory, tools: Tool[]
-  ): Promise<void> {
+    step: WorkflowStep, tools: Tool[]
+  ): Promise<WorkflowStepResponse> {
     const stepStartTime = Date.now();
     logger.agent.debug('Executing step', { 
       stepId: step.id,
-      messageCount: agentMemory.messages.length,
       hasToolChoice: !!step.toolChoice
     });
+    const stepState = this.workflowStateManager.getStepState(step.id);
 
     try {
-      if (step.attempts && step.maxAttempts && step.attempts >= step.maxAttempts) {
-        step.complete = false;
-        step.response = {
-          error: 'Max retries exceeded',
-          content: '',
-          toolCall: {},
+      if (stepState.attempts && stepState.maxAttempts && stepState.attempts >= stepState.maxAttempts) {
+        stepState.complete = false;
+        return {
+          id: step.id,
+          error: {
+            message: 'Max retries exceeded'
+          }
         };
       }
 
       // Reset step state
-      step.attempts = step.attempts ? step.attempts + 1 : 1;
-      step.complete = false;
-      step.response = {
-        error: '',
-        content: '',
-        toolCall: {},
-        metadata: {}
-      };
+      stepState.attempts = stepState.attempts + 1
 
-      // Prepare prompt and add to agent memory
       let prompt = step.prompt;
       if (step.generationTask) {
-        // prompt = `${step.prompt} ${getPromptSuffix(step.generationTask)}`;
       } else if (step.toolChoice && step.toolChoice.length > 0) {
         // Add tool use prompt suffix by default if tool choice is provided
         step.generationTask = 'tool_use';
-        // prompt = `${step.prompt} ${getPromptSuffix('tool_use')}`;
       }
-
-      agentMemory.messages.push({
-        role: 'user',
-        content: prompt
-      });
 
       // Select tools based on generationTask and toolChoice
       if (step.generationTask !== 'tool_use') {
@@ -79,9 +68,21 @@ export class StepExecutor {
         // Filter tools by toolChoice names for tool_use tasks
         tools = tools.filter(tool => step.toolChoice!.includes(tool.function.name));
       }
+
+      const messages: Message[] = [
+        {
+          role: 'system',
+          content: this.workflowStateManager.getSystemMessage()
+        },
+        {
+          role: 'user',
+          content: `Step ${step.id}: ${prompt}`
+        }
+      ];
       
+      // Context and tool results are now included in the updated system message
       const generateArgs: GenerateArgs = {
-        messages: agentMemory.messages,
+        messages,
         temperature: step.temperature ?? 0.1,
         max_new_tokens: step.maxTokens ?? 1024,
       };
@@ -116,32 +117,23 @@ export class StepExecutor {
           hasArgs: !!toolCall?.args
         });
         if (!toolCall) {
-          step.complete = false;
-          step.response = {
-            error: 'No tool call detected in response',
-            content: cleanContent,
-            toolCall: {},
-            metadata: {
-              duration: Date.now() - stepStartTime,
-              stepType: step.generationTask,
+          return {
+            id: step.id,
+            error: {
+              message: 'No tool call detected in response for tool_use generation task'
             }
           };
-          return;
         }
         
         // Find tool in tools array
         const toolSelected = tools.find(tool => tool.function.name === toolCall.name);
         if (!toolSelected) {
-          step.complete = false;
-          step.response = {
-            error: `Tool ${toolCall.name} not found`,
-            metadata: {
-              duration: Date.now() - stepStartTime,
-              stepType: step.generationTask,
-              toolCall: toolCall,
+          return {
+            id: step.id,
+            error: {
+              message: 'Tool ' + toolCall.name + ' not found for tool_use generation task'
             }
           };
-          return;
         }
 
         if (toolSelected.function.implementation) {
@@ -151,124 +143,41 @@ export class StepExecutor {
             toolName: toolCall.name,
             resultType: typeof toolResult
           });
-          step.complete = true;
-          step.response = {
-            toolCall: {
-              name: toolCall.name,
-              args: toolCall.args,
-              result: toolResult,
-            },
-            metadata: {
-              duration: Date.now() - stepStartTime,
-              stepType: step.generationTask,
-              ...(thinkingContent ? { thinkingContent } : {}),
+            this.workflowStateManager.updateStepResult(step.id, JSON.stringify(toolResult));
+            this.workflowStateManager.updateStepCompletion(step.id, true);
+            return {
+              id: step.id,
+              toolCall: {
+                name: toolCall.name,
+                args: toolCall.args,
+                result: JSON.stringify(toolResult)
+              }
+            };
+          } else {
+            return {
+              id: step.id,
+              toolCall: {
+                name: toolCall.name,
+                args: toolCall.args,
+              }
             }
-          };
-          // Add concise tool use messages to memory
-          const argsStr = JSON.stringify(toolCall.args);
-          const shortArgs = argsStr.length > 100 ? argsStr.substring(0, 97) + '...' : argsStr;
-          
-          agentMemory.messages.push(
-            {
-              role: 'assistant',
-              content: `[Tool Use] ${toolCall.name}(${shortArgs})`
-            },
-            {
-              role: 'user',
-              content: `[Tool Result] ${this.formatToolResult(toolResult)}`
-            }
-          );
-
-          return;
-
-        } else {
-          logger.agent.warn('Tool implementation not found', {
-            stepId: step.id,
-            toolName: toolCall.name
-          });
-          step.complete = false;
-          step.response = {
-            error: 'Tool implementation not found',
-            toolCall: toolCall,
-            metadata: { 
-              duration: Date.now() - stepStartTime,
-              stepType: step.generationTask,
-              ...(thinkingContent ? { thinkingContent } : {}),
-            }
-          };
-          return;
-        }
-        
-      } else {
-        step.complete = true;
-        step.response = {
-          content: cleanContent,
-          metadata: {
-            duration: Date.now() - stepStartTime,
-            ...(thinkingContent ? { thinkingContent } : {}),
-            stepType: step.generationTask,
           }
-        };
-
-        // Add tool use and result to memory
-        agentMemory.messages.push({
-          role: 'assistant',
+      } else {
+        this.workflowStateManager.updateStepCompletion(step.id, true);
+        this.workflowStateManager.updateStepResult(step.id, cleanContent);
+        return {
+          id: step.id,
           content: cleanContent
-        });
-        
-        return;
-      }
+        };
+      }        
     } catch (error: any) {
-      // TODO: Improve error typing
-      step.complete = false;
-      step.response = {
-        error: error.message,
-        metadata: {
-          duration: Date.now() - stepStartTime,
-          stepType: step.generationTask,
+      return {
+        id: step.id,
+        error: {
+          message: 'Step execution failed: ' + error.message
         }
       };
-      return;
     }
   }
-
-  private formatToolResult(result: any): string {
-    if (typeof result === 'string') {
-      return result.length > 200 ? result.substring(0, 197) + '...' : result;
-    }
-    const str = JSON.stringify(result);
-    return str.length > 200 ? str.substring(0, 197) + '...' : str;
-  }
-
-  // === FUTURE ENHANCEMENTS ===
-  
-  // TODO: Implement intelligent prompt compression
-  // private compressPrompt(prompt: string, context: AgentMemory): string {
-  //   // Use LLM to compress/summarize long prompts while preserving key information
-  // }
-  
-  // TODO: Implement parallel tool execution
-  // private async executeParallelTools(toolCalls: ToolCall[], tools: Tool[]): Promise<ToolResult[]> {
-  //   // Execute multiple independent tool calls in parallel
-  // }
-  
-  // TODO: Implement tool result caching
-  // private toolCache: Map<string, { result: any, timestamp: Date }>;
-  // private getCachedToolResult(toolName: string, args: any): any | null {
-  //   // Return cached result if available and not stale
-  // }
-  
-  // TODO: Implement step-specific context requirements
-  // private filterContextForStep(memory: AgentMemory, step: WorkflowStep): AgentMemory {
-  //   // Filter memory based on step.contextRequirements
-  // }
-  
-  // TODO: Implement automatic retry with backoff
-  // private async retryWithBackoff<T>(
-  //   fn: () => Promise<T>, 
-  //   maxRetries: number = 3
-  // ): Promise<T> {
-  //   // Exponential backoff for transient failures
-  // }
 }
 

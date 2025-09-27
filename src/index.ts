@@ -7,9 +7,6 @@ export { LogConfigs, getEnvironmentConfig, enableDebuggingMode, disableDebugging
 export { 
   WorkflowStep,
   AgentWorkflow,
-  WorkflowStepResponse,
-  AgentMemory,
-  AgentState,
   AgentSession
 } from './types/agent-session';
 export { CreateSessionArgs, TokenStreamChunk, Session, GenerationTask } from './types/session';

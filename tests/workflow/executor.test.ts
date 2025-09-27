@@ -39,12 +39,12 @@ describe('WorkflowExecutor', () => {
         state: 'idle',
         steps: [
           {
-            id: 1,
+            id: '1',
             prompt: 'Think about the problem',
             generationTask: 'reasoning'
           },
           {
-            id: 2,
+            id: '2',
             prompt: 'Provide a response',
             generationTask: 'chat'
           }
@@ -81,14 +81,14 @@ describe('WorkflowExecutor', () => {
       
       // Verify steps were completed and yielded
       expect(results[0]).toMatchObject({
-        id: 1,
+        id: '1',
         complete: true,
         response: expect.objectContaining({
           content: 'Thinking about the problem'
         })
       })
       expect(results[1]).toMatchObject({
-        id: 2,
+        id: '2',
         complete: true,
         response: expect.objectContaining({
           content: 'Final response'
@@ -107,12 +107,12 @@ describe('WorkflowExecutor', () => {
         state: 'idle',
         steps: [
           {
-            id: 1,
+            id: '1',
             prompt: 'Analyze the problem',
             generationTask: 'reasoning'
           },
           {
-            id: 2,
+            id: '2',
             prompt: 'Provide response based on analysis',
             generationTask: 'chat'
           }
@@ -147,14 +147,14 @@ describe('WorkflowExecutor', () => {
       
       // Verify steps were completed and yielded
       expect(results[0]).toMatchObject({
-        id: 1,
+        id: '1',
         complete: true,
         response: expect.objectContaining({
           content: 'Analyzed the problem'
         })
       })
       expect(results[1]).toMatchObject({
-        id: 2,
+        id: '2',
         complete: true,
         response: expect.objectContaining({
           content: 'Response based on analysis'
@@ -199,7 +199,7 @@ describe('WorkflowExecutor', () => {
         state: 'idle',
         steps: [
           {
-            id: 1,
+            id: '1',
             prompt: 'Use the test tool',
             generationTask: 'tool_use',
             toolChoice: ['test_tool']
@@ -232,7 +232,7 @@ describe('WorkflowExecutor', () => {
       
       // Verify step was completed and yielded
       expect(results[0]).toMatchObject({
-        id: 1,
+        id: '1',
         complete: true,
         response: expect.objectContaining({
           content: 'Using test tool',
@@ -242,8 +242,7 @@ describe('WorkflowExecutor', () => {
         })
       })
       
-      // Verify tool was added to the tools array (WorkflowExecutor uses Tool[] not Map)
-      expect(mockTools).toContain(testTool)
+      // Verify step executor was called with the workflow tool
       expect(mockStepExecutor.execute).toHaveBeenCalledWith(
         expect.any(Object), // step
         expect.any(Object), // memory
@@ -264,7 +263,7 @@ describe('WorkflowExecutor', () => {
         state: 'idle',
         steps: [
           {
-            id: 1,
+            id: '1',
             prompt: 'This step will throw',
             generationTask: 'chat'
           }
@@ -284,7 +283,7 @@ describe('WorkflowExecutor', () => {
 
       expect(results).toHaveLength(1)
       expect(results[0]).toMatchObject({
-        id: 1,
+        id: '1',
         complete: true,
         response: expect.objectContaining({
           error: 'Step execution failed',
@@ -303,7 +302,7 @@ describe('WorkflowExecutor', () => {
         timeout: 1, // 1ms timeout - extremely short
         steps: [
           {
-            id: 1,
+            id: '1',
             prompt: 'A slow step',
             generationTask: 'chat'
           }
@@ -324,7 +323,7 @@ describe('WorkflowExecutor', () => {
 
       expect(results).toHaveLength(1)
       expect(results[0]).toMatchObject({
-        id: 1,
+        id: '1',
         complete: true,
         response: expect.objectContaining({
           error: 'Workflow timeout exceeded'
@@ -340,17 +339,17 @@ describe('WorkflowExecutor', () => {
         maxIterations: 2,
         steps: [
           {
-            id: 1,
+            id: '1',
             prompt: 'Step 1',
             generationTask: 'chat'
           },
           {
-            id: 2,
+            id: '2',
             prompt: 'Step 2',
             generationTask: 'chat'
           },
           {
-            id: 3,
+            id: '3',
             prompt: 'Step 3',
             generationTask: 'chat'
           }
@@ -376,7 +375,7 @@ describe('WorkflowExecutor', () => {
       
       // First result should be the completed step
       expect(results[0]).toMatchObject({
-        id: 1,
+        id: '1',
         complete: true,
         response: expect.objectContaining({
           content: 'Completed step'
@@ -404,7 +403,7 @@ describe('WorkflowExecutor', () => {
         state: 'idle',
         steps: [
           {
-            id: 1,
+            id: '1',
             prompt: 'Only step',
             generationTask: 'chat'
           }
@@ -432,7 +431,7 @@ describe('WorkflowExecutor', () => {
       
       // Verify step was completed and yielded
       expect(results[0]).toMatchObject({
-        id: 1,
+        id: '1',
         complete: true,
         response: expect.objectContaining({
           content: 'Completed'

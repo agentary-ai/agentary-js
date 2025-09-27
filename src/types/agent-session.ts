@@ -1,10 +1,9 @@
-import { Tool, Message, Model } from "./worker";
+import { Tool, Model } from "./worker";
 import { GenerationTask, Session } from "./session";
 
-export type AgentState = 'idle' | 'running' | 'completed' | 'failed';
-
 export interface WorkflowStepResponse {
-  error?: string;
+  id: string;
+  error?: WorkflowStepError;
   content?: string;
   toolCall?: {
     name?: string;
@@ -15,13 +14,13 @@ export interface WorkflowStepResponse {
 }
 
 export interface WorkflowStepError {
-  id: number;
   message: string;
   metadata?: Record<string, any>;
 }
 
 export interface WorkflowStep {
   id: string;
+  description: string; // Short description of the step for persistent agent memory
   prompt: string;
   maxTokens?: number;
   temperature?: number;
@@ -30,40 +29,31 @@ export interface WorkflowStep {
 //   nextSteps?: number[];    // TODO: Possible next step IDs after this step
   toolChoice?: string[];
   maxAttempts?: number;
-  attempts?: number;
-  complete?: boolean;
-  response?: WorkflowStepResponse;
 }
 
 export interface AgentMemoryConfig {
-  maxMessages?: number;
+  maxTokens?: number;
   summarizationEnabled?: boolean;
   summarizationModel?: Model;
   summarizationMaxTokens?: number;
-}
-
-export interface AgentMemory {
-  messages: Message[]
-  context: Record<string, any>;
-  toolResults?: Record<string, any>;
+  summarizationThreshold?: number;
 }
 
 export interface AgentWorkflow {
   id: string
-  name: string;
+  name?: string;
+  description?: string;
   systemPrompt?: string;
-  state?: AgentState;
-  memory?: AgentMemory;
   memoryConfig?: AgentMemoryConfig;
   steps: WorkflowStep[];
+  context?: Record<string, any>;
   tools: Tool[];
-  currentIteration?: number;
-  maxIterations?: number;
   timeout?: number;
+  maxIterations?: number;
 }
 
 export interface AgentSession extends Session {
-  runWorkflow(prompt: string, workflow: AgentWorkflow): AsyncIterable<WorkflowStep>;
+  runWorkflow(prompt: string, workflow: AgentWorkflow): AsyncIterable<WorkflowStepResponse>;
   registerTool(tool: Tool): void;
   getRegisteredTools(): Tool[];
 }
