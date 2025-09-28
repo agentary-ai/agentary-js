@@ -456,7 +456,7 @@
           {
             id: "get-geocode-city",
             description: "Resolve city into latitude, longitude, resolved name, and country",
-            prompt: "Use geocode tool to resolve { city } into { lat, lon, resolvedName, country }.",
+            prompt: "Use the geocode tool to get coordinates for the city from the previous step. Look at the 'extract-user-input' step result to find the city name and pass it to the geocode tool.",
             temperature: 0.1,
             generationTask: "tool_use",
             toolChoice: ["geocode"],
@@ -465,7 +465,7 @@
           {
             id: 'get-weather-forecast',
             description: "Fetch the weather forecast for the given city and date",
-            prompt: "Use the weather_forecast tool to fetch the forecast for { lat, lon, date }.",
+            prompt: "Use the weather_forecast tool with: 1) lat and lon from the geocode result in the previous step, 2) date from the extract-user-input step result.",
             temperature: 0.1,
             generationTask: "tool_use",
             toolChoice: ["weather_forecast"],
@@ -474,7 +474,7 @@
           {
             id: 'determine-activity-type',
             description: "Determine whether to plan indoor or outdoor activities based on the weather forecast",
-            prompt: "Use the determine_activity_type tool to analyze the weather forecast from step 3 and determine whether to plan indoor or outdoor activities.",
+            prompt: "Use the determine_activity_type tool to analyze the weather forecast from the 'get-weather-forecast' step result. Pass the entire forecast object to the tool.",
             temperature: 0.1,
             generationTask: "tool_use",
             toolChoice: ["determine_activity_type"],
@@ -483,10 +483,9 @@
           {
             id: 'poi-search',
             description: "Find nearby POIs based on the weather forecast and activity type",
-            prompt: "Use the places_search tool to find nearby POIs using the lat and lon coordinates from step 2. " +
-              "Use the activity type from step 4 to determine appropriate categories: " +
-              "For outdoor: use categories like ['parks', 'hiking', 'beaches', 'outdoor recreation']. " +
-              "For indoor: use categories like ['museums', 'shopping', 'restaurants', 'entertainment'].",
+            prompt: "Use the places_search tool to find nearby POIs. Use: 1) lat and lon from the 'get-geocode-city' step result, 2) activity type from 'determine-activity-type' result to choose categories. " +
+              "For 'outdoor' type: use categories ['parks', 'hiking', 'beaches', 'outdoor recreation']. " +
+              "For 'indoor' type: use categories ['museums', 'shopping', 'restaurants', 'entertainment'].",
             temperature: 0.1,
             generationTask: "tool_use",
             toolChoice: ["places_search"],
@@ -495,7 +494,7 @@
           {
             id: 'filter-pois-by-budget',
             description: "Filter and rank the POIs by budget and distance practicality",
-            prompt: "Use the budget_filter tool to filter and rank the POIs by { budget } and distance practicality.",
+            prompt: "Use the budget_filter tool with: 1) pois array from the 'poi-search' step result, 2) budget from the 'extract-user-input' step result.",
             temperature: 0.1,
             generationTask: "tool_use",
             toolChoice: ["budget_filter"],
@@ -504,7 +503,7 @@
           {
             id: 'generate-itinerary',
             description: "Generate an itinerary with start/end times",
-            prompt: "Use the calendar_events tool to produce an itinerary with start/end times.",
+            prompt: "Use the calendar_events tool to produce an itinerary. Use: 1) the filtered POIs from 'filter-pois-by-budget' step result, 2) time window from 'extract-user-input' step (if available).",
             temperature: 0.1,
             generationTask: "tool_use",
             toolChoice: ["calendar_events"],
@@ -801,7 +800,8 @@
 
       function addStep(stepResult) {
         const stepDiv = document.createElement('div');
-        stepDiv.className = `step ${stepResult.type}`;
+        const stepType = stepResult.error ? 'error' : stepResult.toolCall ? 'tool_call' : 'response';
+        stepDiv.className = `step ${stepType}`;
         
         const header = document.createElement('div');
         header.className = 'step-header';
@@ -813,11 +813,16 @@
           error: '❌'
         };
         
-        header.innerHTML = `${typeIcons[stepResult.type] || '•'} <strong>Step ${stepResult.stepId}:</strong> ${getStepDescription(stepResult.stepId)}`;
+        header.innerHTML = `${typeIcons[stepType] || '•'} <strong>Step ${stepResult.id}:</strong> ${getStepDescription(stepResult.id)}`;
         
         const content = document.createElement('div');
         content.className = 'step-content';
-        content.textContent = stepResult.content;
+        
+        if (stepResult.error) {
+          content.textContent = stepResult.error.message;
+        } else {
+          content.textContent = stepResult.content || '';
+        }
         
         stepDiv.appendChild(header);
         stepDiv.appendChild(content);
@@ -827,9 +832,18 @@
           toolInfo.className = 'tool-info';
           toolInfo.innerHTML = `<strong>🔧 ${stepResult.toolCall.name}</strong><br/>${JSON.stringify(stepResult.toolCall.args, null, 2)}`;
           if (stepResult.toolCall.result) {
-            toolInfo.innerHTML += `<br/><br/><strong>Result:</strong><br/>${JSON.stringify(stepResult.toolCall.result, null, 2)}`;
+            toolInfo.innerHTML += `<br/><br/><strong>Result:</strong><br/>${stepResult.toolCall.result}`;
           }
           stepDiv.appendChild(toolInfo);
+        }
+        
+        // Add metadata info if available
+        if (stepResult.metadata) {
+          const metadataDiv = document.createElement('div');
+          metadataDiv.className = 'tool-info';
+          metadataDiv.style.marginTop = '8px';
+          metadataDiv.innerHTML = `<strong>⏱️ Duration:</strong> ${stepResult.metadata.duration}ms`;
+          stepDiv.appendChild(metadataDiv);
         }
         
         output.appendChild(stepDiv);
@@ -838,14 +852,14 @@
 
       function getStepDescription(stepId) {
         const descriptions = {
-          1: 'Parsing user request',
-          2: 'Geocoding location',
-          3: 'Fetching weather forecast',
-          4: 'Determining activity type',
-          5: 'Searching for places',
-          6: 'Filtering by budget',
-          7: 'Creating itinerary',
-          8: 'Composing final plan'
+          'extract-user-input': 'Parsing user request',
+          'get-geocode-city': 'Geocoding location',
+          'get-weather-forecast': 'Fetching weather forecast',
+          'determine-activity-type': 'Determining activity type',
+          'poi-search': 'Searching for places',
+          'filter-pois-by-budget': 'Filtering by budget',
+          'generate-itinerary': 'Creating itinerary',
+          'compose-final-plan': 'Composing final plan'
         };
         return descriptions[stepId] || 'Processing';
       }
@@ -892,12 +906,12 @@
           updateStatus('Agent running...', 'running');
 
           const userMessage = createUserMessage();
-          let stepCount = 0;
+          const completedSteps = new Set();
           
           for await (const stepResult of agent.runWorkflow(userMessage, weatherActivityWorkflow)) {
             console.log(JSON.stringify(stepResult, null, 2));
             
-            stepCount++;
+            completedSteps.add(stepResult.id);
             addStep(stepResult);
             
             if (stepResult.error) {
@@ -906,7 +920,7 @@
             }
           }
 
-          updateStatus(`Planning completed! (${stepCount} steps)`, 'completed');
+          updateStatus(`Planning completed! (${completedSteps.size} steps)`, 'completed');
           await agent.dispose();
 
         } catch (error) {

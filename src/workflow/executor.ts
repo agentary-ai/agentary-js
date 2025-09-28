@@ -23,13 +23,30 @@ export class WorkflowExecutor {
   }
 
   async* execute(userPrompt: string, agentWorkflow: AgentWorkflow): AsyncIterable<WorkflowStepResponse> {
-    this.stateManager.logWorkflowStart(agentWorkflow, userPrompt);
+    logger.agent.info('Starting workflow execution', { 
+      workflowId: agentWorkflow.id, 
+      workflowName: agentWorkflow.name,
+      userPrompt,
+      stepCount: agentWorkflow.steps.length,
+      toolCount: agentWorkflow.tools.length 
+    });
     
     this.stateManager.initializeState(
       userPrompt,
       agentWorkflow,
       this.tools
     );
+
+    // Log initial memory state
+    const initialMetrics = this.stateManager.getMemoryMetrics();
+    if (initialMetrics) {
+      logger.agent.info('Initial memory state', {
+        workflowId: agentWorkflow.id,
+        tokenCount: initialMetrics.estimatedTokens,
+        messageCount: initialMetrics.messageCount,
+        maxTokenLimit: initialMetrics.maxTokenLimit
+      });
+    }
       
     let currentStep: WorkflowStep | undefined;
     let state: WorkflowState | undefined;
@@ -54,11 +71,15 @@ export class WorkflowExecutor {
           currentStep?.generationTask
         );
       } else {
-        this.stateManager.logWorkflowComplete(
-          state.workflow.id,
-          state.iteration,
-          state.startTime
-        );
+        const finalMetrics = this.stateManager.getMemoryMetrics();
+        logger.agent.info('Workflow execution complete', { 
+          workflowId: state.workflow.id,
+          iterations: state.iteration,
+          totalTimeMs: Date.now() - state.startTime,
+          finalTokenCount: finalMetrics?.estimatedTokens,
+          totalPruneCount: finalMetrics?.pruneCount,
+          finalMessageCount: finalMetrics?.messageCount
+        });
       }
 
     } catch (error: any) {
@@ -117,7 +138,22 @@ export class WorkflowExecutor {
       const result = await this.stepExecutor.execute(currentStep, state.tools);
       if (result) {
         yield result;
+        
+        // Log memory state after step execution
+        const memoryMetrics = this.stateManager.getMemoryMetrics();
+        if (memoryMetrics && this.stateManager.isContextNearLimit()) {
+          logger.agent.warn('Memory usage high after step execution', {
+            workflowId: state.workflow.id,
+            stepId: currentStep.id,
+            tokenCount: memoryMetrics.estimatedTokens,
+            utilizationPercent: (memoryMetrics.estimatedTokens / memoryMetrics.maxTokenLimit) * 100,
+            pruneCount: memoryMetrics.pruneCount
+          });
+        }
       }
+      
+      // Increment iteration counter after each step execution
+      state.iteration++;
     }
   }
 

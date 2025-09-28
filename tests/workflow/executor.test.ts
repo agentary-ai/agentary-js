@@ -24,7 +24,16 @@ vi.mock('../../src/workflow/workflow-state', () => {
       findNextStep: vi.fn(),
       isMaxIterationsReached: vi.fn(),
       isTimeout: vi.fn(),
-      logWorkflowComplete: vi.fn()
+      logWorkflowComplete: vi.fn(),
+      getMemoryMetrics: vi.fn().mockReturnValue({
+        messageCount: 2,
+        estimatedTokens: 100,
+        pruneCount: 0,
+        avgStepResultSize: 50,
+        maxTokenLimit: 1200,
+        warningThreshold: 0.8
+      }),
+      isContextNearLimit: vi.fn().mockReturnValue(false)
     }))
   }
 })
@@ -299,6 +308,175 @@ describe('WorkflowExecutor', () => {
         workflow.steps[0], // step
         [testTool] // tools array
       )
+    })
+  })
+
+  describe('Step Retry Logic', () => {
+    it('should retry failed steps up to maxAttempts', async () => {
+      const workflow: AgentWorkflow = {
+        id: 'retry-workflow',
+        name: 'Retry Test Workflow',
+        steps: [
+          {
+            id: '1',
+            description: 'Step that will fail and be retried',
+            prompt: 'This step will fail initially',
+            generationTask: 'chat',
+            maxAttempts: 3
+          }
+        ],
+        tools: []
+      }
+
+      // Setup state manager
+      mockStateManager.getState.mockReturnValue({
+        workflow,
+        startTime: Date.now(),
+        completedSteps: new Set(),
+        iteration: 1,
+        maxIterations: 10,
+        timeout: 60000,
+        tools: []
+      })
+
+      // First two calls return the step (for retry), third call returns null (step completed or max attempts reached)
+      mockStateManager.findNextStep
+        .mockReturnValueOnce(workflow.steps[0])  // First attempt
+        .mockReturnValueOnce(workflow.steps[0])  // Second attempt (retry)
+        .mockReturnValueOnce(workflow.steps[0])  // Third attempt (retry)
+        .mockReturnValue(null)                   // No more steps
+
+      // Mock step execution to fail twice, then succeed
+      mockStepExecutor.execute
+        .mockResolvedValueOnce({
+          id: '1',
+          error: {
+            message: 'First attempt failed'
+          },
+          metadata: {
+            duration: 100,
+            stepType: 'chat'
+          }
+        })
+        .mockResolvedValueOnce({
+          id: '1',
+          error: {
+            message: 'Second attempt failed'
+          },
+          metadata: {
+            duration: 100,
+            stepType: 'chat'
+          }
+        })
+        .mockResolvedValueOnce({
+          id: '1',
+          content: 'Third attempt succeeded',
+          metadata: {
+            duration: 100,
+            stepType: 'chat'
+          }
+        })
+
+      const results: any[] = []
+      const userPrompt = 'Test user prompt'
+      for await (const result of workflowExecutor.execute(userPrompt, workflow)) {
+        results.push(result)
+      }
+
+      // Should have 3 results: 2 failures + 1 success
+      expect(results).toHaveLength(3)
+      expect(mockStepExecutor.execute).toHaveBeenCalledTimes(3)
+      
+      // Verify the sequence of results
+      expect(results[0]).toMatchObject({
+        id: '1',
+        error: { message: 'First attempt failed' }
+      })
+      expect(results[1]).toMatchObject({
+        id: '1',
+        error: { message: 'Second attempt failed' }
+      })
+      expect(results[2]).toMatchObject({
+        id: '1',
+        content: 'Third attempt succeeded'
+      })
+    })
+
+    it('should stop retrying after maxAttempts is reached', async () => {
+      const workflow: AgentWorkflow = {
+        id: 'max-retry-workflow',
+        name: 'Max Retry Test Workflow',
+        steps: [
+          {
+            id: '1',
+            description: 'Step that will always fail',
+            prompt: 'This step will always fail',
+            generationTask: 'chat',
+            maxAttempts: 2
+          }
+        ],
+        tools: []
+      }
+
+      // Setup state manager
+      mockStateManager.getState.mockReturnValue({
+        workflow,
+        startTime: Date.now(),
+        completedSteps: new Set(),
+        iteration: 1,
+        maxIterations: 10,
+        timeout: 60000,
+        tools: []
+      })
+
+      // Return the step twice (for 2 attempts), then null
+      mockStateManager.findNextStep
+        .mockReturnValueOnce(workflow.steps[0])  // First attempt
+        .mockReturnValueOnce(workflow.steps[0])  // Second attempt (retry)
+        .mockReturnValue(null)                   // No more steps (max attempts reached)
+
+      // Mock step execution to always fail
+      mockStepExecutor.execute
+        .mockResolvedValueOnce({
+          id: '1',
+          error: {
+            message: 'First attempt failed'
+          },
+          metadata: {
+            duration: 100,
+            stepType: 'chat'
+          }
+        })
+        .mockResolvedValueOnce({
+          id: '1',
+          error: {
+            message: 'Max retries exceeded'
+          },
+          metadata: {
+            duration: 100,
+            stepType: 'chat'
+          }
+        })
+
+      const results: any[] = []
+      const userPrompt = 'Test user prompt'
+      for await (const result of workflowExecutor.execute(userPrompt, workflow)) {
+        results.push(result)
+      }
+
+      // Should have 2 results: 1 failure + 1 max retries exceeded
+      expect(results).toHaveLength(2)
+      expect(mockStepExecutor.execute).toHaveBeenCalledTimes(2)
+      
+      // Verify the sequence of results
+      expect(results[0]).toMatchObject({
+        id: '1',
+        error: { message: 'First attempt failed' }
+      })
+      expect(results[1]).toMatchObject({
+        id: '1',
+        error: { message: 'Max retries exceeded' }
+      })
     })
   })
 
