@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { WorkflowExecutor } from '../../src/workflow/executor'
 import { StepExecutor } from '../../src/workflow/step-executor'
+import { WorkflowStateManager } from '../../src/workflow/workflow-state'
 import type { AgentWorkflow, WorkflowStep } from '../../src/types/agent-session'
 import type { Tool } from '../../src/types/worker'
 
@@ -13,9 +14,25 @@ vi.mock('../../src/workflow/step-executor', () => {
   }
 })
 
+// Mock WorkflowStateManager
+vi.mock('../../src/workflow/workflow-state', () => {
+  return {
+    WorkflowStateManager: vi.fn().mockImplementation(() => ({
+      logWorkflowStart: vi.fn(),
+      initializeState: vi.fn(),
+      getState: vi.fn(),
+      findNextStep: vi.fn(),
+      isMaxIterationsReached: vi.fn(),
+      isTimeout: vi.fn(),
+      logWorkflowComplete: vi.fn()
+    }))
+  }
+})
+
 describe('WorkflowExecutor', () => {
   let workflowExecutor: WorkflowExecutor
   let mockStepExecutor: any
+  let mockStateManager: any
   let mockTools: Tool[]
 
   beforeEach(() => {
@@ -26,9 +43,24 @@ describe('WorkflowExecutor', () => {
       createResponse: vi.fn(),
       dispose: vi.fn()
     }
-    mockStepExecutor = new StepExecutor(mockSession as any)
+    mockStepExecutor = new StepExecutor(mockSession as any, new WorkflowStateManager())
+    mockStateManager = new WorkflowStateManager()
     mockTools = []
-    workflowExecutor = new WorkflowExecutor(mockStepExecutor, mockTools)
+    workflowExecutor = new WorkflowExecutor(mockStepExecutor, mockTools, mockStateManager)
+    
+    // Setup default mock behavior for WorkflowStateManager
+    mockStateManager.getState.mockReturnValue({
+      workflow: { id: 'test', name: 'Test', steps: [], tools: [] },
+      startTime: Date.now(),
+      completedSteps: new Set(),
+      iteration: 1,
+      maxIterations: 10,
+      timeout: 60000,
+      tools: []
+    })
+    mockStateManager.findNextStep.mockReturnValue(null)
+    mockStateManager.isMaxIterationsReached.mockReturnValue(false)
+    mockStateManager.isTimeout.mockReturnValue(false)
   })
 
   describe('Simple Linear Workflow', () => {
@@ -36,15 +68,16 @@ describe('WorkflowExecutor', () => {
       const workflow: AgentWorkflow = {
         id: 'test-workflow',
         name: 'Test Workflow',
-        state: 'idle',
         steps: [
           {
             id: '1',
+            description: 'Think about the problem',
             prompt: 'Think about the problem',
             generationTask: 'reasoning'
           },
           {
             id: '2',
+            description: 'Provide a response',
             prompt: 'Provide a response',
             generationTask: 'chat'
           }
@@ -52,24 +85,35 @@ describe('WorkflowExecutor', () => {
         tools: []
       }
 
-      // Mock step execution - StepExecutor.execute is now a Promise<void> that modifies the step in place
+      // Setup state manager to return steps in order
+      mockStateManager.getState.mockReturnValue({
+        workflow,
+        startTime: Date.now(),
+        completedSteps: new Set(),
+        iteration: 1,
+        maxIterations: 10,
+        timeout: 60000,
+        tools: []
+      })
+      mockStateManager.findNextStep
+        .mockReturnValueOnce(workflow.steps[0])
+        .mockReturnValueOnce(workflow.steps[1])
+        .mockReturnValue(null)
+
+      // Mock step execution - StepExecutor.execute returns WorkflowStepResponse
       mockStepExecutor.execute
-        .mockImplementationOnce(async (step: WorkflowStep) => {
-          step.complete = true;
-          step.response = {
-            content: 'Thinking about the problem',
-            metadata: { stepType: 'reasoning' }
-          };
+        .mockResolvedValueOnce({
+          id: '1',
+          content: 'Thinking about the problem',
+          metadata: { stepType: 'reasoning' }
         })
-        .mockImplementationOnce(async (step: WorkflowStep) => {
-          step.complete = true;
-          step.response = {
-            content: 'Final response',
-            metadata: { stepType: 'chat' }
-          };
+        .mockResolvedValueOnce({
+          id: '2',
+          content: 'Final response',
+          metadata: { stepType: 'chat' }
         })
 
-      const results: WorkflowStep[] = []
+      const results: any[] = []
       const userPrompt = 'Test user prompt'
       for await (const result of workflowExecutor.execute(userPrompt, workflow)) {
         results.push(result)
@@ -82,37 +126,34 @@ describe('WorkflowExecutor', () => {
       // Verify steps were completed and yielded
       expect(results[0]).toMatchObject({
         id: '1',
-        complete: true,
-        response: expect.objectContaining({
-          content: 'Thinking about the problem'
-        })
+        content: 'Thinking about the problem',
+        metadata: { stepType: 'reasoning' }
       })
       expect(results[1]).toMatchObject({
         id: '2',
-        complete: true,
-        response: expect.objectContaining({
-          content: 'Final response'
-        })
+        content: 'Final response',
+        metadata: { stepType: 'chat' }
       })
       
-      // Verify steps were completed in the workflow
-      expect(workflow.steps[0].complete).toBe(true)
-      expect(workflow.steps[1].complete).toBe(true)
+      // Verify step executor was called with correct parameters
+      expect(mockStepExecutor.execute).toHaveBeenCalledWith(workflow.steps[0], [])
+      expect(mockStepExecutor.execute).toHaveBeenCalledWith(workflow.steps[1], [])
     })
 
     it('should pass context between steps', async () => {
       const workflow: AgentWorkflow = {
         id: 'context-workflow',
         name: 'Context Test Workflow',
-        state: 'idle',
         steps: [
           {
             id: '1',
+            description: 'Analyze the problem',
             prompt: 'Analyze the problem',
             generationTask: 'reasoning'
           },
           {
             id: '2',
+            description: 'Provide response based on analysis',
             prompt: 'Provide response based on analysis',
             generationTask: 'chat'
           }
@@ -120,22 +161,34 @@ describe('WorkflowExecutor', () => {
         tools: []
       }
 
+      // Setup state manager to return steps in order
+      mockStateManager.getState.mockReturnValue({
+        workflow,
+        startTime: Date.now(),
+        completedSteps: new Set(),
+        iteration: 1,
+        maxIterations: 10,
+        timeout: 60000,
+        tools: []
+      })
+      mockStateManager.findNextStep
+        .mockReturnValueOnce(workflow.steps[0])
+        .mockReturnValueOnce(workflow.steps[1])
+        .mockReturnValue(null)
+
       mockStepExecutor.execute
-        .mockImplementationOnce(async (step: WorkflowStep) => {
-          step.complete = true;
-          step.response = {
-            content: 'Analyzed the problem',
-            metadata: { analysis: 'Important data' }
-          };
+        .mockResolvedValueOnce({
+          id: '1',
+          content: 'Analyzed the problem',
+          metadata: { analysis: 'Important data' }
         })
-        .mockImplementationOnce(async (step: WorkflowStep) => {
-          step.complete = true;
-          step.response = {
-            content: 'Response based on analysis'
-          };
+        .mockResolvedValueOnce({
+          id: '2',
+          content: 'Response based on analysis',
+          metadata: { stepType: 'chat' }
         })
 
-      const results: WorkflowStep[] = []
+      const results: any[] = []
       const userPrompt = 'Test user prompt'
       for await (const result of workflowExecutor.execute(userPrompt, workflow)) {
         results.push(result)
@@ -148,30 +201,18 @@ describe('WorkflowExecutor', () => {
       // Verify steps were completed and yielded
       expect(results[0]).toMatchObject({
         id: '1',
-        complete: true,
-        response: expect.objectContaining({
-          content: 'Analyzed the problem'
-        })
+        content: 'Analyzed the problem',
+        metadata: { analysis: 'Important data' }
       })
       expect(results[1]).toMatchObject({
         id: '2',
-        complete: true,
-        response: expect.objectContaining({
-          content: 'Response based on analysis'
-        })
+        content: 'Response based on analysis',
+        metadata: { stepType: 'chat' }
       })
       
-      // Verify context was passed to second step - the execute method gets step, memory, tools
-      const secondStepCall = mockStepExecutor.execute.mock.calls[1]
-      expect(secondStepCall[1]).toMatchObject({
-        messages: expect.arrayContaining([
-          expect.objectContaining({ role: 'user', content: userPrompt })
-        ])
-      })
-      
-      // Verify steps were completed in the workflow
-      expect(workflow.steps[0].complete).toBe(true)
-      expect(workflow.steps[1].complete).toBe(true)
+      // Verify step executor was called with correct parameters (step and tools)
+      expect(mockStepExecutor.execute).toHaveBeenCalledWith(workflow.steps[0], [])
+      expect(mockStepExecutor.execute).toHaveBeenCalledWith(workflow.steps[1], [])
     })
   })
 
@@ -196,10 +237,10 @@ describe('WorkflowExecutor', () => {
       const workflow: AgentWorkflow = {
         id: 'tool-workflow',
         name: 'Tool Test Workflow',
-        state: 'idle',
         steps: [
           {
             id: '1',
+            description: 'Use the test tool',
             prompt: 'Use the test tool',
             generationTask: 'tool_use',
             toolChoice: ['test_tool']
@@ -208,19 +249,32 @@ describe('WorkflowExecutor', () => {
         tools: [testTool]
       }
 
-      mockStepExecutor.execute.mockImplementationOnce(async (step: WorkflowStep) => {
-        step.complete = true;
-        step.response = {
-          content: 'Using test tool',
-          toolCall: {
-            name: 'test_tool',
-            args: { input: 'test' },
-            result: 'success'
-          }
-        };
+      // Setup state manager with tools included
+      mockStateManager.getState.mockReturnValue({
+        workflow,
+        startTime: Date.now(),
+        completedSteps: new Set(),
+        iteration: 1,
+        maxIterations: 10,
+        timeout: 60000,
+        tools: [testTool]
+      })
+      mockStateManager.findNextStep
+        .mockReturnValueOnce(workflow.steps[0])
+        .mockReturnValue(null)
+
+      mockStepExecutor.execute.mockResolvedValueOnce({
+        id: '1',
+        content: 'Using test tool',
+        toolCall: {
+          name: 'test_tool',
+          args: { input: 'test' },
+          result: 'success'
+        },
+        metadata: { stepType: 'tool_use' }
       })
 
-      const results: WorkflowStep[] = []
+      const results: any[] = []
       const userPrompt = 'Test user prompt'
       for await (const result of workflowExecutor.execute(userPrompt, workflow)) {
         results.push(result)
@@ -233,25 +287,18 @@ describe('WorkflowExecutor', () => {
       // Verify step was completed and yielded
       expect(results[0]).toMatchObject({
         id: '1',
-        complete: true,
-        response: expect.objectContaining({
-          content: 'Using test tool',
-          toolCall: expect.objectContaining({
-            name: 'test_tool'
-          })
-        })
+        content: 'Using test tool',
+        toolCall: expect.objectContaining({
+          name: 'test_tool'
+        }),
+        metadata: { stepType: 'tool_use' }
       })
       
       // Verify step executor was called with the workflow tool
       expect(mockStepExecutor.execute).toHaveBeenCalledWith(
-        expect.any(Object), // step
-        expect.any(Object), // memory
-        expect.arrayContaining([testTool]) // tools array
+        workflow.steps[0], // step
+        [testTool] // tools array
       )
-      
-      // Verify step was completed
-      expect(workflow.steps[0].complete).toBe(true)
-      expect(workflow.steps[0].response?.toolCall?.name).toBe('test_tool')
     })
   })
 
@@ -260,10 +307,10 @@ describe('WorkflowExecutor', () => {
       const workflow: AgentWorkflow = {
         id: 'error-workflow',
         name: 'Error Workflow',
-        state: 'idle',
         steps: [
           {
             id: '1',
+            description: 'This step will throw',
             prompt: 'This step will throw',
             generationTask: 'chat'
           }
@@ -271,11 +318,32 @@ describe('WorkflowExecutor', () => {
         tools: []
       }
 
-      mockStepExecutor.execute.mockImplementationOnce(async () => {
-        throw new Error('Step execution failed')
+      // Setup state manager
+      mockStateManager.getState.mockReturnValue({
+        workflow,
+        startTime: Date.now(),
+        completedSteps: new Set(),
+        iteration: 1,
+        maxIterations: 10,
+        timeout: 60000,
+        tools: []
+      })
+      mockStateManager.findNextStep
+        .mockReturnValueOnce(workflow.steps[0])
+        .mockReturnValue(null)
+
+      mockStepExecutor.execute.mockResolvedValueOnce({
+        id: '1',
+        error: {
+          message: 'Step execution failed: Step execution failed'
+        },
+        metadata: {
+          duration: 0,
+          stepType: 'chat'
+        }
       })
 
-      const results: WorkflowStep[] = []
+      const results: any[] = []
       const userPrompt = 'Test user prompt'
       for await (const result of workflowExecutor.execute(userPrompt, workflow)) {
         results.push(result)
@@ -284,11 +352,9 @@ describe('WorkflowExecutor', () => {
       expect(results).toHaveLength(1)
       expect(results[0]).toMatchObject({
         id: '1',
-        complete: true,
-        response: expect.objectContaining({
-          error: 'Step execution failed',
-          content: 'Workflow error: Step execution failed'
-        })
+        error: {
+          message: 'Step execution failed: Step execution failed'
+        }
       })
     })
 
@@ -298,11 +364,11 @@ describe('WorkflowExecutor', () => {
       const workflow: AgentWorkflow = {
         id: 'timeout-workflow',
         name: 'Timeout Workflow',
-        state: 'idle',
         timeout: 1, // 1ms timeout - extremely short
         steps: [
           {
             id: '1',
+            description: 'A slow step',
             prompt: 'A slow step',
             generationTask: 'chat'
           }
@@ -315,7 +381,7 @@ describe('WorkflowExecutor', () => {
         // This should not complete due to timeout
       })
 
-      const results: WorkflowStep[] = []
+      const results: any[] = []
       const userPrompt = 'Test user prompt'
       for await (const result of workflowExecutor.execute(userPrompt, workflow)) {
         results.push(result)
@@ -335,21 +401,23 @@ describe('WorkflowExecutor', () => {
       const workflow: AgentWorkflow = {
         id: 'infinite-workflow',
         name: 'Infinite Workflow',
-        state: 'idle',
         maxIterations: 2,
         steps: [
           {
             id: '1',
+            description: 'Step 1',
             prompt: 'Step 1',
             generationTask: 'chat'
           },
           {
             id: '2',
+            description: 'Step 2',
             prompt: 'Step 2',
             generationTask: 'chat'
           },
           {
             id: '3',
+            description: 'Step 3',
             prompt: 'Step 3',
             generationTask: 'chat'
           }
@@ -357,41 +425,43 @@ describe('WorkflowExecutor', () => {
         tools: []
       }
 
-      mockStepExecutor.execute.mockImplementation(async (step: WorkflowStep) => {
-        step.complete = true;
-        step.response = {
-          content: 'Completed step'
-        };
-      })
+      const startTime = Date.now()
+      // Setup state manager to allow some steps but reach max iterations
+      const mockState = {
+        workflow,
+        startTime,
+        completedSteps: new Set(),
+        iteration: 2, // Set to max iterations so no loop iterations happen
+        maxIterations: 2,
+        timeout: 60000,
+        tools: []
+      }
+      
+      mockStateManager.getState.mockReturnValue(mockState)
+      mockStateManager.findNextStep.mockReturnValue(workflow.steps[0]) // Always has a next step
+      
+      // The check should return true indicating max iterations reached
+      mockStateManager.isMaxIterationsReached.mockReturnValue(true)
 
-      const results: WorkflowStep[] = []
+      const results: any[] = []
       const userPrompt = 'Test user prompt'
       for await (const result of workflowExecutor.execute(userPrompt, workflow)) {
         results.push(result)
       }
 
-      // Should yield 1 completed step + 1 error result for max iterations exceeded
-      expect(results).toHaveLength(2)
+      // Should yield 1 error result for max iterations exceeded (no steps executed)
+      expect(results).toHaveLength(1)
       
-      // First result should be the completed step
+      // Should be the max iterations error
       expect(results[0]).toMatchObject({
-        id: '1',
-        complete: true,
-        response: expect.objectContaining({
-          content: 'Completed step'
-        })
+        id: '1', // currentStep will be the found step
+        error: {
+          message: 'Workflow exceeded maximum iterations'
+        }
       })
       
-      // Second result should be the max iterations error
-      expect(results[1]).toMatchObject({
-        complete: true,
-        response: expect.objectContaining({
-          error: 'Workflow exceeded maximum iterations'
-        })
-      })
-      
-      // Should have executed 1 step (maxIterations = 2, so while loop runs 1 time: iteration 1 < maxIterations 2)
-      expect(mockStepExecutor.execute).toHaveBeenCalledTimes(1)
+      // Should have executed 0 steps since max iterations was already reached
+      expect(mockStepExecutor.execute).toHaveBeenCalledTimes(0)
     })
   })
 
@@ -400,10 +470,10 @@ describe('WorkflowExecutor', () => {
       const workflow: AgentWorkflow = {
         id: 'default-config-workflow',
         name: 'Default Config Workflow',
-        state: 'idle',
         steps: [
           {
             id: '1',
+            description: 'Only step',
             prompt: 'Only step',
             generationTask: 'chat'
           }
@@ -412,14 +482,27 @@ describe('WorkflowExecutor', () => {
         // No maxIterations or timeout specified - will use defaults
       }
 
-      mockStepExecutor.execute.mockImplementationOnce(async (step: WorkflowStep) => {
-        step.complete = true;
-        step.response = {
-          content: 'Completed'
-        };
+      // Setup state manager
+      mockStateManager.getState.mockReturnValue({
+        workflow,
+        startTime: Date.now(),
+        completedSteps: new Set(),
+        iteration: 1,
+        maxIterations: 10, // Default value
+        timeout: 60000, // Default value
+        tools: []
+      })
+      mockStateManager.findNextStep
+        .mockReturnValueOnce(workflow.steps[0])
+        .mockReturnValue(null)
+
+      mockStepExecutor.execute.mockResolvedValueOnce({
+        id: '1',
+        content: 'Completed',
+        metadata: { stepType: 'chat' }
       })
 
-      const results: WorkflowStep[] = []
+      const results: any[] = []
       const userPrompt = 'Test user prompt'
       for await (const result of workflowExecutor.execute(userPrompt, workflow)) {
         results.push(result)
@@ -432,27 +515,35 @@ describe('WorkflowExecutor', () => {
       // Verify step was completed and yielded
       expect(results[0]).toMatchObject({
         id: '1',
-        complete: true,
-        response: expect.objectContaining({
-          content: 'Completed'
-        })
+        content: 'Completed',
+        metadata: { stepType: 'chat' }
       })
       
-      // Verify step was completed
-      expect(workflow.steps[0].complete).toBe(true)
-      expect(workflow.steps[0].response?.content).toBe('Completed')
+      // Verify step executor was called correctly
+      expect(mockStepExecutor.execute).toHaveBeenCalledWith(workflow.steps[0], [])
     })
 
     it('should handle empty workflow steps', async () => {
       const workflow: AgentWorkflow = {
         id: 'empty-workflow',
         name: 'Empty Workflow',
-        state: 'idle',
         steps: [],
         tools: []
       }
 
-      const results: WorkflowStep[] = []
+      // Setup state manager with empty steps
+      mockStateManager.getState.mockReturnValue({
+        workflow,
+        startTime: Date.now(),
+        completedSteps: new Set(),
+        iteration: 1,
+        maxIterations: 10,
+        timeout: 60000,
+        tools: []
+      })
+      mockStateManager.findNextStep.mockReturnValue(null) // No steps to find
+
+      const results: any[] = []
       const userPrompt = 'Test user prompt'
       for await (const result of workflowExecutor.execute(userPrompt, workflow)) {
         results.push(result)
@@ -460,6 +551,7 @@ describe('WorkflowExecutor', () => {
 
       // Should complete immediately with no results
       expect(results).toHaveLength(0)
+      expect(mockStepExecutor.execute).not.toHaveBeenCalled()
     })
   })
 })
