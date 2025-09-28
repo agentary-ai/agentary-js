@@ -43,6 +43,10 @@ export class StepExecutor {
           id: step.id,
           error: {
             message: 'Max retries exceeded'
+          },
+          metadata: {
+            duration: Date.now() - stepStartTime,
+            stepType: step.generationTask,
           }
         };
       }
@@ -121,6 +125,10 @@ export class StepExecutor {
             id: step.id,
             error: {
               message: 'No tool call detected in response for tool_use generation task'
+            },
+            metadata: {
+              duration: Date.now() - stepStartTime,
+              stepType: step.generationTask,
             }
           };
         }
@@ -132,6 +140,10 @@ export class StepExecutor {
             id: step.id,
             error: {
               message: 'Tool ' + toolCall.name + ' not found for tool_use generation task'
+            },
+            metadata: {
+              duration: Date.now() - stepStartTime,
+              stepType: step.generationTask,
             }
           };
         }
@@ -151,6 +163,10 @@ export class StepExecutor {
                 name: toolCall.name,
                 args: toolCall.args,
                 result: JSON.stringify(toolResult)
+              },
+              metadata: {
+                duration: Date.now() - stepStartTime,
+                stepType: step.generationTask,
               }
             };
           } else {
@@ -159,6 +175,10 @@ export class StepExecutor {
               toolCall: {
                 name: toolCall.name,
                 args: toolCall.args,
+              },
+              metadata: {
+                duration: Date.now() - stepStartTime,
+                stepType: step.generationTask,
               }
             }
           }
@@ -167,7 +187,11 @@ export class StepExecutor {
         this.workflowStateManager.updateStepResult(step.id, cleanContent);
         return {
           id: step.id,
-          content: cleanContent
+          content: cleanContent,
+          metadata: {
+            duration: Date.now() - stepStartTime,
+            stepType: step.generationTask,
+          }
         };
       }        
     } catch (error: any) {
@@ -175,6 +199,10 @@ export class StepExecutor {
         id: step.id,
         error: {
           message: 'Step execution failed: ' + error.message
+        },
+        metadata: {
+          duration: Date.now() - stepStartTime,
+          stepType: step.generationTask,
         }
       };
     }

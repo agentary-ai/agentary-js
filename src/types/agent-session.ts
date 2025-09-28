@@ -15,7 +15,6 @@ export interface WorkflowStepResponse {
 
 export interface WorkflowStepError {
   message: string;
-  metadata?: Record<string, any>;
 }
 
 export interface WorkflowStep {
@@ -31,20 +30,11 @@ export interface WorkflowStep {
   maxAttempts?: number;
 }
 
-export interface AgentMemoryConfig {
-  maxTokens?: number;
-  summarizationEnabled?: boolean;
-  summarizationModel?: Model;
-  summarizationMaxTokens?: number;
-  summarizationThreshold?: number;
-}
-
 export interface AgentWorkflow {
   id: string
   name?: string;
   description?: string;
   systemPrompt?: string;
-  memoryConfig?: AgentMemoryConfig;
   steps: WorkflowStep[];
   context?: Record<string, any>;
   tools: Tool[];

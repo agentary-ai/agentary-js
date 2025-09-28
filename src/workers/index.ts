@@ -1,2 +1,2 @@
 // Worker management
-export { WorkerManager, type WorkerInstance, type Model } from './manager';
+export { WorkerManager } from './manager';

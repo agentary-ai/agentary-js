@@ -1,65 +1,55 @@
-import type { WorkflowStep } from '../types/agent-session';
+import type { WorkflowStepResponse } from '../types/agent-session';
 import type { GenerationTask } from '../types/session';
 
 export class WorkflowResultBuilder {
   static createTimeoutResult(
     stepId: string | null,
-    prompt: string,
     startTime: number,
     generationTask?: GenerationTask
-  ): WorkflowStep {
+  ): WorkflowStepResponse {
     return {
       id: stepId ?? 'unknown',
-      prompt: prompt ?? 'unknown',
-      complete: true,
-      response: {
-        error: 'Workflow timeout exceeded',
-        metadata: {
+      error: {
+        message: 'Workflow timeout exceeded',
+      },
+      metadata: {
           duration: Date.now() - startTime,
           stepType: generationTask,
-        }
-      },
+      }
     };
   }
 
   static createMaxIterationsResult(
     stepId: string | null,
-    prompt: string,
     startTime: number,
     generationTask?: GenerationTask
-  ): WorkflowStep {
+  ): WorkflowStepResponse {
     return {
       id: stepId ?? 'unknown',
-      prompt: prompt ?? 'unknown',
-      complete: true,
-      response: {
-        error: 'Workflow exceeded maximum iterations',
-        metadata: {
-          duration: Date.now() - startTime,
-          stepType: generationTask,
-        }
+      error: {
+        message: 'Workflow exceeded maximum iterations',
       },
+      metadata: {
+        duration: Date.now() - startTime,
+        stepType: generationTask,
+      }
     };
   }
 
   static createErrorResult(
     stepId: string | null,
-    prompt: string,
     error: Error,
     startTime: number,
     generationTask?: GenerationTask
-  ): WorkflowStep {
+  ): WorkflowStepResponse {
     return {
       id: stepId ?? 'unknown',
-      prompt: prompt ?? 'unknown',
-      complete: true,
-      response: {
-        error: error.message,
-        content: `Workflow error: ${error.message}`,
-        metadata: {
-          duration: Date.now() - startTime,
-          stepType: generationTask,
-        }
+      error: {
+        message: error.message,
+      },
+      metadata: {
+        duration: Date.now() - startTime,
+        stepType: generationTask,
       }
     };
   }

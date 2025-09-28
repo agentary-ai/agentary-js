@@ -4,10 +4,11 @@ import type {
   WorkflowStepResponse,
 } from '../types/agent-session';
 import type { Tool } from '../types/worker';
+import type { WorkflowState } from '../types/workflow-state';
 
 import { logger } from '../utils/logger';
 import { StepExecutor } from './step-executor';
-import { WorkflowStateManager, WorkflowState } from './workflow-state';
+import { WorkflowStateManager } from './workflow-state';
 import { WorkflowResultBuilder } from './result-builder';
 
 export class WorkflowExecutor {
@@ -49,7 +50,6 @@ export class WorkflowExecutor {
         });
         yield WorkflowResultBuilder.createMaxIterationsResult(
           currentStep?.id ?? null,
-          currentStep?.prompt ?? '',
           state.startTime,
           currentStep?.generationTask
         );
@@ -67,7 +67,6 @@ export class WorkflowExecutor {
         logger.agent.error('Failed to initialize workflow state', { error: error.message });
         yield WorkflowResultBuilder.createErrorResult(
           null,
-          userPrompt,
           error,
           Date.now()
         );
@@ -108,7 +107,6 @@ export class WorkflowExecutor {
         });
         yield WorkflowResultBuilder.createTimeoutResult(
           currentStep.id,
-          currentStep.prompt,
           state.startTime,
           currentStep.generationTask
         );
@@ -127,7 +125,7 @@ export class WorkflowExecutor {
     state: WorkflowState,
     currentStep: WorkflowStep | undefined,
     error: Error
-  ): AsyncIterable<WorkflowStep> {
+  ): AsyncIterable<WorkflowStepResponse> {
     logger.agent.error('Workflow execution failed', { 
       workflowId: state.workflow.id, 
       stepId: currentStep?.id ?? 'unknown',
@@ -139,7 +137,6 @@ export class WorkflowExecutor {
     
     yield WorkflowResultBuilder.createErrorResult(
       currentStep?.id ?? null,
-      currentStep?.prompt ?? '',
       error,
       state.startTime,
       currentStep?.generationTask

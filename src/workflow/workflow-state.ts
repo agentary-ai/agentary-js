@@ -1,49 +1,11 @@
 import type { AgentWorkflow, WorkflowStep } from '../types/agent-session';
-import type { Tool, Message } from '../types/worker';
+import type { Tool } from '../types/worker';
+import type { WorkflowState, AgentMemory, StepState } from '../types/workflow-state';
+
 import { logger } from '../utils/logger';
-import { TokenCounter } from '../utils/token-counter';
-
-
-export interface StepState {
-  id: string;
-  description: string;
-  result?: string;
-  complete: boolean;
-  attempts: number;
-  maxAttempts: number;
-}
-
-// To be included in system message for agent
-export interface AgentMemory {
-  workflowName?: string;
-  workflowDescription?: string;
-  workflowUserPrompt: string;
-  // messages: Message[];
-  steps: Record<string, StepState>; // Steps that the agent will execute
-  context?: Record<string, any>; // Context that will apply to all steps
-}
-
-export interface WorkflowState {
-  workflow: AgentWorkflow;
-  systemPrompt?: string;
-  startTime: number;
-  completedSteps: Set<string>;
-  iteration: number;
-  maxIterations: number;
-  timeout: number;
-  tools: Tool[];
-  memory: AgentMemory;
-  currentTokenCount?: number;
-  tokenCountLastUpdated?: Date;
-}
 
 export class WorkflowStateManager {
-  private tokenCounter: TokenCounter;
   private state?: WorkflowState;
-
-  constructor() {
-    this.tokenCounter = new TokenCounter();
-  }
 
   initializeState(userPrompt: string, workflow: AgentWorkflow, tools: Tool[]): void {
     this.state = {
@@ -61,12 +23,10 @@ export class WorkflowStateManager {
         workflow.description,
         workflow.context,
       ),
-      // messages: [],
     };
     if (workflow.systemPrompt) {
       this.state.systemPrompt = workflow.systemPrompt;
     }
-    // this.state.messages = this.initializeMessages(workflow.systemPrompt, userPrompt);
   }
 
   private initializeMemory(
@@ -233,22 +193,6 @@ export class WorkflowStateManager {
   }
     return this.state.memory.steps[stepId].complete;
   }
-
-  // updateStepStatus(
-  //   memory: AgentMemory,
-  //   stepId: string,
-  //   status: 'pending' | 'completed' | 'failed'
-  // ): void {
-  //   memory.stepsToExecute.find(step => step.id === stepId)!.status = status;
-  // }
-
-  // recordStepCompletion(
-  //   state: WorkflowExecutionState,
-  //   stepId: string
-  // ): void {
-  //   state.completedSteps.add(stepId);
-  //   state.iteration++;
-  // }
 
   logWorkflowStart(workflow: AgentWorkflow, userPrompt: string): void {
     logger.agent.info('Starting workflow execution', { 
