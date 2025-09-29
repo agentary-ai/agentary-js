@@ -31,17 +31,21 @@ export class StepExecutor {
     step: WorkflowStep, tools: Tool[]
   ): Promise<WorkflowStepResponse> {
     const stepStartTime = Date.now();
+    const stepState = this.workflowStateManager.getStepState(step.id);
+    
     logger.agent.debug('Executing step', { 
       stepId: step.id,
-      hasToolChoice: !!step.toolChoice
+      hasToolChoice: !!step.toolChoice,
+      attempt: stepState.attempts + 1,
+      maxAttempts: stepState.maxAttempts
     });
-    const stepState = this.workflowStateManager.getStepState(step.id);
     
     // Track initial message count for potential rollback
     const initialMessageCount = this.workflowStateManager.getMessageCount();
 
     try {
-      if (stepState.attempts && stepState.maxAttempts && stepState.attempts >= stepState.maxAttempts) {
+      // Check if step has already exceeded max retry attempts before this attempt
+      if (stepState.maxAttempts && stepState.attempts >= stepState.maxAttempts) {
         stepState.complete = false;
         this.workflowStateManager.handleStepCompletion(step.id, false);
         return {
@@ -52,12 +56,14 @@ export class StepExecutor {
           metadata: {
             duration: Date.now() - stepStartTime,
             stepType: step.generationTask,
+            attempts: stepState.attempts,
+            maxAttempts: stepState.maxAttempts
           }
         };
       }
-
-      // Reset step state
-      stepState.attempts = stepState.attempts + 1
+      
+      // Increment attempt counter
+      stepState.attempts = stepState.attempts + 1;
 
       let prompt = step.prompt;
       this.workflowStateManager.addMessageToMemory({
@@ -152,6 +158,9 @@ export class StepExecutor {
           // Rollback any messages that were added during this step execution
           this.workflowStateManager.rollbackMessagesToCount(initialMessageCount);
           this.workflowStateManager.handleStepCompletion(step.id, false);
+          
+          const willRetry = stepState.maxAttempts && stepState.attempts < stepState.maxAttempts;
+          
           return {
             id: step.id,
             error: {
@@ -162,6 +171,9 @@ export class StepExecutor {
               rawResult: stepResult,
               cleanContent, // Add clean content to help debug
               stepType: step.generationTask,
+              attempt: stepState.attempts,
+              maxAttempts: stepState.maxAttempts,
+              willRetry
             }
           };
         }
@@ -178,6 +190,9 @@ export class StepExecutor {
           // Rollback any messages that were added during this step execution
           this.workflowStateManager.rollbackMessagesToCount(initialMessageCount);
           this.workflowStateManager.handleStepCompletion(step.id, false);
+          
+          const willRetry = stepState.maxAttempts && stepState.attempts < stepState.maxAttempts;
+          
           return {
             id: step.id,
             error: {
@@ -187,6 +202,9 @@ export class StepExecutor {
               duration: Date.now() - stepStartTime,
               rawResult: stepResult,
               stepType: step.generationTask,
+              attempt: stepState.attempts,
+              maxAttempts: stepState.maxAttempts,
+              willRetry
             }
           };
         }
@@ -245,9 +263,15 @@ export class StepExecutor {
     } catch (error: any) {
       // Rollback any messages that were added during this step execution
       this.workflowStateManager.rollbackMessagesToCount(initialMessageCount);
+      
+      const willRetry = stepState.maxAttempts && stepState.attempts < stepState.maxAttempts;
+      
       logger.agent.error('Step execution failed, rolling back messages', {
         stepId: step.id,
         error: error.message,
+        attempt: stepState.attempts,
+        maxAttempts: stepState.maxAttempts,
+        willRetry,
         initialMessageCount,
         rolledBackTo: initialMessageCount,
         currentTokenCount: this.workflowStateManager.getCurrentTokenCount(),
@@ -263,6 +287,9 @@ export class StepExecutor {
         metadata: {
           duration: Date.now() - stepStartTime,
           stepType: step.generationTask,
+          attempt: stepState.attempts,
+          maxAttempts: stepState.maxAttempts,
+          willRetry
         }
       };
     }

@@ -150,10 +150,13 @@ export class WorkflowExecutor {
             pruneCount: memoryMetrics.pruneCount
           });
         }
+        
+        // Only increment iteration and move to next step if the step succeeded
+        // If the step failed (has error), findNextStep() will retry it if attempts < maxAttempts
+        if (!result.error) {
+          state.iteration++;
+        }
       }
-      
-      // Increment iteration counter after each step execution
-      state.iteration++;
     }
   }
 

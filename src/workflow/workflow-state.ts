@@ -165,28 +165,23 @@ export class WorkflowStateManager {
     
     // Always preserve system message and initial user prompt
     const systemMessages = this.state.memory.messages.slice(0, 2);
-    let workingMessages = [...systemMessages];
     let currentTokens = this.tokenCounter.estimateTokens(systemMessages);
     
-    // Add recent messages until we hit the target limit
+    // Collect recent messages that fit within the target limit
     const recentMessages = this.state.memory.messages.slice(2).reverse();
+    const messagesToKeep: Message[] = [];
     
     for (const message of recentMessages) {
       const messageTokens = this.tokenCounter.estimateMessageTokens(message);
       if (currentTokens + messageTokens > targetTokenCount) break;
       
-      workingMessages.splice(-1, 0, message); // Insert before last
+      messagesToKeep.unshift(message); // Add to beginning to maintain chronological order
       currentTokens += messageTokens;
     }
     
-    this.state.memory.messages = workingMessages;
-    
-    // Update metrics
-    if (this.state.memoryMetrics) {
-      this.state.memoryMetrics.pruneCount++;
-      this.state.memoryMetrics.lastPruneTime = Date.now();
-    }
-    
+    // Combine preserved system messages with recent messages in correct order
+    this.state.memory.messages = [...systemMessages, ...messagesToKeep];
+
     this.updateTokenCount();
     
     logger.agent.info('Message history pruned', {
