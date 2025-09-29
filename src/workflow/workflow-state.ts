@@ -195,13 +195,17 @@ export class WorkflowStateManager {
     });
   }
 
-  addMessageToMemory(message: Message) {
+  addMessageToMemory(message: Message, skipPruning = false) {
     if (!this.state) {
       throw new Error('State not initialized');
     }
     this.state.memory.messages?.push(message);
     this.updateTokenCount();
-    this.checkMemoryPressure();
+    
+    // Skip memory pressure check and pruning if requested (e.g., for last step)
+    if (!skipPruning) {
+      this.checkMemoryPressure();
+    }
   }
 
   rollbackMessagesToCount(targetCount: number) {
@@ -391,8 +395,40 @@ export class WorkflowStateManager {
     }
     if (!this.state.memory.steps[stepId]) {
       throw new Error('Step not found');
-  }
+    }
     return this.state.memory.steps[stepId].complete;
+  }
+
+  isLastStep(stepId: string): boolean {
+    if (!this.state) {
+      throw new Error('State not initialized');
+    }
+    
+    const workflow = this.state.workflow;
+    const steps = workflow.steps;
+    
+    // Find the current step's index
+    const currentStepIndex = steps.findIndex(step => step.id === stepId);
+    if (currentStepIndex === -1) {
+      throw new Error('Step not found in workflow');
+    }
+    
+    // Check if there are any remaining incomplete steps after this one
+    for (let i = currentStepIndex + 1; i < steps.length; i++) {
+      const futureStep = steps[i];
+      if (!futureStep?.id) continue;
+      
+      const futureStepState = this.state.memory.steps[futureStep.id];
+      if (!futureStepState) continue;
+      
+      // If this future step is not complete and hasn't exceeded max attempts, it's still pending
+      if (!futureStepState.complete && 
+          (!futureStepState.maxAttempts || futureStepState.attempts < futureStepState.maxAttempts)) {
+        return false;
+      }
+    }
+    
+    return true;
   }
 
   logStepExecution(

@@ -30,6 +30,10 @@ export interface WorkflowStep {
   maxAttempts?: number;
 }
 
+export interface AgentMemoryConfig {
+  enableSummarization?: boolean;
+}
+
 export interface AgentWorkflow {
   id: string
   name?: string;
@@ -40,6 +44,7 @@ export interface AgentWorkflow {
   tools: Tool[];
   timeout?: number;
   maxIterations?: number;
+  memoryConfig?: AgentMemoryConfig;
 }
 
 export interface AgentSession extends Session {

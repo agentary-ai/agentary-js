@@ -66,10 +66,19 @@ export class StepExecutor {
       stepState.attempts = stepState.attempts + 1;
 
       let prompt = step.prompt;
+      const isLastStep = this.workflowStateManager.isLastStep(step.id);
+
+      logger.agent.info("Last step", {
+        isLastStep,
+        stepId: step.id
+      });
+
       this.workflowStateManager.addMessageToMemory({
         role: 'user',
         content: prompt,
-      });
+      }, isLastStep);
+
+      
       
       // Interpolate placeholders with actual values from previous steps
       // const interpolatedPrompt = this.interpolatePrompt(prompt, this.workflowStateManager.getState().memory);
@@ -91,18 +100,6 @@ export class StepExecutor {
         // Filter tools by toolChoice names for tool_use tasks
         tools = tools.filter(tool => step.toolChoice!.includes(tool.function.name));
       }
-
-      // const messages: Message[] = [
-      //   {
-      //     role: 'system',
-      //     content: this.workflowStateManager.getSystemMessage()
-      //   },
-      //   {
-      //     role: 'user',
-      //     content: `Step ${step.id}: ${interpolatedPrompt}`
-      //   }
-      // ];
-      
       
       // Context and tool results are now included in the updated system message
       const generateArgs: GenerateArgs = {
@@ -137,7 +134,7 @@ export class StepExecutor {
       this.workflowStateManager.addMessageToMemory({
         role: 'assistant',
         content: cleanContent,
-      });
+      }, isLastStep);
       
       if (step.generationTask === 'tool_use') {
         // Parse potential tool calls from the clean content
@@ -219,7 +216,7 @@ export class StepExecutor {
             this.workflowStateManager.addMessageToMemory({
               role: 'user',
               content: JSON.stringify(toolResult),
-            });
+            }, isLastStep);
             this.workflowStateManager.handleStepCompletion(step.id, true, JSON.stringify(toolResult));
             return {
               id: step.id,

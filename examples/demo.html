@@ -470,25 +470,32 @@
         name: 'Math Problem Solver',
         systemPrompt: 'You are a math problem solver. You will be given a math problem and you will need to solve it step by step. ' +
           'Break down each problem into clear steps, showing your work. ' +
-          'Use the calculator tool when needed to perform calculations. ' +
-          'Do not attempt to determine the answer yourself.',
+          'You MUST use the calculator tool to perform ALL mathematical calculations. ' +
+          'Do not attempt to calculate numbers yourself - always use the calculate function.',
         maxIterations: 4,
         timeout: 50000,
         steps: [
           {
-            id: 1,
-            generationTask: 'tool_use',
+            id: 'read-problem',
+            description: 'Read the math problem.',
+            generationTask: 'reasoning',
             maxTokens: 2048,
-            prompt: 'Use the calculator tool to calculate the answer to the math problem.',
-            tools: ['calculate'],
-            nextSteps: ['explain']
+            prompt: 'Analyze the math problem and identify what calculations need to be performed. List each calculation that will be needed.',
           },
           {
-            id: 2,
-            name: 'Read solution',
-            prompt: 'Read the solution from the calculate tool and a share a brief explanation of the method.',
+            id: 'calculate',
+            description: 'Calculate the answer to the math problem.',
+            generationTask: 'tool_use',
+            maxTokens: 2048,
+            prompt: 'Now perform the calculations identified in the previous step. Use the calculate function for each mathematical operation. For example, if you need to compute 15 * 23 + 47, call calculate("15 * 23 + 47").',
+            toolChoice: ['calculate'],
+            temperature: 0.1,
+          },
+          {
+            id: 'read-solution',
+            description: 'Read the solution and explain the method.',
+            prompt: 'Based on the calculation results from the previous step, provide the final answer and explain the method used to solve the problem.',
             generationTask: 'chat',
-            nextSteps: ['done']
           }
         ],
         tools: [calculatorTool]
