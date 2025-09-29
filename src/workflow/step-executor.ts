@@ -73,13 +73,11 @@ export class StepExecutor {
         stepId: step.id
       });
 
-      this.workflowStateManager.addMessageToMemory({
+      await this.workflowStateManager.addMessagesToMemory([{
         role: 'user',
         content: prompt,
-      }, isLastStep);
+      }], true);
 
-      
-      
       // Interpolate placeholders with actual values from previous steps
       // const interpolatedPrompt = this.interpolatePrompt(prompt, this.workflowStateManager.getState().memory);
       
@@ -130,11 +128,6 @@ export class StepExecutor {
 
       // Filter out thinking tags and extract clean content
       const { cleanContent, thinkingContent } = this.contentProcessor.removeThinkTags(stepResult);
-
-      this.workflowStateManager.addMessageToMemory({
-        role: 'assistant',
-        content: cleanContent,
-      }, isLastStep);
       
       if (step.generationTask === 'tool_use') {
         // Parse potential tool calls from the clean content
@@ -213,10 +206,22 @@ export class StepExecutor {
             toolName: toolCall.name,
             resultType: typeof toolResult
           });
-            this.workflowStateManager.addMessageToMemory({
-              role: 'user',
-              content: JSON.stringify(toolResult),
-            }, isLastStep);
+            await this.workflowStateManager.addMessagesToMemory([
+              {
+                role: 'assistant',
+                content: cleanContent,
+              },
+              {
+                role: 'user',
+                content: JSON.stringify(toolResult),
+              }
+            ], isLastStep);
+            this.workflowStateManager.addToolResultToMemory(step.id, {
+              prompt,
+              name: toolCall.name,
+              description: toolSelected.function.description,
+              result: JSON.stringify(toolResult)
+            });
             this.workflowStateManager.handleStepCompletion(step.id, true, JSON.stringify(toolResult));
             return {
               id: step.id,
@@ -232,6 +237,10 @@ export class StepExecutor {
               }
             };
           } else {
+            await this.workflowStateManager.addMessagesToMemory([{
+              role: 'assistant',
+              content: cleanContent,
+            }], isLastStep);
             return {
               id: step.id,
               toolCall: {
@@ -246,6 +255,10 @@ export class StepExecutor {
             }
           }
       } else {
+        await this.workflowStateManager.addMessagesToMemory([{
+          role: 'assistant',
+          content: cleanContent,
+        }], isLastStep);
         this.workflowStateManager.handleStepCompletion(step.id, true, cleanContent);
         return {
           id: step.id,

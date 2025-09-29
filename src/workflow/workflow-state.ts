@@ -1,18 +1,24 @@
 import type { AgentWorkflow, WorkflowStep } from '../types/agent-session';
 import type { Message, Tool } from '../types/worker';
-import type { WorkflowState, AgentMemory, StepState, WorkflowMemoryMetrics } from '../types/workflow-state';
+import type { WorkflowState, AgentMemory, StepState, WorkflowMemoryMetrics, ToolResult } from '../types/workflow-state';
+import type { Session } from '../types/session';
 
 import { logger } from '../utils/logger';
 import { TokenCounter } from '../utils/token-counter';
+import { ContentProcessor } from '../processing/content';
 
 export class WorkflowStateManager {
   private state?: WorkflowState;
+  private session: Session | undefined;
   private tokenCounter: TokenCounter;
   private readonly DEFAULT_MAX_TOKENS = 600;
   private readonly DEFAULT_WARNING_THRESHOLD = 0.8;
-
-  constructor() {
+  private contentProcessor: ContentProcessor;
+  
+  constructor(session?: Session) {
+    this.session = session;
     this.tokenCounter = new TokenCounter();
+    this.contentProcessor = new ContentProcessor();
   }
 
   initializeState(userPrompt: string, workflow: AgentWorkflow, tools: Tool[]): void {
@@ -24,6 +30,11 @@ export class WorkflowStateManager {
       maxIterations: workflow.maxIterations ?? 10,
       timeout: workflow.timeout ?? 60000,
       tools: [...tools, ...workflow.tools],
+      memoryConfig: {
+        enableSummarization: workflow.memoryConfig?.enableSummarization ?? false,
+        enablePruning: workflow.memoryConfig?.enablePruning ?? false,
+        storeToolResults: workflow.memoryConfig?.storeToolResults ?? false,
+      },
       memory: this.initializeMemory(
         workflow.steps,
         workflow.systemPrompt,
@@ -76,6 +87,7 @@ export class WorkflowStateManager {
     const memory: AgentMemory = {
       workflowUserPrompt,
       steps: stepsState,
+      toolResults: {},
       messages,
     };
     if (workflowName) {
@@ -99,6 +111,7 @@ export class WorkflowStateManager {
       messageCount: this.state.memory.messages?.length ?? 0,
       estimatedTokens: 0,
       pruneCount: 0,
+      summarizationCount: 0,
       avgStepResultSize: 0,
       maxTokenLimit: this.DEFAULT_MAX_TOKENS,
       warningThreshold: this.DEFAULT_WARNING_THRESHOLD,
@@ -137,7 +150,7 @@ export class WorkflowStateManager {
       : 0;
   }
 
-  private checkMemoryPressure(): void {
+  private async checkMemoryPressure(): Promise<void> {
     if (!this.state?.memoryMetrics) return;
     
     const { estimatedTokens, maxTokenLimit, warningThreshold } = this.state.memoryMetrics;
@@ -148,14 +161,111 @@ export class WorkflowStateManager {
         currentTokens: estimatedTokens,
         maxTokens: maxTokenLimit,
         utilizationPercent,
-        messageCount: this.state.memoryMetrics.messageCount
+        messageCount: this.state.memoryMetrics.messageCount,
+        summarizationEnabled: this.state.memoryConfig?.enableSummarization ?? false
       });
-      
-      // Trigger aggressive pruning to 60% of limit
-      const targetTokens = Math.floor(maxTokenLimit * 0.6);
-      this.pruneMessageHistory(targetTokens);
+
+      if (this.state.memoryConfig?.enablePruning) {
+        const targetTokens = Math.floor(maxTokenLimit * 0.6);
+        this.pruneMessageHistory(targetTokens);
+      // } else if (this.state.memoryConfig?.enableSummarization && this.session) {
+      //   await this.summarizeMessages();
+      }
     }
   }
+
+  // private async summarizeMessages(): Promise<void> {
+  //   if (!this.state?.memory.messages || !this.session) return;
+    
+  //   const originalCount = this.state.memory.messages.length;
+  //   const originalTokens = this.state.currentTokenCount ?? 0;
+    
+  //   // Always preserve system message and initial user prompt
+  //   const systemMessage = this.state.memory.messages[0];
+  //   const userMessage = this.state.memory.messages[1];
+    
+  //   if (!systemMessage || !userMessage) {
+  //     logger.agent.error('Cannot summarize: missing system or user message');
+  //     return;
+  //   }
+    
+  //   // Get messages to summarize (skip system and user messages)
+  //   const messagesToSummarize = this.state.memory.messages.slice(2);
+    
+  //   if (messagesToSummarize.length === 0) {
+  //     logger.agent.debug('No messages to summarize');
+  //     return;
+  //   }
+
+  //   logger.agent.debug('Summarizing messages', {
+  //     messagesToSummarize: messagesToSummarize.map(m => m.content),
+  //     messageCount: messagesToSummarize.length
+  //   });
+    
+  //   try {
+  //     // Create summarization prompt
+  //     const summarizationMessages: Message[] = [
+  //       {
+  //         role: 'system',
+  //         content: 'Summarize agent workflow conversations preserving ALL critical information: tool calls with parameters, tool results (JSON data), key decisions, workflow state, errors, and data transformations. Distinguish between actions taken, results obtained, reasoning, and current context. Do NOT omit tool calls or results.'
+  //       },
+  //       {
+  //         role: 'user',
+  //         content: `Summarize this workflow conversation, preserving tool calls, results, and state:\n\n${messagesToSummarize.map(m => `${m.role}: ${m.content}`).join('\n\n')}`
+  //       }
+  //     ];
+      
+  //     // Generate summary using the session
+  //     let response = '';
+  //     for await (const chunk of this.session.createResponse({
+  //       messages: summarizationMessages,
+  //       temperature: 0.1,
+  //       max_new_tokens: 2048
+  //     }, 'chat')) {
+  //       if (!chunk.isLast) {
+  //         response += chunk.token;
+  //       }
+  //     }
+
+  //     const { cleanContent, thinkingContent } = this.contentProcessor.removeThinkTags(response);
+      
+  //     // Create summarized message
+  //     const summaryMessage: Message = {
+  //       role: 'assistant',
+  //       content: cleanContent
+  //     };
+      
+  //     // Replace message history with system, user, and summary
+  //     this.state.memory.messages = [systemMessage, userMessage, summaryMessage];
+      
+  //     // Update metrics
+  //     if (this.state.memoryMetrics) {
+  //       this.state.memoryMetrics.summarizationCount += 1;
+  //       this.state.memoryMetrics.lastSummarizationTime = Date.now();
+  //     }
+      
+  //     this.updateTokenCount();
+      
+  //     logger.agent.info('Message history summarized', {
+  //       originalMessageCount: originalCount,
+  //       newMessageCount: this.state.memory.messages.length,
+  //       removedMessages: originalCount - this.state.memory.messages.length,
+  //       originalTokens,
+  //       newTokens: this.state.currentTokenCount,
+  //       summarizationCount: this.state.memoryMetrics?.summarizationCount ?? 0,
+  //       summaryLength: cleanContent.length
+  //     });
+      
+  //   } catch (error: any) {
+  //     logger.agent.error('Failed to summarize messages', {
+  //       error: error.message,
+  //       messageCount: messagesToSummarize.length
+  //     });
+  //     // Fall back to pruning if summarization fails
+  //     // const targetTokens = Math.floor(this.state.memoryMetrics?.maxTokenLimit ?? this.DEFAULT_MAX_TOKENS * 0.6);
+  //     // this.pruneMessageHistory(targetTokens);
+  //   }
+  // }
 
   private pruneMessageHistory(targetTokenCount: number): void {
     if (!this.state?.memory.messages) return;
@@ -195,16 +305,25 @@ export class WorkflowStateManager {
     });
   }
 
-  addMessageToMemory(message: Message, skipPruning = false) {
+  async addMessagesToMemory(messages: Message[], skipPruning = false): Promise<void> {
     if (!this.state) {
       throw new Error('State not initialized');
     }
-    this.state.memory.messages?.push(message);
+    this.state.memory.messages?.push(...messages);
     this.updateTokenCount();
     
     // Skip memory pressure check and pruning if requested (e.g., for last step)
     if (!skipPruning) {
-      this.checkMemoryPressure();
+      await this.checkMemoryPressure();
+    }
+  }
+
+  addToolResultToMemory(stepId: string, toolResult: ToolResult): void {
+    if (!this.state) {
+      throw new Error('State not initialized');
+    }
+    if (this.state.memoryConfig?.storeToolResults) {
+      this.state.memory.toolResults['step_' + stepId] = toolResult;
     }
   }
 
@@ -267,88 +386,42 @@ export class WorkflowStateManager {
     return this.state;
   }
 
-  getSystemMessage(): string {
-    if (!this.state) {
-      throw new Error('State not initialized');
-    }
-    return `${this.state.systemPrompt ? `${this.state.systemPrompt}\n\n` : 'You are a helpful AI agent. Think step-by-step. When a tool is needed, call it with minimal arguments. Be concise when replying to the user.\n'}${this.buildContextString(this.state.memory)}`;
-  }
-
-  private buildContextString(memory: AgentMemory): string {
-    let contextSection = '<system_instructions>\n';
-    contextSection += 'You are an AI agent executing a specific step of a workflow. Follow these critical rules:\n\n';
-    contextSection += '1. **ONLY provide the direct answer** to what the step asks for\n';
-    contextSection += '2. **DO NOT include**:\n';
-    contextSection += '   - Greetings or pleasantries ("Hello!", "I\'d be happy to help")\n';
-    contextSection += '   - Explanations of what you\'re doing ("Let me...", "I\'ll...")\n';
-    contextSection += '   - Summaries or conclusions ("In summary...", "To conclude...")\n';
-    contextSection += '   - Any meta-commentary about the task\n';
-    contextSection += '3. **For tool use**: When asked to use a tool, output ONLY the tool call in this format:\n';
-    contextSection += '   <tool_call>{"name": "tool_name", "arguments": {"param1": "value1", "param2": "value2"}}</tool_call>\n';
-    contextSection += '   - Replace values with actual data from the context\n';
-    contextSection += '   - Do NOT add any text before or after the tool call\n';
-    contextSection += '4. **Be concise**: Use the minimum words needed for clarity\n';
-    contextSection += '5. **Stay focused**: Address only what the current step requests\n';
-    contextSection += '</system_instructions>\n\n';
-    
-    contextSection += '<workflow_context>\n';
-    
-    // Add workflow context if available
-    if (memory.workflowName) {
-      contextSection += `Workflow: ${memory.workflowName}\n`;
-    }
-    if (memory.workflowDescription) {
-      contextSection += `Description: ${memory.workflowDescription}\n`;
-    }
-    contextSection += `User Request: ${memory.workflowUserPrompt}\n\n`;
-    
-    // Add any global context
-    if (memory.context) {
-      contextSection += 'Global Context:\n';
-      Object.entries(memory.context).forEach(([key, value]) => {
-        contextSection += `  ${key}: ${JSON.stringify(value)}\n`;
-      });
-      contextSection += '\n';
-    }
-    
-    // Add completed steps and their results
-    const completedSteps = Object.values(memory.steps).filter(step => step.complete);
-    if (completedSteps.length > 0) {
-      contextSection += 'Previous Step Results:\n';
-      completedSteps.forEach(step => {
-        if (step.result) {
-          // Truncate long results if needed to avoid context overflow
-          const maxResultLength = 500;
-          const result = step.result.length > maxResultLength 
-            ? step.result.substring(0, maxResultLength) + '... [truncated]'
-            : step.result;
-          contextSection += `${step.id} (${step.description}): ${result}\n`;
-        }
-      });
-      contextSection += '\n';
-    }
-    contextSection += '</workflow_context>\n\n';
-    
-    return contextSection;
-  }
-
   // TODO: Support intelligent step selection
   findNextStep(): WorkflowStep | undefined {
     if (!this.state) {
       throw new Error('State not initialized');
     }
+
+    logger.agent.debug('Finding next step', {
+      workflowId: this.state.workflow.id,
+      iteration: this.state.iteration,
+      maxIterations: this.state.maxIterations,
+      completedSteps: Array.from(this.state.completedSteps)
+    });
     const completedSteps = this.state.completedSteps;
     return this.state.workflow.steps.find(step => {
       if (!step.id || completedSteps.has(step.id)) {
+        logger.agent.debug('Step not found', {
+          stepId: step.id,
+          completedSteps: Array.from(completedSteps)
+        });
         return false;
       }
       
       // Check if step has exceeded max retry attempts
       const stepState = this.state!.memory.steps[step.id];
       if (stepState && stepState.maxAttempts && stepState.attempts >= stepState.maxAttempts) {
+        logger.agent.debug('Step has exceeded max retry attempts', {
+          stepId: step.id,
+          attempts: stepState.attempts,
+          maxAttempts: stepState.maxAttempts
+        });
         return false;
       }
       
+      logger.agent.debug('Step found', {
+        stepId: step.id,
+      });
       return true;
     });
   }
@@ -403,7 +476,6 @@ export class WorkflowStateManager {
     if (!this.state) {
       throw new Error('State not initialized');
     }
-    
     const workflow = this.state.workflow;
     const steps = workflow.steps;
     
@@ -427,7 +499,6 @@ export class WorkflowStateManager {
         return false;
       }
     }
-    
     return true;
   }
 

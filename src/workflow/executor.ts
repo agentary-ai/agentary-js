@@ -101,6 +101,11 @@ export class WorkflowExecutor {
     state: WorkflowState
   ): AsyncIterable<WorkflowStepResponse> {
     while (state.iteration < state.maxIterations) {
+      logger.agent.debug('New workflow iteration', {
+        workflowId: state.workflow.id,
+        iteration: state.iteration,
+        maxIterations: state.maxIterations
+      });
       const currentStep = this.stateManager.findNextStep();
       if (!currentStep) {
         logger.agent.warn('No next available step found', { 
@@ -135,29 +140,35 @@ export class WorkflowExecutor {
       }
 
       // Execute the step
-      const result = await this.stepExecutor.execute(currentStep, state.tools);
-      if (result) {
-        yield result;
+      const result = yield await this.stepExecutor.execute(currentStep, state.tools);
+      logger.agent.debug('Step execution result', {
+        workflowId: state.workflow.id,
+        stepId: currentStep.id,
+        result
+      });
         
-        // Log memory state after step execution
-        const memoryMetrics = this.stateManager.getMemoryMetrics();
-        if (memoryMetrics && this.stateManager.isContextNearLimit()) {
-          logger.agent.warn('Memory usage high after step execution', {
-            workflowId: state.workflow.id,
-            stepId: currentStep.id,
-            tokenCount: memoryMetrics.estimatedTokens,
-            utilizationPercent: (memoryMetrics.estimatedTokens / memoryMetrics.maxTokenLimit) * 100,
-            pruneCount: memoryMetrics.pruneCount
-          });
-        }
-        
-        // Only increment iteration and move to next step if the step succeeded
-        // If the step failed (has error), findNextStep() will retry it if attempts < maxAttempts
-        if (!result.error) {
-          state.iteration++;
-        }
+      // Log memory state after step execution
+      const memoryMetrics = this.stateManager.getMemoryMetrics();
+      if (memoryMetrics && this.stateManager.isContextNearLimit()) {
+        logger.agent.warn('Memory usage high after step execution', {
+          workflowId: state.workflow.id,
+          stepId: currentStep.id,
+          tokenCount: memoryMetrics.estimatedTokens,
+          utilizationPercent: (memoryMetrics.estimatedTokens / memoryMetrics.maxTokenLimit) * 100,
+          pruneCount: memoryMetrics.pruneCount
+        });
       }
+      logger.agent.debug('Incrementing iteration', {
+        workflowId: state.workflow.id,
+        iteration: state.iteration
+      });
+      state.iteration++;    
     }
+    logger.agent.debug('Workflow steps execution complete', {
+      workflowId: state.workflow.id,
+      iterations: state.iteration,
+      totalTimeMs: Date.now() - state.startTime
+    });
   }
 
   private async* handleWorkflowError(

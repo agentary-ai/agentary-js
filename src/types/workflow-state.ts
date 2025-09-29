@@ -1,8 +1,8 @@
-import { AgentWorkflow } from "./agent-session";
+import { AgentMemoryConfig, AgentWorkflow } from "./agent-session";
 import { Tool } from "./worker";
 import { Message } from "./worker";
 
-export interface StepState {
+  export interface StepState {
     id: string;
     description: string;
     result?: string;
@@ -10,12 +10,20 @@ export interface StepState {
     attempts: number;
     maxAttempts: number;
   }
+
+  export interface ToolResult {
+    prompt: string;
+    name: string;
+    description: string;
+    result: string;
+  }
   
   export interface AgentMemory {
     workflowName?: string;
     workflowDescription?: string;
     workflowUserPrompt: string;
     steps: Record<string, StepState>;
+    toolResults: Record<string, ToolResult>;
     context?: Record<string, any>;
     messages?: Message[];
   }
@@ -25,6 +33,8 @@ export interface StepState {
     estimatedTokens: number;
     lastPruneTime?: number;
     pruneCount: number;
+    summarizationCount: number;
+    lastSummarizationTime?: number;
     avgStepResultSize: number;
     maxTokenLimit: number;
     warningThreshold: number;
@@ -40,6 +50,7 @@ export interface StepState {
     timeout: number;
     tools: Tool[];
     memory: AgentMemory;
+    memoryConfig?: AgentMemoryConfig;
     currentTokenCount?: number;
     tokenCountLastUpdated?: Date;
     memoryMetrics?: WorkflowMemoryMetrics;

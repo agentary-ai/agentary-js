@@ -32,6 +32,8 @@ export interface WorkflowStep {
 
 export interface AgentMemoryConfig {
   enableSummarization?: boolean;
+  enablePruning?: boolean;
+  storeToolResults?: boolean;
 }
 
 export interface AgentWorkflow {
