@@ -1,4 +1,4 @@
-import type { WorkflowStepResponse } from '../types/agent-session';
+import type { WorkflowIterationResponse } from '../types/agent-session';
 import type { GenerationTask } from '../types/session';
 
 export class WorkflowResultBuilder {
@@ -6,9 +6,8 @@ export class WorkflowResultBuilder {
     stepId: string | null,
     startTime: number,
     generationTask?: GenerationTask
-  ): WorkflowStepResponse {
-    return {
-      id: stepId ?? 'unknown',
+  ): WorkflowIterationResponse {
+    const response: WorkflowIterationResponse = {
       error: {
         message: 'Workflow timeout exceeded',
       },
@@ -17,15 +16,18 @@ export class WorkflowResultBuilder {
           stepType: generationTask,
       }
     };
+    if (stepId) {
+      response.stepId = stepId;
+    }
+    return response;
   }
 
   static createMaxIterationsResult(
     stepId: string | null,
     startTime: number,
     generationTask?: GenerationTask
-  ): WorkflowStepResponse {
-    return {
-      id: stepId ?? 'unknown',
+  ): WorkflowIterationResponse {
+    const response: WorkflowIterationResponse = {
       error: {
         message: 'Workflow exceeded maximum iterations',
       },
@@ -34,16 +36,18 @@ export class WorkflowResultBuilder {
         stepType: generationTask,
       }
     };
+    if (stepId) {
+      response.stepId = stepId;
+    }
+    return response;
   }
 
   static createErrorResult(
-    stepId: string | null,
     error: Error,
     startTime: number,
     generationTask?: GenerationTask
-  ): WorkflowStepResponse {
+  ): WorkflowIterationResponse {
     return {
-      id: stepId ?? 'unknown',
       error: {
         message: error.message,
       },

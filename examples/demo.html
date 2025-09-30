@@ -566,6 +566,7 @@
           let stepCount = 0;
           for await (const stepResult of agent.runWorkflow(task, mathWorkflow)) {
             stepCount++;
+            console.log(stepResult);
             addStep(stepResult);
             
             if (stepResult.error) {

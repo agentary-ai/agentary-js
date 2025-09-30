@@ -8,11 +8,12 @@ import { TokenCounter } from '../utils/token-counter';
 import { ContentProcessor } from '../processing/content';
 
 export class WorkflowStateManager {
+  private readonly DEFAULT_MAX_TOKENS = 512;
+  private readonly DEFAULT_WARNING_THRESHOLD = 0.8;
+
   private state?: WorkflowState;
   private session: Session | undefined;
   private tokenCounter: TokenCounter;
-  private readonly DEFAULT_MAX_TOKENS = 600;
-  private readonly DEFAULT_WARNING_THRESHOLD = 0.8;
   private contentProcessor: ContentProcessor;
   
   constructor(session?: Session) {
@@ -31,9 +32,11 @@ export class WorkflowStateManager {
       timeout: workflow.timeout ?? 60000,
       tools: [...tools, ...workflow.tools],
       memoryConfig: {
-        enableSummarization: workflow.memoryConfig?.enableSummarization ?? false,
-        enablePruning: workflow.memoryConfig?.enablePruning ?? false,
-        storeToolResults: workflow.memoryConfig?.storeToolResults ?? false,
+        enableMessageSummarization: workflow.memoryConfig?.enableMessageSummarization ?? false,
+        enableMessagePruning: workflow.memoryConfig?.enableMessagePruning ?? false,
+        enableMessageHistory: workflow.memoryConfig?.enableMessageHistory ?? false,
+        enableToolResultStorage: workflow.memoryConfig?.enableToolResultStorage ?? false,
+        maxMemoryTokens: workflow.memoryConfig?.maxMemoryTokens ?? this.DEFAULT_MAX_TOKENS,
       },
       memory: this.initializeMemory(
         workflow.steps,
@@ -72,29 +75,20 @@ export class WorkflowStateManager {
       };
     });
 
-    const messages: Message[] = [
-      {
-        role: 'system',
-        content: workflowSystemPrompt || 'You are a helpful AI agent. Think step-by-step. When a tool ' +
-          'is needed, call it with minimal arguments. Be concise when replying to the user.'
-      },
-      {
-        role: 'user', 
-        content: workflowUserPrompt
-      }
-    ];
-
     const memory: AgentMemory = {
       workflowUserPrompt,
       steps: stepsState,
       toolResults: {},
-      messages,
+      messages: [],
     };
     if (workflowName) {
       memory.workflowName = workflowName;
     }
     if (workflowDescription) {
       memory.workflowDescription = workflowDescription;
+    }
+    if (workflowSystemPrompt) {
+      memory.workflowSystemPrompt = workflowSystemPrompt;
     }
     if (context) {
       memory.context = context;
@@ -118,10 +112,28 @@ export class WorkflowStateManager {
     };
   }
 
+  private getToolResultsInstruction(toolResults: Record<string, ToolResult>): Message[] {
+    if (Object.values(toolResults).length === 0) {
+      return [];
+    }
+    return [{ role: 'system', content: 'Refer to the following tool results when generating your response:\n' +
+      Object.values(toolResults).map(toolResult => 
+        `${toolResult.name}: ${toolResult.description}\n${toolResult.result}`
+      ).join('\n') }];
+  }
+
   private updateTokenCount(): void {
     if (!this.state?.memory.messages) return;
     
-    const tokenCount = this.tokenCounter.estimateTokens(this.state.memory.messages);
+    const messageHistoryTokenCount = this.tokenCounter.estimateTokens(this.state.memory.messages);
+    
+    let toolResultsInstruction: Message[] = [];
+    if (this.state.memoryConfig?.enableToolResultStorage) {
+      toolResultsInstruction = this.getToolResultsInstruction(this.state.memory.toolResults);
+    }
+    const toolResultsTokenCount = this.tokenCounter.estimateTokens(toolResultsInstruction);
+    const tokenCount = messageHistoryTokenCount + toolResultsTokenCount;
+
     this.state.currentTokenCount = tokenCount;
     this.state.tokenCountLastUpdated = new Date();
     
@@ -162,127 +174,112 @@ export class WorkflowStateManager {
         maxTokens: maxTokenLimit,
         utilizationPercent,
         messageCount: this.state.memoryMetrics.messageCount,
-        summarizationEnabled: this.state.memoryConfig?.enableSummarization ?? false
+        summarizationEnabled: this.state.memoryConfig?.enableMessageSummarization ?? false,
+        pruningEnabled: this.state.memoryConfig?.enableMessagePruning ?? false
       });
 
-      if (this.state.memoryConfig?.enablePruning) {
-        const targetTokens = Math.floor(maxTokenLimit * 0.6);
-        this.pruneMessageHistory(targetTokens);
-      // } else if (this.state.memoryConfig?.enableSummarization && this.session) {
-      //   await this.summarizeMessages();
-      }
+      await this.summarizeMessages();
+      const targetTokens = Math.floor(maxTokenLimit * 0.6);
+      this.pruneMessageHistory(targetTokens);
     }
   }
 
-  // private async summarizeMessages(): Promise<void> {
-  //   if (!this.state?.memory.messages || !this.session) return;
+  private async summarizeMessages(): Promise<void> {
+    if (!this.state?.memory.messages || !this.session 
+      || !this.state.memoryConfig?.enableMessageSummarization) return;
     
-  //   const originalCount = this.state.memory.messages.length;
-  //   const originalTokens = this.state.currentTokenCount ?? 0;
+    const originalCount = this.state.memory.messages.length;
+    const originalTokens = this.state.currentTokenCount ?? 0;
+        
+    logger.agent.debug('Summarizing messages', {
+      messagesToSummarize: this.state.memory.messages.map(m => m.content),
+      messageCount: this.state.memory.messages.length
+    });
     
-  //   // Always preserve system message and initial user prompt
-  //   const systemMessage = this.state.memory.messages[0];
-  //   const userMessage = this.state.memory.messages[1];
-    
-  //   if (!systemMessage || !userMessage) {
-  //     logger.agent.error('Cannot summarize: missing system or user message');
-  //     return;
-  //   }
-    
-  //   // Get messages to summarize (skip system and user messages)
-  //   const messagesToSummarize = this.state.memory.messages.slice(2);
-    
-  //   if (messagesToSummarize.length === 0) {
-  //     logger.agent.debug('No messages to summarize');
-  //     return;
-  //   }
+    try {
+      // Create summarization prompt
+      const summarizationMessages: Message[] = [
+        {
+          role: 'system',
+          content: 'Summarize conversation history into key facts only. ' +
+          'Be extremely concise.'
+        },
+        {
+          role: 'user',
+          content: 'Summarize this conversation: ' +
+          `${this.state.memory.messages.map((msg) => `${msg.role}: ${msg.content}`).join('\n')}`
+        }
+      ];
+      
+      // Generate summary using the session
+      let response = '';
+      for await (const chunk of this.session.createResponse({
+        messages: summarizationMessages,
+        temperature: 0.1,
+        max_new_tokens: 2048
+      }, 'chat')) {
+        if (!chunk.isLast) {
+          response += chunk.token;
+        }
+      }
 
-  //   logger.agent.debug('Summarizing messages', {
-  //     messagesToSummarize: messagesToSummarize.map(m => m.content),
-  //     messageCount: messagesToSummarize.length
-  //   });
-    
-  //   try {
-  //     // Create summarization prompt
-  //     const summarizationMessages: Message[] = [
-  //       {
-  //         role: 'system',
-  //         content: 'Summarize agent workflow conversations preserving ALL critical information: tool calls with parameters, tool results (JSON data), key decisions, workflow state, errors, and data transformations. Distinguish between actions taken, results obtained, reasoning, and current context. Do NOT omit tool calls or results.'
-  //       },
-  //       {
-  //         role: 'user',
-  //         content: `Summarize this workflow conversation, preserving tool calls, results, and state:\n\n${messagesToSummarize.map(m => `${m.role}: ${m.content}`).join('\n\n')}`
-  //       }
-  //     ];
+      const { cleanContent } = this.contentProcessor.removeThinkTags(response);
       
-  //     // Generate summary using the session
-  //     let response = '';
-  //     for await (const chunk of this.session.createResponse({
-  //       messages: summarizationMessages,
-  //       temperature: 0.1,
-  //       max_new_tokens: 2048
-  //     }, 'chat')) {
-  //       if (!chunk.isLast) {
-  //         response += chunk.token;
-  //       }
-  //     }
-
-  //     const { cleanContent, thinkingContent } = this.contentProcessor.removeThinkTags(response);
+      // Create summarized message
+      const summaryMessage: Message = {
+        role: 'assistant',
+        content: cleanContent
+      };
       
-  //     // Create summarized message
-  //     const summaryMessage: Message = {
-  //       role: 'assistant',
-  //       content: cleanContent
-  //     };
+      // Replace message history with system, user, and summary
+      this.state.memory.messages = [summaryMessage];
       
-  //     // Replace message history with system, user, and summary
-  //     this.state.memory.messages = [systemMessage, userMessage, summaryMessage];
+      // Update metrics
+      if (this.state.memoryMetrics) {
+        this.state.memoryMetrics.summarizationCount += 1;
+        this.state.memoryMetrics.lastSummarizationTime = Date.now();
+      }
       
-  //     // Update metrics
-  //     if (this.state.memoryMetrics) {
-  //       this.state.memoryMetrics.summarizationCount += 1;
-  //       this.state.memoryMetrics.lastSummarizationTime = Date.now();
-  //     }
+      this.updateTokenCount();
       
-  //     this.updateTokenCount();
+      logger.agent.info('Message history summarized', {
+        originalMessageCount: originalCount,
+        newMessageCount: this.state.memory.messages.length,
+        removedMessages: originalCount - this.state.memory.messages.length,
+        originalTokens,
+        newTokens: this.state.currentTokenCount,
+        summarizationCount: this.state.memoryMetrics?.summarizationCount ?? 0,
+        summaryLength: cleanContent.length
+      });
+      logger.agent.debug('Summary', {
+        summary: cleanContent
+      });
       
-  //     logger.agent.info('Message history summarized', {
-  //       originalMessageCount: originalCount,
-  //       newMessageCount: this.state.memory.messages.length,
-  //       removedMessages: originalCount - this.state.memory.messages.length,
-  //       originalTokens,
-  //       newTokens: this.state.currentTokenCount,
-  //       summarizationCount: this.state.memoryMetrics?.summarizationCount ?? 0,
-  //       summaryLength: cleanContent.length
-  //     });
-      
-  //   } catch (error: any) {
-  //     logger.agent.error('Failed to summarize messages', {
-  //       error: error.message,
-  //       messageCount: messagesToSummarize.length
-  //     });
-  //     // Fall back to pruning if summarization fails
-  //     // const targetTokens = Math.floor(this.state.memoryMetrics?.maxTokenLimit ?? this.DEFAULT_MAX_TOKENS * 0.6);
-  //     // this.pruneMessageHistory(targetTokens);
-  //   }
-  // }
+    } catch (error: any) {
+      logger.agent.error('Failed to summarize messages', {
+        error: error.message,
+        messageCount: this.state.memory.messages.length
+      });
+    }
+  }
 
   private pruneMessageHistory(targetTokenCount: number): void {
-    if (!this.state?.memory.messages) return;
+    if (!this.state?.memory.messages 
+      || !this.state.memoryConfig?.enableMessagePruning) return;
     
     const originalCount = this.state.memory.messages.length;
     const originalTokens = this.state.currentTokenCount ?? 0;
     
-    // Always preserve system message and initial user prompt
-    const systemMessages = this.state.memory.messages.slice(0, 2);
-    let currentTokens = this.tokenCounter.estimateTokens(systemMessages);
+    // Estimate tokens for workflow prompts
+    const workflowPrompts = this.getWorkflowPrompts();
+    let currentTokens = this.tokenCounter.estimateTokens(workflowPrompts);
     
     // Collect recent messages that fit within the target limit
-    const recentMessages = this.state.memory.messages.slice(2).reverse();
+    const recentMessages = this.state.memory.messages.reverse();
     const messagesToKeep: Message[] = [];
     
     for (const message of recentMessages) {
-      const messageTokens = this.tokenCounter.estimateMessageTokens(message);
+      const messageTokens = this.tokenCounter.estimateTokens([message]);
       if (currentTokens + messageTokens > targetTokenCount) break;
       
       messagesToKeep.unshift(message); // Add to beginning to maintain chronological order
@@ -290,7 +287,7 @@ export class WorkflowStateManager {
     }
     
     // Combine preserved system messages with recent messages in correct order
-    this.state.memory.messages = [...systemMessages, ...messagesToKeep];
+    this.state.memory.messages = messagesToKeep;
 
     this.updateTokenCount();
     
@@ -306,9 +303,13 @@ export class WorkflowStateManager {
   }
 
   async addMessagesToMemory(messages: Message[], skipPruning = false): Promise<void> {
-    if (!this.state) {
+    if (!this.state || !this.state.memoryConfig?.enableMessageHistory) {
       throw new Error('State not initialized');
     }
+    logger.agent.debug('Adding messages to memory', {
+      messages,
+      skipPruning
+    });
     this.state.memory.messages?.push(...messages);
     this.updateTokenCount();
     
@@ -318,13 +319,31 @@ export class WorkflowStateManager {
     }
   }
 
+  getMessages(): Message[] {
+    if (!this.state) {
+      throw new Error('State not initialized');
+    }
+    return this.state.memory.messages ?? [];
+  }
+
   addToolResultToMemory(stepId: string, toolResult: ToolResult): void {
     if (!this.state) {
       throw new Error('State not initialized');
     }
-    if (this.state.memoryConfig?.storeToolResults) {
+    if (this.state.memoryConfig?.enableToolResultStorage) {
+      logger.agent.debug('Adding tool result to memory', {
+        stepId,
+        toolResult
+      });
       this.state.memory.toolResults['step_' + stepId] = toolResult;
     }
+  }
+  
+  getToolResults(): Record<string, ToolResult> {
+    if (!this.state) {
+      throw new Error('State not initialized');
+    }
+    return this.state.memory.toolResults;
   }
 
   rollbackMessagesToCount(targetCount: number) {
@@ -345,6 +364,29 @@ export class WorkflowStateManager {
         newTokenCount: this.state.currentTokenCount
       });
     }
+  }
+
+  getWorkflowPrompts(): Message[] {
+    if (!this.state) {
+      throw new Error('State not initialized');
+    }
+    const toolResults = this.getToolResults();
+    let systemPrompt = this.state.systemPrompt ?? 'You are ' +
+      'a helpful AI agent. Think step-by-step. When a tool is needed, ' +
+      'call it with minimal arguments. Be concise when replying to the ' +
+      'user.';
+
+    // systemPrompt = systemPrompt + '\n**Workflow Steps:**\n' +
+    //   Object.values(this.state.memory.steps).map(step => step.description).join('\n');
+    
+    return [
+      { role: 'system', content: systemPrompt +
+        `${Object.values(toolResults).length > 0 ? '**Tool Results:**\n' +
+            Object.values(toolResults).map(
+              toolResult => `${toolResult.name}: ${toolResult.description}\n${toolResult.result}`).join('\n') : ''}`
+      },
+      { role: 'user', content: this.state.memory.workflowUserPrompt }
+    ];
   }
 
   getMessageCount(): number {
@@ -371,14 +413,6 @@ export class WorkflowStateManager {
     return estimatedTokens > maxTokenLimit * warningThreshold;
   }
 
-  // Allow dynamic adjustment of max token limit
-  setMaxTokenLimit(limit: number): void {
-    if (!this.state?.memoryMetrics) return;
-    this.state.memoryMetrics.maxTokenLimit = limit;
-    logger.agent.info('Updated max token limit', { newLimit: limit });
-    this.checkMemoryPressure();
-  }
-
   getState(): WorkflowState {
     if (!this.state) {
       throw new Error('State not initialized');
@@ -401,7 +435,7 @@ export class WorkflowStateManager {
     const completedSteps = this.state.completedSteps;
     return this.state.workflow.steps.find(step => {
       if (!step.id || completedSteps.has(step.id)) {
-        logger.agent.debug('Step not found', {
+        logger.agent.debug('Skipping step', {
           stepId: step.id,
           completedSteps: Array.from(completedSteps)
         });
@@ -419,7 +453,7 @@ export class WorkflowStateManager {
         return false;
       }
       
-      logger.agent.debug('Step found', {
+      logger.agent.debug('Returning step', {
         stepId: step.id,
       });
       return true;

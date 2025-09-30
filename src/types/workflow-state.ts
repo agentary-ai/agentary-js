@@ -12,7 +12,6 @@ import { Message } from "./worker";
   }
 
   export interface ToolResult {
-    prompt: string;
     name: string;
     description: string;
     result: string;
@@ -21,6 +20,7 @@ import { Message } from "./worker";
   export interface AgentMemory {
     workflowName?: string;
     workflowDescription?: string;
+    workflowSystemPrompt?: string;
     workflowUserPrompt: string;
     steps: Record<string, StepState>;
     toolResults: Record<string, ToolResult>;

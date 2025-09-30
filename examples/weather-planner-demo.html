@@ -441,11 +441,13 @@
       const weatherActivityWorkflow = {
         id: "weather-activity-planner",
         name: "Weather & Activity Planner",
-        systemPrompt: "You are an agent that plans weather-appropriate activities with nearby places and a schedule that fits the user's time and budget.",
-        maxIterations: 10,
+        systemPrompt: "You are an agent that plans weather-appropriate activities with nearby places and a schedule that fits the user's time and budget. Be concise in your responses.",
+        maxIterations: 15,
         timeout: 180000,
         memoryConfig: {
-          enableSummarization: true,
+          enableMessageSummarization: true,
+          enableMessageHistory: true,
+          maxMemoryTokens: 1024
         },
         steps: [
           {
@@ -816,7 +818,11 @@
           error: '❌'
         };
         
-        header.innerHTML = `${typeIcons[stepType] || '•'} <strong>Step ${stepResult.id}:</strong> ${getStepDescription(stepResult.id)}`;
+        if (stepResult.stepId) {
+          header.innerHTML = `${typeIcons[stepType] || '•'} <strong>Step ${stepResult.stepId}:</strong> ${getStepDescription(stepResult.stepId)}`;
+        } else {
+          header.innerHTML = '';
+        }
         
         const content = document.createElement('div');
         content.className = 'step-content';
@@ -914,12 +920,14 @@
           for await (const stepResult of agent.runWorkflow(userMessage, weatherActivityWorkflow)) {
             console.log(JSON.stringify(stepResult, null, 2));
             
-            completedSteps.add(stepResult.id);
+            completedSteps.add(stepResult.stepId);
             addStep(stepResult);
             
             if (stepResult.error) {
-              updateStatus('Error occurred', 'error');
-              break;
+              // Log error but continue execution - don't break the loop
+              console.warn('Step error encountered:', stepResult.error.message);
+              updateStatus(`Step error: ${stepResult.error.message}`, 'error');
+              // Continue to next iteration instead of breaking
             }
           }
 

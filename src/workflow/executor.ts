@@ -1,7 +1,7 @@
 import type { 
   AgentWorkflow, 
   WorkflowStep, 
-  WorkflowStepResponse,
+  WorkflowIterationResponse,
 } from '../types/agent-session';
 import type { Tool } from '../types/worker';
 import type { WorkflowState } from '../types/workflow-state';
@@ -22,7 +22,7 @@ export class WorkflowExecutor {
     this.stateManager = stateManager;
   }
 
-  async* execute(userPrompt: string, agentWorkflow: AgentWorkflow): AsyncIterable<WorkflowStepResponse> {
+  async* execute(userPrompt: string, agentWorkflow: AgentWorkflow): AsyncIterable<WorkflowIterationResponse> {
     logger.agent.info('Starting workflow execution', { 
       workflowId: agentWorkflow.id, 
       workflowName: agentWorkflow.name,
@@ -58,6 +58,13 @@ export class WorkflowExecutor {
 
       // Handle completion
       currentStep = this.stateManager.findNextStep();
+      if (!currentStep) {
+        logger.agent.warn('No steps remaining for execution', { 
+          workflowId: state.workflow.id, 
+          availableSteps: state.workflow.steps.map(step => step.id)
+        });
+        return;
+      }
       
       if (this.stateManager.isMaxIterationsReached(state)) {
         logger.agent.warn('Workflow exceeded maximum iterations', { 
@@ -66,7 +73,7 @@ export class WorkflowExecutor {
           totalTimeMs: Date.now() - state.startTime
         });
         yield WorkflowResultBuilder.createMaxIterationsResult(
-          currentStep?.id ?? null,
+          currentStep.id,
           state.startTime,
           currentStep?.generationTask
         );
@@ -87,7 +94,6 @@ export class WorkflowExecutor {
         // Handle state initialization failure
         logger.agent.error('Failed to initialize workflow state', { error: error.message });
         yield WorkflowResultBuilder.createErrorResult(
-          null,
           error,
           Date.now()
         );
@@ -99,7 +105,7 @@ export class WorkflowExecutor {
 
   private async* executeWorkflowSteps(
     state: WorkflowState
-  ): AsyncIterable<WorkflowStepResponse> {
+  ): AsyncIterable<WorkflowIterationResponse> {
     while (state.iteration < state.maxIterations) {
       logger.agent.debug('New workflow iteration', {
         workflowId: state.workflow.id,
@@ -140,11 +146,14 @@ export class WorkflowExecutor {
       }
 
       // Execute the step
-      const result = yield await this.stepExecutor.execute(currentStep, state.tools);
-      logger.agent.debug('Step execution result', {
-        workflowId: state.workflow.id,
+      const stepResult = await this.stepExecutor.execute(currentStep, state.tools);
+      yield stepResult;
+
+      logger.agent.debug('Step execution completed, continuing workflow', {
         stepId: currentStep.id,
-        result
+        hasError: !!stepResult.error,
+        willContinue: true,
+        iteration: state.iteration
       });
         
       // Log memory state after step execution
@@ -175,7 +184,7 @@ export class WorkflowExecutor {
     state: WorkflowState,
     currentStep: WorkflowStep | undefined,
     error: Error
-  ): AsyncIterable<WorkflowStepResponse> {
+  ): AsyncIterable<WorkflowIterationResponse> {
     logger.agent.error('Workflow execution failed', { 
       workflowId: state.workflow.id, 
       stepId: currentStep?.id ?? 'unknown',
@@ -186,7 +195,6 @@ export class WorkflowExecutor {
     });
     
     yield WorkflowResultBuilder.createErrorResult(
-      currentStep?.id ?? null,
       error,
       state.startTime,
       currentStep?.generationTask

@@ -1,7 +1,7 @@
 import type { 
   AgentSession, 
   AgentWorkflow,
-  WorkflowStepResponse, 
+  WorkflowIterationResponse, 
 } from '../types/agent-session';
 import type { Session, CreateSessionArgs, TokenStreamChunk, GenerationTask } from '../types/session';
 import type { GenerateArgs, Tool } from '../types/worker';
@@ -54,7 +54,7 @@ export class AgentSessionImpl implements AgentSession {
 
   async* runWorkflow(
     prompt: string, workflow: AgentWorkflow
-  ): AsyncIterable<WorkflowStepResponse> {
+  ): AsyncIterable<WorkflowIterationResponse> {
     if (this.disposed) throw new Error('Agent session disposed');
     yield* this.workflowExecutor.execute(prompt, workflow);
   }

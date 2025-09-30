@@ -1,8 +1,8 @@
 import { Tool, Model } from "./worker";
 import { GenerationTask, Session } from "./session";
 
-export interface WorkflowStepResponse {
-  id: string;
+export interface WorkflowIterationResponse {
+  stepId?: string;
   error?: WorkflowStepError;
   content?: string;
   toolCall?: {
@@ -31,9 +31,11 @@ export interface WorkflowStep {
 }
 
 export interface AgentMemoryConfig {
-  enableSummarization?: boolean;
-  enablePruning?: boolean;
-  storeToolResults?: boolean;
+  enableMessageSummarization?: boolean;
+  enableMessagePruning?: boolean;
+  enableMessageHistory?: boolean;
+  enableToolResultStorage?: boolean;
+  maxMemoryTokens?: number;
 }
 
 export interface AgentWorkflow {
@@ -50,7 +52,7 @@ export interface AgentWorkflow {
 }
 
 export interface AgentSession extends Session {
-  runWorkflow(prompt: string, workflow: AgentWorkflow): AsyncIterable<WorkflowStepResponse>;
+  runWorkflow(prompt: string, workflow: AgentWorkflow): AsyncIterable<WorkflowIterationResponse>;
   registerTool(tool: Tool): void;
   getRegisteredTools(): Tool[];
 }

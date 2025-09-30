@@ -112,12 +112,12 @@ describe('WorkflowExecutor', () => {
       // Mock step execution - StepExecutor.execute returns WorkflowStepResponse
       mockStepExecutor.execute
         .mockResolvedValueOnce({
-          id: '1',
+          stepId: '1',
           content: 'Thinking about the problem',
           metadata: { stepType: 'reasoning' }
         })
         .mockResolvedValueOnce({
-          id: '2',
+          stepId: '2',
           content: 'Final response',
           metadata: { stepType: 'chat' }
         })
@@ -134,12 +134,12 @@ describe('WorkflowExecutor', () => {
       
       // Verify steps were completed and yielded
       expect(results[0]).toMatchObject({
-        id: '1',
+        stepId: '1',
         content: 'Thinking about the problem',
         metadata: { stepType: 'reasoning' }
       })
       expect(results[1]).toMatchObject({
-        id: '2',
+        stepId: '2',
         content: 'Final response',
         metadata: { stepType: 'chat' }
       })
@@ -187,12 +187,12 @@ describe('WorkflowExecutor', () => {
 
       mockStepExecutor.execute
         .mockResolvedValueOnce({
-          id: '1',
+          stepId: '1',
           content: 'Analyzed the problem',
           metadata: { analysis: 'Important data' }
         })
         .mockResolvedValueOnce({
-          id: '2',
+          stepId: '2',
           content: 'Response based on analysis',
           metadata: { stepType: 'chat' }
         })
@@ -209,12 +209,12 @@ describe('WorkflowExecutor', () => {
       
       // Verify steps were completed and yielded
       expect(results[0]).toMatchObject({
-        id: '1',
+        stepId: '1',
         content: 'Analyzed the problem',
         metadata: { analysis: 'Important data' }
       })
       expect(results[1]).toMatchObject({
-        id: '2',
+        stepId: '2',
         content: 'Response based on analysis',
         metadata: { stepType: 'chat' }
       })
@@ -273,7 +273,7 @@ describe('WorkflowExecutor', () => {
         .mockReturnValue(null)
 
       mockStepExecutor.execute.mockResolvedValueOnce({
-        id: '1',
+        stepId: '1',
         content: 'Using test tool',
         toolCall: {
           name: 'test_tool',
@@ -295,7 +295,7 @@ describe('WorkflowExecutor', () => {
       
       // Verify step was completed and yielded
       expect(results[0]).toMatchObject({
-        id: '1',
+        stepId: '1',
         content: 'Using test tool',
         toolCall: expect.objectContaining({
           name: 'test_tool'
@@ -349,7 +349,7 @@ describe('WorkflowExecutor', () => {
       // Mock step execution to fail twice, then succeed
       mockStepExecutor.execute
         .mockResolvedValueOnce({
-          id: '1',
+          stepId: '1',
           error: {
             message: 'First attempt failed'
           },
@@ -359,7 +359,7 @@ describe('WorkflowExecutor', () => {
           }
         })
         .mockResolvedValueOnce({
-          id: '1',
+          stepId: '1',
           error: {
             message: 'Second attempt failed'
           },
@@ -369,7 +369,7 @@ describe('WorkflowExecutor', () => {
           }
         })
         .mockResolvedValueOnce({
-          id: '1',
+          stepId: '1',
           content: 'Third attempt succeeded',
           metadata: {
             duration: 100,
@@ -389,15 +389,15 @@ describe('WorkflowExecutor', () => {
       
       // Verify the sequence of results
       expect(results[0]).toMatchObject({
-        id: '1',
+        stepId: '1',
         error: { message: 'First attempt failed' }
       })
       expect(results[1]).toMatchObject({
-        id: '1',
+        stepId: '1',
         error: { message: 'Second attempt failed' }
       })
       expect(results[2]).toMatchObject({
-        id: '1',
+        stepId: '1',
         content: 'Third attempt succeeded'
       })
     })
@@ -438,7 +438,7 @@ describe('WorkflowExecutor', () => {
       // Mock step execution to always fail
       mockStepExecutor.execute
         .mockResolvedValueOnce({
-          id: '1',
+          stepId: '1',
           error: {
             message: 'First attempt failed'
           },
@@ -448,7 +448,7 @@ describe('WorkflowExecutor', () => {
           }
         })
         .mockResolvedValueOnce({
-          id: '1',
+          stepId: '1',
           error: {
             message: 'Max retries exceeded'
           },
@@ -470,11 +470,11 @@ describe('WorkflowExecutor', () => {
       
       // Verify the sequence of results
       expect(results[0]).toMatchObject({
-        id: '1',
+        stepId: '1',
         error: { message: 'First attempt failed' }
       })
       expect(results[1]).toMatchObject({
-        id: '1',
+        stepId: '1',
         error: { message: 'Max retries exceeded' }
       })
     })
@@ -511,7 +511,7 @@ describe('WorkflowExecutor', () => {
         .mockReturnValue(null)
 
       mockStepExecutor.execute.mockResolvedValueOnce({
-        id: '1',
+        stepId: '1',
         error: {
           message: 'Step execution failed: Step execution failed'
         },
@@ -529,7 +529,7 @@ describe('WorkflowExecutor', () => {
 
       expect(results).toHaveLength(1)
       expect(results[0]).toMatchObject({
-        id: '1',
+        stepId: '1',
         error: {
           message: 'Step execution failed: Step execution failed'
         }
@@ -567,7 +567,7 @@ describe('WorkflowExecutor', () => {
 
       expect(results).toHaveLength(1)
       expect(results[0]).toMatchObject({
-        id: '1',
+        stepId: '1',
         complete: true,
         response: expect.objectContaining({
           error: 'Workflow timeout exceeded'
@@ -632,7 +632,7 @@ describe('WorkflowExecutor', () => {
       
       // Should be the max iterations error
       expect(results[0]).toMatchObject({
-        id: '1', // currentStep will be the found step
+        stepId: '1', // currentStep will be the found step
         error: {
           message: 'Workflow exceeded maximum iterations'
         }
@@ -675,7 +675,7 @@ describe('WorkflowExecutor', () => {
         .mockReturnValue(null)
 
       mockStepExecutor.execute.mockResolvedValueOnce({
-        id: '1',
+        stepId: '1',
         content: 'Completed',
         metadata: { stepType: 'chat' }
       })
@@ -692,7 +692,7 @@ describe('WorkflowExecutor', () => {
       
       // Verify step was completed and yielded
       expect(results[0]).toMatchObject({
-        id: '1',
+        stepId: '1',
         content: 'Completed',
         metadata: { stepType: 'chat' }
       })
