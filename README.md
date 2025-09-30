@@ -12,10 +12,9 @@
 - **Quantized Models**: Support for efficient quantized models (Q4, Q8, etc.) for optimal performance
 - **Streaming Generation**: Real-time token streaming with Time to First Byte (TTFB) metrics
 - **Function Calling**: Built-in support for tool/function calling capabilities
-- **Multi-Model Support**: Use different models for chat, function calling, planning, and reasoning tasks
+- **Multi-Model Support**: Use different models for chat, tool use and reasoning.
 - **Agentic Workflows**: Create and execute complex multi-step agent workflows with conditional logic
 - **Tool Integration**: Register custom tools for agents to use during workflow execution
-- **Zero Server**: Complete client-side execution with no data leaving the user's device
 
 ## 📦 Installation
 
@@ -132,6 +131,9 @@ const researchWorkflow = {
   systemPrompt: 'You are a helpful research assistant.',
   maxIterations: 5,
   timeout: 30000,
+  memoryConfig: {
+    enablePruning: true
+  }
   steps: [
     {
       id: 1,
@@ -186,22 +188,20 @@ const researchWorkflow = {
 // Execute the workflow
 console.log('🤖 Starting research workflow...\n');
 
-for await (const step of agent.runWorkflow('Research the benefits of renewable energy', researchWorkflow)) {
-  console.log(`[STEP ${step.id}] ${step.prompt}`);
-  
-  if (step.response?.content) {
-    console.log(`  📝 Content: ${step.response.content}`);
+for await (const iteration of agent.runWorkflow('Research the benefits of renewable energy', researchWorkflow)) {
+  if (iteration?.content) {
+    console.log(`[Step ${iteration.stepId}]: ${iteration?.content}`);
+
   }
-  
-  if (step.response?.toolCall) {
-    console.log(`  🔧 Tool: ${step.response.toolCall.name}(${JSON.stringify(step.response.toolCall.args)})`);
-    if (step.response.toolCall.result) {
-      console.log(`  📄 Result: ${step.response.toolCall.result}`);
+  if (iteration?.toolCall) {
+    console.log(`  🔧 Tool: ${iteration.toolCall.name}(${JSON.stringify(iteration.toolCall.args)})`);
+    if (iteration.toolCall.result) {
+      console.log(`  📄 Result: ${iteration.toolCall.result}`);
     }
   }
   
-  if (step.response?.error) {
-    console.log(`  ❌ Error: ${step.response.error}`);
+  if (iteration?.error) {
+    console.log(`  ❌ Error: ${iteration.error.message}`);
   }
   
   console.log(''); // Empty line for readability
@@ -309,22 +309,21 @@ Returns all currently registered tools.
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `id` | `number` | Unique identifier for the step |
-| `prompt` | `string` | The prompt or description for this step |
+| `id` | `string` | Unique identifier for the step |
+| `description` | `string` | Short description of the step for persistent agent memory |
+| `prompt` | `string` | The prompt or instruction for this step |
 | `maxTokens` | `number` | Maximum tokens to generate (optional) |
 | `temperature` | `number` | Temperature for generation (optional) |
 | `generationTask` | `GenerationTask` | Type of generation task (optional) |
 | `toolChoice` | `string[]` | Available tools for this step (optional) |
-| `maxAttempts` | `number` | Maximum retry attempts (optional) |
-| `attempts` | `number` | Current attempt count (optional) |
-| `complete` | `boolean` | Whether this step is finished (optional) |
-| `response` | `WorkflowStepResponse` | Step execution result (optional) |
+| `maxAttempts` | `number` | Maximum retry attempts on failure (optional, default: 1) |
 
-#### WorkflowStepResponse
+#### WorkflowIterationResponse
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `error` | `string` | Error message if step failed (optional) |
+| `stepId` | `string` | ID of the workflow step (optional) |
+| `error` | `WorkflowStepError` | Error details if step failed (optional) |
 | `content` | `string` | Generated content (optional) |
 | `toolCall` | `object` | Tool call information (optional) |
 | `toolCall.name` | `string` | Name of the called tool (optional) |
@@ -332,31 +331,50 @@ Returns all currently registered tools.
 | `toolCall.result` | `string` | Tool execution result (optional) |
 | `metadata` | `Record<string, any>` | Additional step metadata (optional) |
 
+#### WorkflowStepError
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `message` | `string` | Error message describing the step failure |
+
+
 #### AgentWorkflow
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `id` | `string` | Unique workflow identifier |
 | `name` | `string` | Human-readable workflow name |
+| `description` | `string` | Workflow description (optional) |
 | `systemPrompt` | `string` | System prompt for the workflow (optional) |
-| `state` | `AgentState` | Current workflow state |
-| `memory` | `AgentMemory` | Workflow memory (optional) |
 | `steps` | `WorkflowStep[]` | Array of workflow steps |
+| `context` | `Record<string, any>` | Initial workflow context data (optional) |
 | `tools` | `Tool[]` | Tools available to the workflow |
-| `currentIteration` | `number` | Current iteration number (optional) |
-| `maxIterations` | `number` | Maximum number of iterations (optional) |
 | `timeout` | `number` | Workflow timeout in milliseconds (optional) |
+| `maxIterations` | `number` | Maximum number of iterations (optional) |
+| `memoryConfig` | `AgentMemoryConfig` | Memory management configuration (optional) |
 
-#### AgentState
-
-Workflow state: `'idle' \| 'running' \| 'completed' \| 'failed'`
-
-#### AgentMemory
+#### AgentMemoryConfig
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `messages` | `Message[]` | Conversation messages |
-| `context` | `Record<string, any>` | Workflow context data |
+| `enableMessageSummarization` | `boolean` | Enable automatic summarization of old messages (optional, default: false) |
+| `enableMessagePruning` | `boolean` | Enable automatic pruning of old messages when token limit is reached (optional, default: false) |
+| `enableMessageHistory` | `boolean` | Enable full message history tracking (optional, default: false) |
+| `enableToolResultStorage` | `boolean` | Enable storage of tool execution results in memory (optional, default: false) |
+| `maxMemoryTokens` | `number` | Maximum token limit for workflow memory (optional, default: 512) |
+
+
+#### AgentMemoryConfig
+
+Configure advanced memory management features for workflows to optimize token usage and performance.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `enableMessageSummarization` | `boolean` | Enable automatic summarization of old messages (optional, default: false) |
+| `enableMessagePruning` | `boolean` | Enable automatic pruning of old messages when token limit is reached (optional, default: false) |
+| `enableMessageHistory` | `boolean` | Enable full message history tracking (optional, default: false) |
+| `enableToolResultStorage` | `boolean` | Enable storage of tool execution results in memory (optional, default: false) |
+| `maxMemoryTokens` | `number` | Maximum token limit for workflow memory (optional, default: 512) |
 
 #### Tool
 
@@ -371,6 +389,39 @@ Workflow state: `'idle' \| 'running' \| 'completed' \| 'failed'`
 | `function.parameters.properties` | `Record<string, any>` | Parameter properties |
 | `function.parameters.required` | `string[]` | Required parameter names |
 | `function.implementation` | `Function` | JavaScript implementation (optional) |
+
+### Additional Types
+
+#### EngineKind
+
+Supported inference engines:
+```typescript
+type EngineKind = 'auto' | 'webgpu' | 'wasm' | 'webnn';
+```
+
+#### WorkerInstance
+
+Internal worker instance type representing the Web Worker handling model inference.
+
+#### InitArgs
+
+Worker initialization arguments including model configuration and runtime settings.
+
+#### MessageContent
+
+Message content type that can be either a string or structured content with metadata.
+
+#### WorkflowIterationResponse
+
+Enhanced response type for workflow iterations:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `stepId` | `string` | ID of the current step (optional) |
+| `error` | `WorkflowStepError` | Error information if step failed (optional) |
+| `content` | `string` | Generated content (optional) |
+| `toolCall` | `object` | Tool execution details (optional) |
+| `metadata` | `Record<string, any>` | Additional metadata (optional) |
 
 ## 🌐 Browser Support
 
@@ -413,15 +464,12 @@ src/
 ├── workflow/                         # Workflow execution engine
 │   ├── executor.ts                   # Workflow execution logic
 │   ├── step-executor.ts              # Individual step execution
-│   ├── step-configs.ts               # Step type configurations
+│   ├── result-builder.ts             # Workflow result construction
+│   ├── workflow-state.ts             # Workflow state management
 │   └── index.ts                      # Workflow exports
 ├── processing/                       # Content and tool processing
 │   ├── content/
 │   │   ├── processor.ts              # Content processing utilities
-│   │   └── index.ts
-│   ├── prompts/
-│   │   ├── builder.ts                # Prompt construction
-│   │   ├── templates.ts              # Prompt templates
 │   │   └── index.ts
 │   ├── tools/
 │   │   ├── parser.ts                 # Main tool call parser
@@ -433,14 +481,15 @@ src/
 │   │   │   └── index.ts
 │   │   └── index.ts
 │   └── index.ts                      # Processing exports
-├── engine/                           # Main runtime engine
-│   └── index.ts                      # Engine exports
-├── types/
-│   ├── api.ts                        # Public API types
-│   └── worker.ts                     # Internal worker types
-└── utils/
+├── types/                            # Type definitions
+│   ├── agent-session.ts              # Agent session types
+│   ├── session.ts                    # Basic session types
+│   ├── worker.ts                     # Internal worker types
+│   └── workflow-state.ts             # Workflow state types
+└── utils/                            # Utility modules
     ├── logger.ts                     # Logging utilities
-    └── logger-config.ts              # Logger configuration
+    ├── logger-config.ts              # Logger configuration
+    └── token-counter.ts              # Token counting utilities
 ```
 
 ### Running the Examples
@@ -459,20 +508,36 @@ npx http-server . -c-1
 
 #### Available Examples
 
-The `examples/demo.html` file provides an interactive demonstration with two main sections:
+1. **`examples/demo.html`** - Interactive demonstration with two main sections:
 
-- **🔧 Agent Workflow Tab**: Advanced agent workflows with step-by-step execution
-  - Math Problem Solver workflow with calculator tool
-  - Demonstrates think → act → respond step pattern
-  - Real-time step visualization and tool call tracking
-  - Pre-loaded with sample math problems for testing
+   - **🔧 Agent Workflow Tab**: Advanced agent workflows with step-by-step execution
+     - Math Problem Solver workflow with calculator tool
+     - Demonstrates think → act → respond step pattern
+     - Real-time step visualization and tool call tracking
+     - Pre-loaded with sample math problems for testing
 
-- **💬 Direct Chat Tab**: Basic text generation and function calling
-  - Simple prompt-response interaction
-  - Optional tool integration with configurable JSON tools
-  - Pre-configured weather tool example
-  - Hugging Face token support for private models
-  - Streaming token generation with TTFB metrics
+   - **💬 Direct Chat Tab**: Basic text generation and function calling
+     - Simple prompt-response interaction
+     - Optional tool integration with configurable JSON tools
+     - Pre-configured weather tool example
+     - Hugging Face token support for private models
+     - Streaming token generation with TTFB metrics
+
+2. **`examples/weather-planner-demo.html`** - Advanced Weather Activity Planning Demo:
+
+   - **🌦️ Weather-Based Activity Planning**: Intelligent activity recommendations based on weather conditions
+     - Multi-step workflow with geocoding, weather forecasting, and POI search
+     - Dynamic indoor/outdoor activity selection based on weather conditions
+     - Budget-aware filtering and distance-based recommendations
+     - Calendar event generation with time slots
+   
+   - **Features**:
+     - Location input with geocoding support
+     - Date and time window configuration
+     - Budget preferences (free, cheap, any)
+     - Activity type preferences
+     - Real-time workflow execution visualization
+     - Comprehensive result display with itinerary
 
 
 
@@ -486,43 +551,6 @@ Agent workflows support four main step types:
 - **`act`**: Action steps that use tools to interact with external systems
 - **`decide`**: Decision-making steps with conditional logic
 - **`respond`**: Final response or summary generation
-
-### Common Workflow Patterns
-
-#### Sequential Workflow
-```javascript
-const sequentialWorkflow = {
-  steps: [
-    { id: 'step1', type: 'think', nextSteps: ['step2'] },
-    { id: 'step2', type: 'act', nextSteps: ['step3'] },
-    { id: 'step3', type: 'respond' }
-  ]
-};
-```
-
-#### Conditional Workflow
-```javascript
-const conditionalWorkflow = {
-  steps: [
-    { id: 'analyze', type: 'think', nextSteps: ['simple', 'complex'] },
-    { id: 'simple', type: 'respond', condition: 'simple_case' },
-    { id: 'complex', type: 'act', condition: 'complex_case', nextSteps: ['respond'] },
-    { id: 'respond', type: 'respond' }
-  ]
-};
-```
-
-#### Research & Analysis Pattern
-```javascript
-const researchPattern = {
-  steps: [
-    { id: 'plan', type: 'think', description: 'Plan research approach' },
-    { id: 'gather', type: 'act', tools: ['search', 'fetch'] },
-    { id: 'analyze', type: 'think', description: 'Analyze findings' },
-    { id: 'synthesize', type: 'respond', description: 'Synthesize insights' }
-  ]
-};
-```
 
 ### Best Practices
 
@@ -538,15 +566,102 @@ const researchPattern = {
 - Set reasonable timeouts and iteration limits
 - Plan for error scenarios
 
-#### 3. Context Management
-- Pass relevant context between steps
-- Avoid overly long context that might exceed model limits
-- Use structured data in step metadata
+#### 3. Context Management & Memory Configuration
+
+Configure agent memory to optimize performance and token usage:
+
+##### Memory Strategy Selection
+```javascript
+// For long-running workflows with many steps
+const longWorkflowMemory = {
+  enableMessagePruning: true,        // Auto-remove old messages
+  enableMessageSummarization: true,  // Summarize conversation history
+  maxMemoryTokens: 2048,            // Higher limit for complex workflows
+  enableToolResultStorage: false    // Disable to save tokens
+};
+
+// For tool-heavy workflows
+const toolIntensiveMemory = {
+  enableToolResultStorage: true,     // Keep tool results in memory
+  enableMessageHistory: true,        // Full history for tool context
+  maxMemoryTokens: 1536,            // Moderate limit
+  enableMessagePruning: false       // Keep all messages for tool context
+};
+
+// For simple sequential workflows
+const simpleWorkflowMemory = {
+  enableMessagePruning: false,       // Keep all messages (small workflow)
+  enableMessageSummarization: false, // No summarization needed
+  maxMemoryTokens: 512,             // Lower limit for efficiency
+  enableMessageHistory: false       // Minimal history tracking
+};
+```
+
+##### Best Practices
+- **Token Management**: Set `maxMemoryTokens` to 20-30% of your model's context window
+- **Step Context**: Pass only essential context between steps using structured metadata
+- **Memory Pruning**: Enable for workflows with >5 steps or long conversations
+- **Tool Results**: Store tool results only when subsequent steps need the data
+- **Summarization**: Use for workflows that reference early conversation context
+- **History Tracking**: Enable full history only when steps need complete conversation context
+
+##### Dynamic Memory Adjustment
+```javascript
+// Adjust memory config based on workflow complexity
+const getMemoryConfig = (stepCount, hasTools, maxTokens) => ({
+  enableMessagePruning: stepCount > 5,
+  enableMessageSummarization: stepCount > 8,
+  enableToolResultStorage: hasTools,
+  maxMemoryTokens: Math.min(maxTokens * 0.3, 2048)
+});
+```
 
 #### 4. Model Selection
 - Use reasoning models for analysis and inference
 - Use tool_use models for tool-specific workflows
 - Consider using specialized models for domain-specific tasks
+
+### Advanced Workflow Features
+
+#### Step Retry and Error Handling
+Steps can automatically retry on failure:
+```javascript
+const workflow = {
+  steps: [
+    {
+      id: 'api-call',
+      description: 'Call external API',
+      prompt: 'Fetch user data',
+      generationTask: 'tool_use',
+      maxAttempts: 3, // Retry up to 3 times on failure
+      toolChoice: ['fetch_user_data']
+    }
+  ]
+};
+```
+
+#### Memory Management
+Optimize token usage with memory configuration:
+```javascript
+const workflow = {
+  memoryConfig: {
+    enableMessagePruning: true,      // Auto-prune old messages
+    enableMessageSummarization: true, // Summarize conversation history
+    maxMemoryTokens: 1024            // Set token limit
+  },
+  steps: [/* ... */]
+};
+```
+
+#### Workflow Timeout and Validation
+Set execution limits:
+```javascript
+const workflow = {
+  timeout: 30000,        // 30 second timeout
+  maxIterations: 10,     // Maximum workflow iterations
+  steps: [/* ... */]
+};
+```
 
 ## 🔍 Logging & Debugging
 
@@ -555,16 +670,31 @@ Agentary.js includes a comprehensive logging system for debugging and monitoring
 ### Basic Logging Usage
 
 ```typescript
-import { logger, LogLevel } from 'agentary-js';
+import { logger, LogLevel, isDebuggingMode } from 'agentary-js';
 
 // Use predefined category loggers
-logger.session.info('Session created successfully');
+logger.session.info('Session created successfully'); [[memory:6381875]]
 logger.worker.debug('Processing generation request', { prompt: 'Hello' });
 logger.agent.warn('Step timeout approaching', { stepId: 'step-1' });
 
 // Or use custom categories
 logger.info('custom-category', 'Custom message', { data: 'example' });
+
+// Check if debugging mode is enabled
+if (isDebuggingMode()) {
+  logger.worker.debug('Detailed debug info', { workerState: state });
+}
 ```
+
+### Category Loggers
+
+Agentary.js provides predefined category loggers for different parts of the system:
+
+- `logger.session` - Session lifecycle and management
+- `logger.worker` - Worker communication and model inference [[memory:6381875]]
+- `logger.agent` - Agent workflow execution
+- `logger.workflow` - Workflow state and step execution
+- `logger.tools` - Tool parsing and execution
 
 ### Configuration
 

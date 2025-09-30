@@ -28,7 +28,7 @@ export interface Message {
 
 export interface Model {
   name: string;
-  quantization: DataType;
+  quantization?: DataType;
 }
 
 export interface Tool {

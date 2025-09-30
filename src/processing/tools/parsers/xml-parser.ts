@@ -5,7 +5,7 @@ export class XMLToolCallParser {
   parse(content: string): ParsedToolCall | null {
     // Look for tool calls in XML format: <tool_call>{"name": "...", "arguments": {...}}</tool_call>
     // Also handle cases where the closing tag might be missing
-    const xmlToolCallRegex = /<tool_call>\s*({.*?})\s*(?:<\/tool_call>|$)/s;
+    const xmlToolCallRegex = /<tool_call>\s*({.*})\s*(?:<\/tool_call>|$)/s;
     const xmlMatch = content.match(xmlToolCallRegex);
     
     if (!xmlMatch || !xmlMatch[1]) {

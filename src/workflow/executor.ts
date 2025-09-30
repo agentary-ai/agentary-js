@@ -1,22 +1,28 @@
 import type { 
   AgentWorkflow, 
   WorkflowStep, 
+  WorkflowIterationResponse,
 } from '../types/agent-session';
 import type { Tool } from '../types/worker';
+import type { WorkflowState } from '../types/workflow-state';
 
 import { logger } from '../utils/logger';
 import { StepExecutor } from './step-executor';
+import { WorkflowStateManager } from './workflow-state';
+import { WorkflowResultBuilder } from './result-builder';
 
 export class WorkflowExecutor {
   private stepExecutor: StepExecutor;
   private tools: Tool[];
+  private stateManager: WorkflowStateManager;
 
-  constructor(stepExecutor: StepExecutor, tools: Tool[]) {
+  constructor(stepExecutor: StepExecutor, tools: Tool[], stateManager: WorkflowStateManager) {
     this.stepExecutor = stepExecutor;
     this.tools = tools;
+    this.stateManager = stateManager;
   }
 
-  async* execute(userPrompt: string, agentWorkflow: AgentWorkflow): AsyncIterable<WorkflowStep> {
+  async* execute(userPrompt: string, agentWorkflow: AgentWorkflow): AsyncIterable<WorkflowIterationResponse> {
     logger.agent.info('Starting workflow execution', { 
       workflowId: agentWorkflow.id, 
       workflowName: agentWorkflow.name,
@@ -24,153 +30,174 @@ export class WorkflowExecutor {
       stepCount: agentWorkflow.steps.length,
       toolCount: agentWorkflow.tools.length 
     });
-
-    // Register workflow tools
-    this.tools.push(...agentWorkflow.tools);
-
-    const maxIterations = agentWorkflow.maxIterations ?? 10;
-    const timeout = agentWorkflow.timeout ?? 60000; // 1 minute default
-    const startTime = Date.now();
-    const completedSteps = new Set<number>();
     
-    // Initialize workflow memory
-    agentWorkflow.memory = {
-      messages: [
-        {
-          role: 'system',
-          content: agentWorkflow.systemPrompt ?? ''
-        },
-        {
-          role: 'user',
-          content: userPrompt
-        }
-      ],
-      context: {}
-    };
-    
-    let iteration = 1;
+    this.stateManager.initializeState(
+      userPrompt,
+      agentWorkflow,
+      this.tools
+    );
+
+    // Log initial memory state
+    const initialMetrics = this.stateManager.getMemoryMetrics();
+    if (initialMetrics) {
+      logger.agent.info('Initial memory state', {
+        workflowId: agentWorkflow.id,
+        tokenCount: initialMetrics.estimatedTokens,
+        messageCount: initialMetrics.messageCount,
+        maxTokenLimit: initialMetrics.maxTokenLimit
+      });
+    }
+      
     let currentStep: WorkflowStep | undefined;
+    let state: WorkflowState | undefined;
+    
     try {
-      while (iteration < maxIterations) {
-        currentStep = this.findNextAvailableStep(agentWorkflow.steps, completedSteps);
-        if (!currentStep) {
-          logger.agent.warn('No next available step found', { 
-            workflowId: agentWorkflow.id, 
-            availableSteps: agentWorkflow.steps.map(step => step.id)
-          });
-          break;
-        }
+      state = this.stateManager.getState();
+      
+      yield* this.executeWorkflowSteps(state);
 
-        // Check that timeout hasn't been exceeded
-        if (Date.now() - startTime > timeout) {
-          logger.agent.warn('Workflow timeout exceeded', { 
-            workflowId: agentWorkflow.id, 
-            stepId: currentStep?.id, 
-            elapsedMs: Date.now() - startTime,
-            timeoutMs: timeout 
-          });
-          yield {
-            id: currentStep.id,
-            prompt: currentStep.prompt,
-            complete: true,
-            response: {
-              error: 'Workflow timeout exceeded',
-              metadata: {
-                duration: Date.now() - startTime,
-                stepType: currentStep.generationTask,
-              }
-            },
-          };
-          break;
-        }
-
-        // Add maxAttempts and attempts if not already defined
-        currentStep.maxAttempts = currentStep.maxAttempts ?? 3;
-        currentStep.attempts = currentStep.attempts ?? 0;
-
-        // Execute step
-        logger.agent.info('Executing workflow step', { 
-          workflowId: agentWorkflow.id, 
-          stepId: currentStep.id, 
-          stepType: currentStep.generationTask,
-          iteration: iteration,
-          memory: agentWorkflow.memory,
+      // Handle completion
+      currentStep = this.stateManager.findNextStep();
+      if (!currentStep) {
+        logger.agent.warn('No steps remaining for execution', { 
+          workflowId: state.workflow.id, 
+          availableSteps: state.workflow.steps.map(step => step.id)
         });
-
-        await this.stepExecutor.execute(
-          currentStep, agentWorkflow.memory, this.tools
-        );
-        logger.agent.info('Step execution result', {
-          currentStep
-        });
-        if (currentStep.complete) {
-          yield currentStep;
-          completedSteps.add(currentStep.id);
-        } else {
-          continue;
-        }
-        iteration++;
+        return;
       }
-
-      if (iteration >= maxIterations) {
+      
+      if (this.stateManager.isMaxIterationsReached(state)) {
         logger.agent.warn('Workflow exceeded maximum iterations', { 
-          workflowId: agentWorkflow.id, 
-          maxIterations,
-          totalTimeMs: Date.now() - startTime
+          workflowId: state.workflow.id, 
+          maxIterations: state.maxIterations,
+          totalTimeMs: Date.now() - state.startTime
         });
-        yield {
-          id: currentStep?.id ?? -1,
-          prompt: currentStep?.prompt ?? '',
-          complete: true,
-          response: {
-            error: 'Workflow exceeded maximum iterations',
-            metadata: {
-              duration: Date.now() - startTime,
-              stepType: currentStep?.generationTask,
-            }
-          },
-        };
+        yield WorkflowResultBuilder.createMaxIterationsResult(
+          currentStep.id,
+          state.startTime,
+          currentStep?.generationTask
+        );
       } else {
-        logger.agent.info('Workflow completed successfully', { 
-          workflowId: agentWorkflow.id, 
-          iterations: iteration,
-          totalTimeMs: Date.now() - startTime
+        const finalMetrics = this.stateManager.getMemoryMetrics();
+        logger.agent.info('Workflow execution complete', { 
+          workflowId: state.workflow.id,
+          iterations: state.iteration,
+          totalTimeMs: Date.now() - state.startTime,
+          finalTokenCount: finalMetrics?.estimatedTokens,
+          totalPruneCount: finalMetrics?.pruneCount,
+          finalMessageCount: finalMetrics?.messageCount
         });
       }
 
     } catch (error: any) {
-      logger.agent.error('Workflow execution failed', { 
-        workflowId: agentWorkflow.id, 
-        stepId: currentStep?.id ?? -1,
-        error: error.message,
-        iterations: iteration,
-        totalTimeMs: Date.now() - startTime,
-        stack: error.stack
-      });
-      yield {
-        id: currentStep?.id ?? -1,
-        prompt: currentStep?.prompt ?? '',
-        complete: true,
-        response: {
-          error: error.message,
-          content: `Workflow error: ${error.message}`,
-          metadata: {
-            duration: Date.now() - startTime,
-            stepType: currentStep?.generationTask,
-          }
-        }
-      };
+      if (!state) {
+        // Handle state initialization failure
+        logger.agent.error('Failed to initialize workflow state', { error: error.message });
+        yield WorkflowResultBuilder.createErrorResult(
+          error,
+          Date.now()
+        );
+      } else {
+        yield* this.handleWorkflowError(state, currentStep, error);
+      }
     }
   }
 
-  // TODO: Introduce step dependencies and routing in AgentWorkflow
-  private findNextAvailableStep(steps: WorkflowStep[], completedSteps: Set<number>): WorkflowStep | undefined {
-    return steps.find(step => {
-      // Skip already completed steps
-      if (completedSteps.has(step.id)) {
-        return false;
+  private async* executeWorkflowSteps(
+    state: WorkflowState
+  ): AsyncIterable<WorkflowIterationResponse> {
+    while (state.iteration < state.maxIterations) {
+      logger.agent.debug('New workflow iteration', {
+        workflowId: state.workflow.id,
+        iteration: state.iteration,
+        maxIterations: state.maxIterations
+      });
+      const currentStep = this.stateManager.findNextStep();
+      if (!currentStep) {
+        logger.agent.warn('No next available step found', { 
+          workflowId: state.workflow.id, 
+          availableSteps: state.workflow.steps.map(step => step.id)
+        });
+        break;
       }
-      return true;
+
+      if (!currentStep.id) {
+        logger.agent.error('ID undefined for workflow step', { 
+          workflowId: state.workflow.id, 
+          step: currentStep
+        });
+        break;
+      }
+
+      // Check timeout
+      if (this.stateManager.isTimeout(state)) {
+        logger.agent.warn('Workflow timeout exceeded', { 
+          workflowId: state.workflow.id, 
+          stepId: currentStep.id, 
+          elapsedMs: Date.now() - state.startTime,
+          timeoutMs: state.timeout
+        });
+        yield WorkflowResultBuilder.createTimeoutResult(
+          currentStep.id,
+          state.startTime,
+          currentStep.generationTask
+        );
+        break;
+      }
+
+      // Execute the step
+      const stepResult = await this.stepExecutor.execute(currentStep, state.tools);
+      yield stepResult;
+
+      logger.agent.debug('Step execution completed, continuing workflow', {
+        stepId: currentStep.id,
+        hasError: !!stepResult.error,
+        willContinue: true,
+        iteration: state.iteration
+      });
+        
+      // Log memory state after step execution
+      const memoryMetrics = this.stateManager.getMemoryMetrics();
+      if (memoryMetrics && this.stateManager.isContextNearLimit()) {
+        logger.agent.warn('Memory usage high after step execution', {
+          workflowId: state.workflow.id,
+          stepId: currentStep.id,
+          tokenCount: memoryMetrics.estimatedTokens,
+          utilizationPercent: (memoryMetrics.estimatedTokens / memoryMetrics.maxTokenLimit) * 100,
+          pruneCount: memoryMetrics.pruneCount
+        });
+      }
+      logger.agent.debug('Incrementing iteration', {
+        workflowId: state.workflow.id,
+        iteration: state.iteration
+      });
+      state.iteration++;    
+    }
+    logger.agent.debug('Workflow steps execution complete', {
+      workflowId: state.workflow.id,
+      iterations: state.iteration,
+      totalTimeMs: Date.now() - state.startTime
     });
+  }
+
+  private async* handleWorkflowError(
+    state: WorkflowState,
+    currentStep: WorkflowStep | undefined,
+    error: Error
+  ): AsyncIterable<WorkflowIterationResponse> {
+    logger.agent.error('Workflow execution failed', { 
+      workflowId: state.workflow.id, 
+      stepId: currentStep?.id ?? 'unknown',
+      error: error.message,
+      iterations: state.iteration,
+      totalTimeMs: Date.now() - state.startTime,
+      stack: error.stack
+    });
+    
+    yield WorkflowResultBuilder.createErrorResult(
+      error,
+      state.startTime,
+      currentStep?.generationTask
+    );
   }
 }

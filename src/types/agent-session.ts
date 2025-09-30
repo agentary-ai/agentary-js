@@ -1,10 +1,9 @@
-import { Tool, Message } from "./worker";
+import { Tool, Model } from "./worker";
 import { GenerationTask, Session } from "./session";
 
-export type AgentState = 'idle' | 'running' | 'completed' | 'failed';
-
-export interface WorkflowStepResponse {
-  error?: string;
+export interface WorkflowIterationResponse {
+  stepId?: string;
+  error?: WorkflowStepError;
   content?: string;
   toolCall?: {
     name?: string;
@@ -15,13 +14,12 @@ export interface WorkflowStepResponse {
 }
 
 export interface WorkflowStepError {
-  id: number;
   message: string;
-  metadata?: Record<string, any>;
 }
 
 export interface WorkflowStep {
-  id: number;
+  id: string;
+  description: string; // Short description of the step for persistent agent memory
   prompt: string;
   maxTokens?: number;
   temperature?: number;
@@ -30,55 +28,31 @@ export interface WorkflowStep {
 //   nextSteps?: number[];    // TODO: Possible next step IDs after this step
   toolChoice?: string[];
   maxAttempts?: number;
-  attempts?: number;
-  complete?: boolean;
-  response?: WorkflowStepResponse;
 }
 
-export interface AgentMemory {
-    messages: Message[]
-    context: Record<string, any>;
+export interface AgentMemoryConfig {
+  enableMessageSummarization?: boolean;
+  enableMessagePruning?: boolean;
+  enableMessageHistory?: boolean;
+  enableToolResultStorage?: boolean;
+  maxMemoryTokens?: number;
 }
 
 export interface AgentWorkflow {
   id: string
-  name: string;
+  name?: string;
+  description?: string;
   systemPrompt?: string;
-  state?: AgentState;
-  memory?: AgentMemory;
   steps: WorkflowStep[];
+  context?: Record<string, any>;
   tools: Tool[];
-  currentIteration?: number;
-  maxIterations?: number;
   timeout?: number;
+  maxIterations?: number;
+  memoryConfig?: AgentMemoryConfig;
 }
 
-// export interface WorkflowStepResult {
-//   stepId: number;
-//   content?: string;
-//   toolCall?: {
-//     name: string;
-//     args: Record<string, any>;
-//     result?: string;
-//   };
-//   nextStepId?: number; // TODO: use model to determine next step based response if multiple options are specified in step.nextSteps
-//   complete: boolean;
-//   error?: string;
-//   metadata?: Record<string, any>;
-// }
-
-// export interface AgentWorkflowResult {
-//   workflowId: string;
-//   status: 'running' | 'completed' | 'failed' | 'timeout';
-//   currentStepId?: string;
-//   steps: AgentStepResult[];
-//   finalResult?: string;
-//   error?: string;
-//   totalDuration?: number;
-// }
-
 export interface AgentSession extends Session {
-  runWorkflow(prompt: string, workflow: AgentWorkflow): AsyncIterable<WorkflowStep>;
+  runWorkflow(prompt: string, workflow: AgentWorkflow): AsyncIterable<WorkflowIterationResponse>;
   registerTool(tool: Tool): void;
   getRegisteredTools(): Tool[];
 }

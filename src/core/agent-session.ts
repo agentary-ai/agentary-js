@@ -1,7 +1,7 @@
 import type { 
   AgentSession, 
   AgentWorkflow,
-  WorkflowStep, 
+  WorkflowIterationResponse, 
 } from '../types/agent-session';
 import type { Session, CreateSessionArgs, TokenStreamChunk, GenerationTask } from '../types/session';
 import type { GenerateArgs, Tool } from '../types/worker';
@@ -9,6 +9,7 @@ import { createSession } from './session';
 import { WorkflowExecutor } from '../workflow/executor';
 import { StepExecutor } from '../workflow/step-executor';
 import { WorkerManager } from '../workers/manager';
+import { WorkflowStateManager } from '../workflow/workflow-state';
 
 export class AgentSessionImpl implements AgentSession {
   workerManager: WorkerManager;
@@ -17,11 +18,13 @@ export class AgentSessionImpl implements AgentSession {
   private disposed = false;
   private stepExecutor: StepExecutor;
   private workflowExecutor: WorkflowExecutor;
+  private workflowStateManager: WorkflowStateManager;
 
   constructor(session: Session) {
     this.session = session;
-    this.stepExecutor = new StepExecutor(session);
-    this.workflowExecutor = new WorkflowExecutor(this.stepExecutor, this.tools);
+    this.workflowStateManager = new WorkflowStateManager(session);
+    this.stepExecutor = new StepExecutor(session, this.workflowStateManager);
+    this.workflowExecutor = new WorkflowExecutor(this.stepExecutor, this.tools, this.workflowStateManager);
     this.workerManager = session.workerManager;
   }
 
@@ -51,7 +54,7 @@ export class AgentSessionImpl implements AgentSession {
 
   async* runWorkflow(
     prompt: string, workflow: AgentWorkflow
-  ): AsyncIterable<WorkflowStep> {
+  ): AsyncIterable<WorkflowIterationResponse> {
     if (this.disposed) throw new Error('Agent session disposed');
     yield* this.workflowExecutor.execute(prompt, workflow);
   }
