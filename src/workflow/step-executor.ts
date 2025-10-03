@@ -145,6 +145,7 @@ export class StepExecutor {
       ],
       temperature: step.temperature ?? 0.1,
       max_new_tokens: step.maxTokens ?? 1024,
+      enable_thinking: step.enableThinking ?? false,
     };
     if (filteredTools.length > 0) {
       generateArgs.tools = filteredTools;
