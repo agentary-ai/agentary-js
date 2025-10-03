@@ -1,28 +1,108 @@
-import type { AgentWorkflow, WorkflowStep } from '../types/agent-session';
+import type { AgentWorkflow, WorkflowStep, AgentMemoryConfig } from '../types/agent-session';
 import type { Message, Tool } from '../types/worker';
-import type { WorkflowState, AgentMemory, StepState, WorkflowMemoryMetrics, ToolResult } from '../types/workflow-state';
+import type { WorkflowState, AgentMemory, StepState, WorkflowMemoryMetrics } from '../types/workflow-state';
 import type { Session } from '../types/session';
+import type { 
+  MemoryStrategy, 
+  MemoryFormatter, 
+  CompressionStrategy,
+  MemoryMessage,
+  MemoryConfig,
+  ToolResult
+} from '../types/memory';
 
 import { logger } from '../utils/logger';
 import { TokenCounter } from '../utils/token-counter';
-import { ContentProcessor } from '../processing/content';
+import { SlidingWindowStrategy } from '../memory/strategies/sliding-window-strategy';
+import { DefaultMemoryFormatter } from '../memory/formatters/default-formatter';
+import { SummarizationCompressionStrategy } from '../memory/strategies/summarization-compression';
 
 export class WorkflowStateManager {
-  private readonly DEFAULT_MAX_TOKENS = 512;
+  private readonly DEFAULT_MAX_TOKENS = 2048;
   private readonly DEFAULT_WARNING_THRESHOLD = 0.8;
 
   private state?: WorkflowState;
   private session: Session | undefined;
   private tokenCounter: TokenCounter;
-  private contentProcessor: ContentProcessor;
+  private memoryStrategy: MemoryStrategy;
+  private memoryFormatter: MemoryFormatter;
+  private compressionStrategy?: CompressionStrategy;
+  private memoryConfig?: MemoryConfig;
   
-  constructor(session?: Session) {
+  constructor(session?: Session, memoryConfig?: MemoryConfig | AgentMemoryConfig) {
     this.session = session;
     this.tokenCounter = new TokenCounter();
-    this.contentProcessor = new ContentProcessor();
+    
+    // Convert legacy config to new config if needed
+    const normalizedConfig = this.normalizeMemoryConfig(memoryConfig);
+    if (normalizedConfig) {
+      this.memoryConfig = normalizedConfig;
+    }
+    
+    // Use provided or default strategies
+    this.memoryStrategy = normalizedConfig?.strategy || 
+      new SlidingWindowStrategy(normalizedConfig?.maxTokens || this.DEFAULT_MAX_TOKENS);
+    
+    this.memoryFormatter = normalizedConfig?.formatter || 
+      new DefaultMemoryFormatter();
+    
+    if (normalizedConfig?.compressionStrategy) {
+      this.compressionStrategy = normalizedConfig.compressionStrategy;
+    }
+    
+    // Enable auto-compression with summarization if legacy config indicates it
+    if (this.isLegacyConfig(memoryConfig) && memoryConfig?.enableMessageSummarization && session) {
+      this.compressionStrategy = new SummarizationCompressionStrategy();
+    }
+  }
+  
+  private isLegacyConfig(config?: MemoryConfig | AgentMemoryConfig): config is AgentMemoryConfig {
+    return config ? 'enableMessageSummarization' in config : false;
+  }
+  
+  private normalizeMemoryConfig(config?: MemoryConfig | AgentMemoryConfig): MemoryConfig | undefined {
+    if (!config) return undefined;
+    
+    // If it's already new format, return as is
+    if ('strategy' in config || 'formatter' in config || 'compressionStrategy' in config) {
+      return config as MemoryConfig;
+    }
+    
+    // Convert legacy config
+    const legacyConfig = config as AgentMemoryConfig;
+    const autoCompressValue = legacyConfig.enableMessagePruning || legacyConfig.enableMessageSummarization;
+    
+    const memoryConfig: MemoryConfig = {
+      maxTokens: legacyConfig.maxMemoryTokens || this.DEFAULT_MAX_TOKENS,
+      compressionThreshold: this.DEFAULT_WARNING_THRESHOLD
+    };
+    
+    if (autoCompressValue) {
+      memoryConfig.autoCompress = true;
+    }
+    
+    return memoryConfig;
   }
 
   initializeState(userPrompt: string, workflow: AgentWorkflow, tools: Tool[]): void {
+    // Update memory config and strategy if workflow provides one
+    if (workflow.memoryConfig) {
+      const normalizedConfig = this.normalizeMemoryConfig(workflow.memoryConfig);
+      if (normalizedConfig) {
+        this.memoryConfig = normalizedConfig;
+      }
+      
+      if (normalizedConfig?.strategy) {
+        this.memoryStrategy = normalizedConfig.strategy;
+      }
+      if (normalizedConfig?.formatter) {
+        this.memoryFormatter = normalizedConfig.formatter;
+      }
+      if (normalizedConfig?.compressionStrategy) {
+        this.compressionStrategy = normalizedConfig.compressionStrategy;
+      }
+    }
+    
     this.state = {
       workflow,
       startTime: Date.now(),
@@ -31,13 +111,6 @@ export class WorkflowStateManager {
       maxIterations: workflow.maxIterations ?? 10,
       timeout: workflow.timeout ?? 60000,
       tools: [...tools, ...workflow.tools],
-      memoryConfig: {
-        enableMessageSummarization: workflow.memoryConfig?.enableMessageSummarization ?? false,
-        enableMessagePruning: workflow.memoryConfig?.enableMessagePruning ?? false,
-        enableMessageHistory: workflow.memoryConfig?.enableMessageHistory ?? false,
-        enableToolResultStorage: workflow.memoryConfig?.enableToolResultStorage ?? false,
-        maxMemoryTokens: workflow.memoryConfig?.maxMemoryTokens ?? this.DEFAULT_MAX_TOKENS,
-      },
       memory: this.initializeMemory(
         workflow.steps,
         workflow.systemPrompt,
@@ -51,9 +124,11 @@ export class WorkflowStateManager {
       this.state.systemPrompt = workflow.systemPrompt;
     }
     
-    // Initialize memory metrics and token counting
+    // Clear memory strategy for fresh start
+    this.memoryStrategy.clear();
+    
+    // Initialize memory metrics
     this.initializeMemoryMetrics();
-    this.updateTokenCount();
   }
 
   private initializeMemory(
@@ -101,242 +176,172 @@ export class WorkflowStateManager {
       throw new Error('State not initialized');
     }
     
+    const strategyMetrics = this.memoryStrategy.getMetrics();
     this.state.memoryMetrics = {
-      messageCount: this.state.memory.messages?.length ?? 0,
-      estimatedTokens: 0,
-      pruneCount: 0,
-      summarizationCount: 0,
+      messageCount: strategyMetrics.messageCount,
+      estimatedTokens: strategyMetrics.estimatedTokens,
+      pruneCount: strategyMetrics.compressionCount,
+      summarizationCount: strategyMetrics.compressionCount,
       avgStepResultSize: 0,
-      maxTokenLimit: this.DEFAULT_MAX_TOKENS,
-      warningThreshold: this.DEFAULT_WARNING_THRESHOLD,
+      maxTokenLimit: this.memoryConfig?.maxTokens || this.DEFAULT_MAX_TOKENS,
+      warningThreshold: this.memoryConfig?.compressionThreshold || this.DEFAULT_WARNING_THRESHOLD,
     };
   }
 
-  private getToolResultsInstruction(toolResults: Record<string, ToolResult>): Message[] {
-    if (Object.values(toolResults).length === 0) {
-      return [];
-    }
-    return [{ role: 'system', content: 'Refer to the following tool results when generating your response:\n' +
-      Object.values(toolResults).map(toolResult => 
-        `${toolResult.name}: ${toolResult.description}\n${toolResult.result}`
-      ).join('\n') }];
-  }
-
-  private updateTokenCount(): void {
-    if (!this.state?.memory.messages) return;
-    
-    const messageHistoryTokenCount = this.tokenCounter.estimateTokens(this.state.memory.messages);
-    
-    let toolResultsInstruction: Message[] = [];
-    if (this.state.memoryConfig?.enableToolResultStorage) {
-      toolResultsInstruction = this.getToolResultsInstruction(this.state.memory.toolResults);
-    }
-    const toolResultsTokenCount = this.tokenCounter.estimateTokens(toolResultsInstruction);
-    const tokenCount = messageHistoryTokenCount + toolResultsTokenCount;
-
-    this.state.currentTokenCount = tokenCount;
-    this.state.tokenCountLastUpdated = new Date();
-    
-    if (this.state.memoryMetrics) {
-      this.state.memoryMetrics.estimatedTokens = tokenCount;
-      this.state.memoryMetrics.messageCount = this.state.memory.messages.length;
-      this.updateMemoryMetrics();
-    }
-    
-    logger.agent.debug('Token count updated', {
-      tokenCount,
-      messageCount: this.state.memory.messages.length,
-      utilizationPercent: (tokenCount / this.DEFAULT_MAX_TOKENS) * 100
-    });
-  }
-
   private updateMemoryMetrics(): void {
-    if (!this.state?.memoryMetrics) return;
+    if (!this.state) return;
     
+    const strategyMetrics = this.memoryStrategy.getMetrics();
+    
+    // Update workflow state metrics
+    if (this.state.memoryMetrics) {
+      this.state.memoryMetrics.messageCount = strategyMetrics.messageCount;
+      this.state.memoryMetrics.estimatedTokens = strategyMetrics.estimatedTokens;
+      this.state.memoryMetrics.summarizationCount = strategyMetrics.compressionCount;
+      this.state.memoryMetrics.pruneCount = strategyMetrics.compressionCount;
+      
+      if (strategyMetrics.lastCompressionTime !== undefined) {
+        this.state.memoryMetrics.lastSummarizationTime = strategyMetrics.lastCompressionTime;
+        this.state.memoryMetrics.lastPruneTime = strategyMetrics.lastCompressionTime;
+      }
+    }
+    
+    // Calculate average step result size
     const stepResults = Object.values(this.state.memory.steps)
       .filter(s => s.result)
       .map(s => s.result!.length);
     
-    this.state.memoryMetrics.avgStepResultSize = stepResults.length > 0 
-      ? stepResults.reduce((a, b) => a + b, 0) / stepResults.length 
-      : 0;
+    if (this.state.memoryMetrics && stepResults.length > 0) {
+      this.state.memoryMetrics.avgStepResultSize = 
+        stepResults.reduce((a, b) => a + b, 0) / stepResults.length;
+    }
+    
+    // Update current token count
+    this.state.currentTokenCount = strategyMetrics.estimatedTokens;
+    this.state.tokenCountLastUpdated = new Date();
+    
+    logger.agent.debug('Memory metrics updated', {
+      messageCount: strategyMetrics.messageCount,
+      estimatedTokens: strategyMetrics.estimatedTokens,
+      compressionCount: strategyMetrics.compressionCount
+    });
   }
 
   private async checkMemoryPressure(): Promise<void> {
     if (!this.state?.memoryMetrics) return;
     
-    const { estimatedTokens, maxTokenLimit, warningThreshold } = this.state.memoryMetrics;
-    const utilizationPercent = (estimatedTokens / maxTokenLimit) * 100;
+    const metrics = this.memoryStrategy.getMetrics();
+    const config = this.memoryConfig || { 
+      maxTokens: this.DEFAULT_MAX_TOKENS, 
+      compressionThreshold: this.DEFAULT_WARNING_THRESHOLD 
+    };
     
-    if (estimatedTokens > maxTokenLimit * warningThreshold) {
-      logger.agent.warn('Approaching context limit', {
-        currentTokens: estimatedTokens,
-        maxTokens: maxTokenLimit,
-        utilizationPercent,
-        messageCount: this.state.memoryMetrics.messageCount,
-        summarizationEnabled: this.state.memoryConfig?.enableMessageSummarization ?? false,
-        pruningEnabled: this.state.memoryConfig?.enableMessagePruning ?? false
+    // Check if compression is needed
+    if (this.compressionStrategy?.shouldCompress(metrics, config)) {
+      logger.agent.warn('Memory pressure detected, compressing', {
+        currentTokens: metrics.estimatedTokens,
+        maxTokens: config.maxTokens,
+        messageCount: metrics.messageCount
       });
-
-      await this.summarizeMessages();
-      const targetTokens = Math.floor(maxTokenLimit * 0.6);
-      this.pruneMessageHistory(targetTokens);
-    }
-  }
-
-  private async summarizeMessages(): Promise<void> {
-    if (!this.state?.memory.messages || !this.session 
-      || !this.state.memoryConfig?.enableMessageSummarization) return;
-    
-    const originalCount = this.state.memory.messages.length;
-    const originalTokens = this.state.currentTokenCount ?? 0;
-        
-    logger.agent.debug('Summarizing messages', {
-      messagesToSummarize: this.state.memory.messages.map(m => m.content),
-      messageCount: this.state.memory.messages.length
-    });
-    
-    try {
-      // Create summarization prompt
-      const summarizationMessages: Message[] = [
-        {
-          role: 'system',
-          content: 'Summarize conversation history into key facts only. ' +
-          'Be extremely concise.'
-        },
-        {
-          role: 'user',
-          content: 'Summarize this conversation: ' +
-          `${this.state.memory.messages.map((msg) => `${msg.role}: ${msg.content}`).join('\n')}`
-        }
-      ];
       
-      // Generate summary using the session
-      let response = '';
-      for await (const chunk of this.session.createResponse({
-        messages: summarizationMessages,
-        temperature: 0.1,
-        max_new_tokens: 2048
-      }, 'chat')) {
-        if (!chunk.isLast) {
-          response += chunk.token;
-        }
+      const messages = await this.memoryStrategy.retrieve();
+      const targetTokens = Math.floor((config.maxTokens || this.DEFAULT_MAX_TOKENS) * 0.6);
+      
+      const compressed = await this.compressionStrategy.compress(
+        messages,
+        targetTokens,
+        this.session
+      );
+      
+      this.memoryStrategy.clear();
+      await this.memoryStrategy.add(compressed);
+      this.updateMemoryMetrics();
+    } else if (this.isContextNearLimit()) {
+      // Fallback to simple pruning if no compression strategy
+      const targetTokens = Math.floor((config.maxTokens || this.DEFAULT_MAX_TOKENS) * 0.7);
+      if (this.memoryStrategy.compress) {
+        await this.memoryStrategy.compress({
+          targetTokens,
+          preserveTypes: ['system', 'summary']
+        });
+        this.updateMemoryMetrics();
       }
-
-      const { cleanContent } = this.contentProcessor.removeThinkTags(response);
-      
-      // Create summarized message
-      const summaryMessage: Message = {
-        role: 'assistant',
-        content: cleanContent
-      };
-      
-      // Replace message history with system, user, and summary
-      this.state.memory.messages = [summaryMessage];
-      
-      // Update metrics
-      if (this.state.memoryMetrics) {
-        this.state.memoryMetrics.summarizationCount += 1;
-        this.state.memoryMetrics.lastSummarizationTime = Date.now();
-      }
-      
-      this.updateTokenCount();
-      
-      logger.agent.info('Message history summarized', {
-        originalMessageCount: originalCount,
-        newMessageCount: this.state.memory.messages.length,
-        removedMessages: originalCount - this.state.memory.messages.length,
-        originalTokens,
-        newTokens: this.state.currentTokenCount,
-        summarizationCount: this.state.memoryMetrics?.summarizationCount ?? 0,
-        summaryLength: cleanContent.length
-      });
-      logger.agent.debug('Summary', {
-        summary: cleanContent
-      });
-      
-    } catch (error: any) {
-      logger.agent.error('Failed to summarize messages', {
-        error: error.message,
-        messageCount: this.state.memory.messages.length
-      });
     }
   }
 
-  private pruneMessageHistory(targetTokenCount: number): void {
-    if (!this.state?.memory.messages 
-      || !this.state.memoryConfig?.enableMessagePruning) return;
-    
-    const originalCount = this.state.memory.messages.length;
-    const originalTokens = this.state.currentTokenCount ?? 0;
-    
-    // Estimate tokens for workflow prompts
-    const workflowPrompts = this.getWorkflowPrompts();
-    let currentTokens = this.tokenCounter.estimateTokens(workflowPrompts);
-    
-    // Collect recent messages that fit within the target limit
-    const recentMessages = this.state.memory.messages.reverse();
-    const messagesToKeep: Message[] = [];
-    
-    for (const message of recentMessages) {
-      const messageTokens = this.tokenCounter.estimateTokens([message]);
-      if (currentTokens + messageTokens > targetTokenCount) break;
-      
-      messagesToKeep.unshift(message); // Add to beginning to maintain chronological order
-      currentTokens += messageTokens;
-    }
-    
-    // Combine preserved system messages with recent messages in correct order
-    this.state.memory.messages = messagesToKeep;
 
-    this.updateTokenCount();
-    
-    logger.agent.info('Message history pruned', {
-      originalMessageCount: originalCount,
-      newMessageCount: this.state.memory.messages.length,
-      removedMessages: originalCount - this.state.memory.messages.length,
-      originalTokens,
-      newTokens: this.state.currentTokenCount,
-      targetTokens: targetTokenCount,
-      pruneCount: this.state.memoryMetrics?.pruneCount ?? 0
-    });
-  }
-
-  async addMessagesToMemory(messages: Message[], skipPruning = false): Promise<void> {
-    if (!this.state || !this.state.memoryConfig?.enableMessageHistory) {
-      throw new Error('State not initialized');
-    }
-    logger.agent.debug('Adding messages to memory', {
-      messages,
-      skipPruning
-    });
-    this.state.memory.messages?.push(...messages);
-    this.updateTokenCount();
-    
-    // Skip memory pressure check and pruning if requested (e.g., for last step)
-    if (!skipPruning) {
-      await this.checkMemoryPressure();
-    }
-  }
-
-  getMessages(): Message[] {
+  async addMessagesToMemory(messages: Message[], skipCompression = false): Promise<void> {
     if (!this.state) {
       throw new Error('State not initialized');
     }
-    return this.state.memory.messages ?? [];
+    
+    logger.agent.debug('Adding messages to memory', {
+      messageCount: messages.length,
+      skipCompression
+    });
+    
+    // Convert to MemoryMessage format with metadata
+    const memoryMessages: MemoryMessage[] = messages.map(m => ({
+      role: m.role,
+      content: m.content,
+      metadata: {
+        timestamp: Date.now(),
+        type: this.inferMessageType(m)
+      }
+    }));
+    
+    // Add to memory strategy
+    await this.memoryStrategy.add(memoryMessages);
+    
+    // Also add to legacy memory for backward compatibility
+    if (!this.state.memory.messages) {
+      this.state.memory.messages = [];
+    }
+    this.state.memory.messages.push(...messages);
+    
+    // Update metrics
+    this.updateMemoryMetrics();
+    
+    // Check memory pressure if not skipped
+    if (!skipCompression) {
+      await this.checkMemoryPressure();
+    }
+  }
+  
+  private inferMessageType(message: Message): 'system' | 'user' | 'assistant' | 'tool_result' | 'step' | 'summary' {
+    if (message.role === 'system') return 'system';
+    if (message.content.startsWith('**Step:**')) return 'step';
+    if (message.role === 'user') {
+      try {
+        JSON.parse(message.content);
+        return 'tool_result';
+      } catch {
+        return 'user';
+      }
+    }
+    return 'assistant';
+  }
+
+  async getMessages(): Promise<Message[]> {
+    if (!this.state) {
+      throw new Error('State not initialized');
+    }
+    
+    // Retrieve from memory strategy and format
+    const memoryMessages = await this.memoryStrategy.retrieve();
+    return this.memoryFormatter.formatMessages(memoryMessages);
   }
 
   addToolResultToMemory(stepId: string, toolResult: ToolResult): void {
     if (!this.state) {
       throw new Error('State not initialized');
     }
-    if (this.state.memoryConfig?.enableToolResultStorage) {
-      logger.agent.debug('Adding tool result to memory', {
-        stepId,
-        toolResult
-      });
-      this.state.memory.toolResults['step_' + stepId] = toolResult;
-    }
+    
+    logger.agent.debug('Adding tool result to memory', {
+      stepId,
+      toolResult
+    });
+    this.state.memory.toolResults['step_' + stepId] = toolResult;
   }
   
   getToolResults(): Record<string, ToolResult> {
@@ -346,17 +351,26 @@ export class WorkflowStateManager {
     return this.state.memory.toolResults;
   }
 
-  rollbackMessagesToCount(targetCount: number) {
+  async rollbackMessagesToCount(targetCount: number) {
     if (!this.state) {
       throw new Error('State not initialized');
     }
-    if (!this.state.memory.messages) {
-      return;
-    }
-    const currentCount = this.state.memory.messages.length;
+    
+    const currentMessages = await this.memoryStrategy.retrieve();
+    const currentCount = currentMessages.length;
+    
     if (currentCount > targetCount) {
-      this.state.memory.messages.splice(targetCount);
-      this.updateTokenCount();
+      // Clear and re-add only the messages we want to keep
+      this.memoryStrategy.clear();
+      await this.memoryStrategy.add(currentMessages.slice(0, targetCount));
+      
+      // Also update legacy memory
+      if (this.state.memory.messages) {
+        this.state.memory.messages.splice(targetCount);
+      }
+      
+      this.updateMemoryMetrics();
+      
       logger.agent.debug('Rolled back messages', { 
         from: currentCount, 
         to: targetCount,
@@ -370,37 +384,54 @@ export class WorkflowStateManager {
     if (!this.state) {
       throw new Error('State not initialized');
     }
+    
     const toolResults = this.getToolResults();
-    let systemPrompt = this.state.systemPrompt ?? 'You are ' +
-      'a helpful AI agent. Think step-by-step. When a tool is needed, ' +
-      'call it with minimal arguments. Be concise when replying to the ' +
-      'user.';
-
-    // systemPrompt = systemPrompt + '\n**Workflow Steps:**\n' +
-    //   Object.values(this.state.memory.steps).map(step => step.description).join('\n');
+    const basePrompt = this.state.systemPrompt ?? 
+      'You are a helpful AI agent. Think step-by-step. When a tool is needed, ' +
+      'call it with minimal arguments. Be concise when replying to the user.';
+    
+    // Format tool results using the formatter if available
+    const toolResultsContext = this.memoryFormatter.formatToolResults 
+      ? this.memoryFormatter.formatToolResults(toolResults)
+      : this.formatToolResultsDefault(toolResults);
+    
+    const systemPrompt = this.memoryFormatter.formatSystemPrompt
+      ? this.memoryFormatter.formatSystemPrompt(basePrompt, toolResultsContext)
+      : basePrompt + (toolResultsContext ? '\n' + toolResultsContext : '');
     
     return [
-      { role: 'system', content: systemPrompt +
-        `${Object.values(toolResults).length > 0 ? '**Tool Results:**\n' +
-            Object.values(toolResults).map(
-              toolResult => `${toolResult.name}: ${toolResult.description}\n${toolResult.result}`).join('\n') : ''}`
-      },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: this.state.memory.workflowUserPrompt }
     ];
+  }
+  
+  private formatToolResultsDefault(toolResults: Record<string, ToolResult>): string {
+    if (Object.values(toolResults).length === 0) return '';
+    
+    return '**Tool Results:**\n' +
+      Object.values(toolResults)
+        .map(tr => `${tr.name}: ${tr.description}\n${tr.result}`)
+        .join('\n');
+  }
+  
+  getFormattedStepInstruction(stepId: string, prompt: string): string {
+    return this.memoryFormatter.formatStepInstruction
+      ? this.memoryFormatter.formatStepInstruction(stepId, prompt)
+      : `**Step:** ${stepId}: ${prompt}`;
   }
 
   getMessageCount(): number {
     if (!this.state) {
       throw new Error('State not initialized');
     }
-    return this.state.memory.messages?.length ?? 0;
+    return this.memoryStrategy.getMetrics().messageCount;
   }
 
   getCurrentTokenCount(): number {
     if (!this.state) {
       throw new Error('State not initialized');
     }
-    return this.state.currentTokenCount ?? 0;
+    return this.memoryStrategy.getMetrics().estimatedTokens;
   }
 
   getMemoryMetrics(): WorkflowMemoryMetrics | undefined {
@@ -496,16 +527,6 @@ export class WorkflowStateManager {
     }
   }
 
-  isStepComplete(stepId: string): boolean {
-    if (!this.state) {
-      throw new Error('State not initialized');
-    }
-    if (!this.state.memory.steps[stepId]) {
-      throw new Error('Step not found');
-    }
-    return this.state.memory.steps[stepId].complete;
-  }
-
   isLastStep(stepId: string): boolean {
     if (!this.state) {
       throw new Error('State not initialized');
@@ -534,18 +555,5 @@ export class WorkflowStateManager {
       }
     }
     return true;
-  }
-
-  logStepExecution(
-    workflow: AgentWorkflow,
-    step: WorkflowStep,
-    iteration: number,
-  ): void {
-    logger.agent.info('Executing workflow step', { 
-      workflowId: workflow.id, 
-      stepId: step.id, 
-      stepType: step.generationTask,
-      iteration,
-    });
   }
 }

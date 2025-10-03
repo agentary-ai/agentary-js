@@ -113,9 +113,12 @@ export class StepExecutor {
     let prompt = step.prompt;
     const isLastStep = this.workflowStateManager.isLastStep(step.id);
 
+    // Use formatter to format step instruction
+    const stepInstruction = this.workflowStateManager.getFormattedStepInstruction(step.id, prompt);
+    
     await this.workflowStateManager.addMessagesToMemory([{
       role: 'user',
-      content: `**Step:** ${step.id}: ${prompt}`,
+      content: stepInstruction,
     }], true);
 
     if (step.generationTask) {
@@ -137,11 +140,14 @@ export class StepExecutor {
       filteredTools = tools.filter(tool => step.toolChoice!.includes(tool.function.name));
     }
     
+    // Get messages from memory (now async)
+    const memoryMessages = await this.workflowStateManager.getMessages();
+    
     // Context and tool results are now included in the updated system message
     const generateArgs: GenerateArgs = {
       messages: [
         ...this.workflowStateManager.getWorkflowPrompts(),
-        ...this.workflowStateManager.getMessages()
+        ...memoryMessages
       ],
       temperature: step.temperature ?? 0.1,
       max_new_tokens: step.maxTokens ?? 1024,

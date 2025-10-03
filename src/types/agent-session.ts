@@ -1,5 +1,6 @@
 import { Tool, Model } from "./worker";
 import { GenerationTask, Session } from "./session";
+import { MemoryConfig } from "./memory";
 
 export interface WorkflowIterationResponse {
   stepId?: string;
@@ -31,6 +32,7 @@ export interface WorkflowStep {
   maxAttempts?: number;
 }
 
+// Legacy config for backward compatibility
 export interface AgentMemoryConfig {
   enableMessageSummarization?: boolean;
   enableMessagePruning?: boolean;
@@ -49,7 +51,7 @@ export interface AgentWorkflow {
   tools: Tool[];
   timeout?: number;
   maxIterations?: number;
-  memoryConfig?: AgentMemoryConfig;
+  memoryConfig?: AgentMemoryConfig | MemoryConfig; // Support both legacy and new config
 }
 
 export interface AgentSession extends Session {
