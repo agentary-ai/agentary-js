@@ -1,4 +1,4 @@
-import type { AgentWorkflow, WorkflowStep, AgentMemoryConfig } from '../types/agent-session';
+import type { AgentWorkflow, WorkflowStep } from '../types/agent-session';
 import type { Message, Tool } from '../types/worker';
 import type { WorkflowState, AgentMemory, StepState, WorkflowMemoryMetrics } from '../types/workflow-state';
 import type { Session } from '../types/session';
@@ -15,7 +15,6 @@ import { logger } from '../utils/logger';
 import { TokenCounter } from '../utils/token-counter';
 import { SlidingWindowStrategy } from '../memory/strategies/sliding-window-strategy';
 import { DefaultMemoryFormatter } from '../memory/formatters/default-formatter';
-import { SummarizationCompressionStrategy } from '../memory/strategies/summarization-compression';
 
 export class WorkflowStateManager {
   private readonly DEFAULT_MAX_TOKENS = 2048;
@@ -29,77 +28,39 @@ export class WorkflowStateManager {
   private compressionStrategy?: CompressionStrategy;
   private memoryConfig?: MemoryConfig;
   
-  constructor(session?: Session, memoryConfig?: MemoryConfig | AgentMemoryConfig) {
+  constructor(session?: Session, memoryConfig?: MemoryConfig) {
     this.session = session;
     this.tokenCounter = new TokenCounter();
     
-    // Convert legacy config to new config if needed
-    const normalizedConfig = this.normalizeMemoryConfig(memoryConfig);
-    if (normalizedConfig) {
-      this.memoryConfig = normalizedConfig;
+    if (memoryConfig) {
+      this.memoryConfig = memoryConfig;
     }
     
     // Use provided or default strategies
-    this.memoryStrategy = normalizedConfig?.strategy || 
-      new SlidingWindowStrategy(normalizedConfig?.maxTokens || this.DEFAULT_MAX_TOKENS);
+    this.memoryStrategy = memoryConfig?.strategy || 
+      new SlidingWindowStrategy(memoryConfig?.maxTokens || this.DEFAULT_MAX_TOKENS);
     
-    this.memoryFormatter = normalizedConfig?.formatter || 
+    this.memoryFormatter = memoryConfig?.formatter || 
       new DefaultMemoryFormatter();
     
-    if (normalizedConfig?.compressionStrategy) {
-      this.compressionStrategy = normalizedConfig.compressionStrategy;
+    if (memoryConfig?.compressionStrategy) {
+      this.compressionStrategy = memoryConfig.compressionStrategy;
     }
-    
-    // Enable auto-compression with summarization if legacy config indicates it
-    if (this.isLegacyConfig(memoryConfig) && memoryConfig?.enableMessageSummarization && session) {
-      this.compressionStrategy = new SummarizationCompressionStrategy();
-    }
-  }
-  
-  private isLegacyConfig(config?: MemoryConfig | AgentMemoryConfig): config is AgentMemoryConfig {
-    return config ? 'enableMessageSummarization' in config : false;
-  }
-  
-  private normalizeMemoryConfig(config?: MemoryConfig | AgentMemoryConfig): MemoryConfig | undefined {
-    if (!config) return undefined;
-    
-    // If it's already new format, return as is
-    if ('strategy' in config || 'formatter' in config || 'compressionStrategy' in config) {
-      return config as MemoryConfig;
-    }
-    
-    // Convert legacy config
-    const legacyConfig = config as AgentMemoryConfig;
-    const autoCompressValue = legacyConfig.enableMessagePruning || legacyConfig.enableMessageSummarization;
-    
-    const memoryConfig: MemoryConfig = {
-      maxTokens: legacyConfig.maxMemoryTokens || this.DEFAULT_MAX_TOKENS,
-      compressionThreshold: this.DEFAULT_WARNING_THRESHOLD
-    };
-    
-    if (autoCompressValue) {
-      memoryConfig.autoCompress = true;
-    }
-    
-    return memoryConfig;
   }
 
   initializeState(userPrompt: string, workflow: AgentWorkflow, tools: Tool[]): void {
     // Update memory config and strategy if workflow provides one
     if (workflow.memoryConfig) {
-      const normalizedConfig = this.normalizeMemoryConfig(workflow.memoryConfig);
-      if (normalizedConfig) {
-        this.memoryConfig = normalizedConfig;
-      }
+      this.memoryConfig = workflow.memoryConfig;
       
-      if (normalizedConfig?.strategy) {
-        this.memoryStrategy = normalizedConfig.strategy;
+      if (workflow.memoryConfig.strategy) {
+        this.memoryStrategy = workflow.memoryConfig.strategy;
       }
-      if (normalizedConfig?.formatter) {
-        this.memoryFormatter = normalizedConfig.formatter;
+      if (workflow.memoryConfig.formatter) {
+        this.memoryFormatter = workflow.memoryConfig.formatter;
       }
-      if (normalizedConfig?.compressionStrategy) {
-        this.compressionStrategy = normalizedConfig.compressionStrategy;
+      if (workflow.memoryConfig.compressionStrategy) {
+        this.compressionStrategy = workflow.memoryConfig.compressionStrategy;
       }
     }
     

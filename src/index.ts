@@ -29,8 +29,7 @@ export type {
   WorkflowIterationResponse,
   WorkflowStepError,
   AgentWorkflow,
-  AgentSession,
-  AgentMemoryConfig
+  AgentSession
 } from './types/agent-session';
 export type { 
   CreateSessionArgs, 

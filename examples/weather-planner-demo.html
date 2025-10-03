@@ -444,11 +444,6 @@
         systemPrompt: "You are an agent that plans weather-appropriate activities with nearby places and a schedule that fits the user's time and budget. Be concise in your responses.",
         maxIterations: 15,
         timeout: 180000,
-        memoryConfig: {
-          enableMessageSummarization: true,
-          enableMessageHistory: true,
-          maxMemoryTokens: 1024
-        },
         steps: [
           {
             id: "extract-user-input",

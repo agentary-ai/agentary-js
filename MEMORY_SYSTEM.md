@@ -12,7 +12,7 @@ The new memory system consists of three main components:
 
 ## Quick Start
 
-### Using Default Configuration (Backward Compatible)
+### Using Default Configuration
 
 The system works out of the box with sensible defaults:
 
@@ -32,11 +32,6 @@ const workflow = {
   id: 'my-workflow',
   systemPrompt: 'You are a helpful assistant.',
   maxIterations: 10,
-  memoryConfig: {
-    enableMessageHistory: true,
-    enableMessageSummarization: true,
-    maxMemoryTokens: 2048
-  },
   steps: [/* your steps */],
   tools: []
 };
@@ -46,9 +41,9 @@ for await (const result of agent.runWorkflow('Help me plan my day', workflow)) {
 }
 ```
 
-### Using the New Plugin System
+### Customizing Memory Configuration
 
-For more control, use the new plugin-based configuration:
+For more control, configure the memory system:
 
 ```typescript
 import { 
@@ -366,29 +361,6 @@ const message: MemoryMessage = {
     tokenCount: 15
   }
 };
-```
-
-## Migration from Legacy Config
-
-The old configuration still works:
-
-```typescript
-// Old way (still supported)
-memoryConfig: {
-  enableMessageSummarization: true,
-  enableMessagePruning: true,
-  enableMessageHistory: true,
-  maxMemoryTokens: 2048
-}
-
-// Automatically converts to:
-memoryConfig: {
-  strategy: new SlidingWindowStrategy(2048),
-  formatter: new DefaultMemoryFormatter(),
-  compressionStrategy: new SummarizationCompressionStrategy(),
-  maxTokens: 2048,
-  compressionThreshold: 0.8
-}
 ```
 
 ## Best Practices

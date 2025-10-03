@@ -32,15 +32,6 @@ export interface WorkflowStep {
   maxAttempts?: number;
 }
 
-// Legacy config for backward compatibility
-export interface AgentMemoryConfig {
-  enableMessageSummarization?: boolean;
-  enableMessagePruning?: boolean;
-  enableMessageHistory?: boolean;
-  enableToolResultStorage?: boolean;
-  maxMemoryTokens?: number;
-}
-
 export interface AgentWorkflow {
   id: string
   name?: string;
@@ -51,7 +42,7 @@ export interface AgentWorkflow {
   tools: Tool[];
   timeout?: number;
   maxIterations?: number;
-  memoryConfig?: AgentMemoryConfig | MemoryConfig; // Support both legacy and new config
+  memoryConfig?: MemoryConfig;
 }
 
 export interface AgentSession extends Session {
