@@ -67,7 +67,7 @@ function postDebug(requestId: string, message: string, data?: unknown) {
 
       isGenerating = true;
 
-      const { messages, max_new_tokens, temperature, top_p, top_k, stop, tools, repetition_penalty } = msg.args as GenerateArgs;
+      const { messages, max_new_tokens, temperature, top_p, top_k, stop, tools, repetition_penalty, enable_thinking } = msg.args as GenerateArgs;
       if (!messages) throw new Error('Messages are required');
 
       // If tools are provided, or even if not, pre-apply the chat template so we can
@@ -75,6 +75,7 @@ function postDebug(requestId: string, message: string, data?: unknown) {
       const applyTemplateOptions: any = {
         tokenize: false,
         add_generation_prompt: true,
+        enable_thinking: enable_thinking ?? false,
       };
       if (Array.isArray(tools) && tools.length) {
         applyTemplateOptions.tools = tools;

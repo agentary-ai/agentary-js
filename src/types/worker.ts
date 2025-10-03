@@ -52,6 +52,7 @@ export interface GenerateArgs {
   tools?: Tool[];
   stop?: string[];
   temperature?: number;
+  enable_thinking?: boolean;
   top_p?: number;
   top_k?: number;
   repetition_penalty?: number;
