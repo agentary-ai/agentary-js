@@ -39,8 +39,8 @@ export class StepExecutor {
       maxAttempts: stepState.maxAttempts
     });
     
-    // Track initial message count for potential rollback
-    const initialMessageCount = this.workflowStateManager.getMessageCount();
+    // Create checkpoint for potential rollback
+    this.workflowStateManager.createCheckpoint(step.id);
 
     try {      
       // Increment attempt counter
@@ -64,14 +64,13 @@ export class StepExecutor {
           stepResult, 
           isLastStep, 
           stepState, 
-          stepStartTime, 
-          initialMessageCount
+          stepStartTime
         );
       } else {
         return this.handleContentResponse(step, cleanContent, stepResult, isLastStep, stepStartTime);
       }        
     } catch (error: any) {
-      return this.handleError(error, step, stepState, stepStartTime, initialMessageCount);
+      return this.handleError(error, step, stepState, stepStartTime);
     }
   }
 
@@ -112,12 +111,9 @@ export class StepExecutor {
     // Get messages from memory (now async)
     const memoryMessages = await this.workflowStateManager.getMessages();
     
-    // Context and tool results are now included in the updated system message
+    // System and user prompts are already in memory, so just use memoryMessages
     const generateArgs: GenerateArgs = {
-      messages: [
-        ...this.workflowStateManager.getWorkflowPrompts(),
-        ...memoryMessages
-      ],
+      messages: memoryMessages,
       temperature: step.temperature ?? 0.1,
       max_new_tokens: step.maxTokens ?? 1024,
       enable_thinking: step.enableThinking ?? false,
@@ -159,8 +155,7 @@ export class StepExecutor {
     stepResult: string,
     isLastStep: boolean,
     stepState: any,
-    stepStartTime: number,
-    initialMessageCount: number
+    stepStartTime: number
   ): Promise<WorkflowIterationResponse> {
     // Parse potential tool calls from the clean content
     const toolCall = this.toolParser.parse(cleanContent);
@@ -178,9 +173,8 @@ export class StepExecutor {
         expectedTools: step.toolChoice,
         thinkingContent: thinkingContent?.substring(0, 200) // Log first 200 chars of thinking
       });
-      // Rollback any messages that were added during this step execution
-      // TODO: Implement checkpoint-based rollback
-      this.workflowStateManager.rollbackMessagesToCount(initialMessageCount);
+      // Rollback to checkpoint before this step
+      this.workflowStateManager.rollbackToCheckpoint(step.id);
       this.workflowStateManager.handleStepCompletion(step.id, false);
       const willRetry = stepState.maxAttempts && stepState.attempts < stepState.maxAttempts;
 
@@ -210,8 +204,8 @@ export class StepExecutor {
         availableTools: filteredTools.map(t => t.function.name),
         parsedArgs: toolCall.args
       });
-      // Rollback any messages that were added during this step execution
-      this.workflowStateManager.rollbackMessagesToCount(initialMessageCount);
+      // Rollback to checkpoint before this step
+      this.workflowStateManager.rollbackToCheckpoint(step.id);
       this.workflowStateManager.handleStepCompletion(step.id, false);
       
       const willRetry = stepState.maxAttempts && stepState.attempts < stepState.maxAttempts;
@@ -322,22 +316,20 @@ export class StepExecutor {
     error: any,
     step: WorkflowStep,
     stepState: any,
-    stepStartTime: number,
-    initialMessageCount: number
+    stepStartTime: number
   ): WorkflowIterationResponse {
-    // Rollback any messages that were added during this step execution
-    this.workflowStateManager.rollbackMessagesToCount(initialMessageCount);
+    // Rollback to checkpoint before this step
+    this.workflowStateManager.rollbackToCheckpoint(step.id);
     
     const willRetry = stepState.maxAttempts && stepState.attempts < stepState.maxAttempts;
     
-    logger.agent.error('Step execution failed, rolling back messages', {
+    logger.agent.error('Step execution failed, rolling back to checkpoint', {
       stepId: step.id,
       error: error.message,
       attempt: stepState.attempts,
       maxAttempts: stepState.maxAttempts,
       willRetry,
-      initialMessageCount,
-      rolledBackTo: initialMessageCount,
+      checkpointId: step.id,
       currentTokenCount: this.workflowStateManager.getCurrentTokenCount(),
       memoryPressure: this.workflowStateManager.isContextNearLimit()
     });

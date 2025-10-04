@@ -1,6 +1,9 @@
 import type { Message, MessageRole } from './worker';
 import type { Session } from './session';
 
+export type MemoryMessageType = 
+  'system_instruction' | 'user_prompt' | 'step_prompt' | 'step_result' | 'summary';
+
 // Core memory message with metadata
 export interface MemoryMessage {
   role: MessageRole;
@@ -10,7 +13,7 @@ export interface MemoryMessage {
     stepId?: string;
     priority?: number;
     tokenCount?: number;
-    type?: 'system' | 'user' | 'assistant' | 'tool_result' | 'step' | 'summary';
+    type?: MemoryMessageType;
   };
 }
 

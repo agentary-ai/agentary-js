@@ -2,12 +2,17 @@ import type { AgentWorkflow, WorkflowStep } from '../types/agent-session';
 import type { Message, Tool } from '../types/worker';
 import type { WorkflowState, StepState } from '../types/workflow-state';
 import type { Session } from '../types/session';
-import type { MemoryConfig, ToolResult } from '../types/memory';
+import type { MemoryConfig, ToolResult, MemoryMessage } from '../types/memory';
 
 import { logger } from '../utils/logger';
 import { MemoryManager } from '../memory/memory-manager';
 
 export class WorkflowStateManager {
+  private static readonly DEFAULT_SYSTEM_PROMPT = 
+    'You are a helpful AI agent. Think step-by-step. ' +
+    'When a tool is needed, call it with minimal arguments. ' +
+    'Be concise when replying to the user.';
+
   private state?: WorkflowState;
   private session: Session;
   private memoryManager: MemoryManager;
@@ -17,11 +22,16 @@ export class WorkflowStateManager {
     this.memoryManager = new MemoryManager(session, memoryConfig);
   }
 
-  initializeState(userPrompt: string, workflow: AgentWorkflow, tools: Tool[]): void {
+  async initializeState(userPrompt: string, workflow: AgentWorkflow, tools: Tool[]): Promise<void> {
     // Update memory manager if workflow provides config
     if (workflow.memoryConfig) {
       this.memoryManager = new MemoryManager(this.session, workflow.memoryConfig);
     }
+    this.memoryManager.clear();
+    await this.addMessagesToMemory([
+      { role: 'system', content: workflow.systemPrompt ?? WorkflowStateManager.DEFAULT_SYSTEM_PROMPT, metadata: { type: 'system_instruction' } },
+      { role: 'user', content: userPrompt, metadata: { type: 'user_prompt' } }
+    ]);
 
     const steps: Record<string, StepState> = {};
     workflow.steps.forEach(step => {
@@ -32,7 +42,6 @@ export class WorkflowStateManager {
         maxAttempts: step.maxAttempts ?? 3,
       };
     });
-    
     this.state = {
       workflow,
       userPrompt,
@@ -45,11 +54,9 @@ export class WorkflowStateManager {
       steps,
       toolResults: {},
     };
-
-    this.memoryManager.clear();
   }
 
-  async addMessagesToMemory(messages: Message[], skipCompression = false): Promise<void> {
+  async addMessagesToMemory(messages: MemoryMessage[], skipCompression = false): Promise<void> {
     await this.memoryManager.addMessages(messages, skipCompression);
   }
 
@@ -82,25 +89,25 @@ export class WorkflowStateManager {
     await this.memoryManager.rollbackToCount(targetCount);
   }
 
-  getWorkflowPrompts(): Message[] {
-    if (!this.state) {
-      throw new Error('State not initialized');
-    }
+  // getWorkflowPrompts(): Message[] {
+  //   if (!this.state) {
+  //     throw new Error('State not initialized');
+  //   }
     
-    const toolResults = this.getToolResults();
-    const basePrompt = this.state.workflow.systemPrompt ?? 
-      'You are a helpful AI agent. Think step-by-step. When a tool is needed, ' +
-      'call it with minimal arguments. Be concise when replying to the user.';
+  //   const toolResults = this.getToolResults();
+  //   const basePrompt = this.state.workflow.systemPrompt ?? 
+  //     'You are a helpful AI agent. Think step-by-step. When a tool is needed, ' +
+  //     'call it with minimal arguments. Be concise when replying to the user.';
     
-    // Format using memory manager
-    const toolResultsContext = this.memoryManager.formatToolResults(toolResults);
-    const systemPrompt = this.memoryManager.formatSystemPrompt(basePrompt, toolResultsContext);
+  //   // Format using memory manager
+  //   const toolResultsContext = this.memoryManager.formatToolResults(toolResults);
+  //   const systemPrompt = this.memoryManager.formatSystemPrompt(basePrompt, toolResultsContext);
     
-    return [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: this.state.userPrompt }
-    ];
-  }
+  //   return [
+  //     { role: 'system', content: systemPrompt },
+  //     { role: 'user', content: this.state.userPrompt }
+  //   ];
+  // }
   
   getFormattedStepInstruction(stepId: string, prompt: string): string {
     return this.memoryManager.formatStepInstruction(stepId, prompt);
@@ -171,8 +178,11 @@ export class WorkflowStateManager {
     return Date.now() - state.startTime > state.timeout;
   }
 
-  isMaxIterationsReached(state: WorkflowState): boolean {
-    return state.iteration >= state.maxIterations;
+  isMaxIterationsReached(): boolean {
+    if (!this.state) {
+      throw new Error('State not initialized');
+    }
+    return this.state.iteration >= this.state.maxIterations;
   }
 
   getStepState(stepId: string): StepState {
@@ -231,5 +241,13 @@ export class WorkflowStateManager {
       }
     }
     return true;
+  }
+
+  createCheckpoint(id: string): void {
+    this.memoryManager.createCheckpoint(id);
+  }
+
+  rollbackToCheckpoint(id: string): void {
+    this.memoryManager.rollbackToCheckpoint(id);
   }
 }

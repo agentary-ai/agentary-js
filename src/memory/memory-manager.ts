@@ -59,14 +59,22 @@ export class MemoryManager {
   /**
    * Add messages to memory with optional compression check
    */
-  async addMessages(messages: Message[], skipCompression = false): Promise<void> {
+  async addMessages(messages: MemoryMessage[], skipCompression = false): Promise<void> {
     logger.agent.debug('Adding messages to memory', {
       messageCount: messages.length,
       skipCompression
     });
+    messages = messages.map(m => ({
+      ...m,
+      metadata: {
+        timestamp: Date.now(),
+        tokenCount: this.tokenCounter.estimateTokens([m]),
+        ...m.metadata
+      }
+    }));
     
-    const memoryMessages = this.convertToMemoryMessages(messages);
-    await this.memory.add(memoryMessages);
+    // const memoryMessages = this.convertToMemoryMessages(messages);
+    await this.memory.add(messages);
     
     if (!skipCompression) {
       await this.checkAndCompress();
@@ -224,38 +232,6 @@ export class MemoryManager {
         preserveTypes: ['system', 'summary']
       });
     }
-  }
-  
-  /**
-   * Convert standard messages to memory messages with metadata
-   */
-  private convertToMemoryMessages(messages: Message[]): MemoryMessage[] {
-    return messages.map(m => ({
-      role: m.role,
-      content: m.content,
-      metadata: {
-        timestamp: Date.now(),
-        type: this.inferMessageType(m),
-        tokenCount: this.tokenCounter.estimateTokens([m])
-      }
-    }));
-  }
-  
-  /**
-   * Infer message type from content and role
-   */
-  private inferMessageType(message: Message): 'system' | 'user' | 'assistant' | 'tool_result' | 'step' | 'summary' {
-    if (message.role === 'system') return 'system';
-    if (message.content.startsWith('**Step:**')) return 'step';
-    if (message.role === 'user') {
-      try {
-        JSON.parse(message.content);
-        return 'tool_result';
-      } catch {
-        return 'user';
-      }
-    }
-    return 'assistant';
   }
   
   /**

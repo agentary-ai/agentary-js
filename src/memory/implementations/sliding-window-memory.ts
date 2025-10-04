@@ -50,7 +50,7 @@ export class SlidingWindowMemory implements Memory {
     });
     
     // Auto-prune if needed
-    // await this.autoPrune();
+    await this.autoPrune();
   }
   
   async retrieve(options?: RetrievalOptions): Promise<MemoryMessage[]> {
@@ -194,23 +194,23 @@ export class SlidingWindowMemory implements Memory {
     });
   }
   
-  // private async autoPrune(): Promise<void> {
-  //   const metrics = this.getMetrics();
-  //   const threshold = this.maxTokens * 0.9;
+  private async autoPrune(): Promise<void> {
+    const metrics = this.getMetrics();
+    const threshold = this.maxTokens * 0.9;
     
-  //   if (metrics.estimatedTokens > threshold) {
-  //     logger.agent.debug('Auto-pruning triggered', {
-  //       currentTokens: metrics.estimatedTokens,
-  //       threshold,
-  //       maxTokens: this.maxTokens
-  //     });
+    if (metrics.estimatedTokens > threshold) {
+      logger.agent.debug('Auto-pruning triggered', {
+        currentTokens: metrics.estimatedTokens,
+        threshold,
+        maxTokens: this.maxTokens
+      });
       
-  //     await this.compress({
-  //       targetTokens: Math.floor(this.maxTokens * 0.7),
-  //       preserveTypes: ['system', 'summary']
-  //     });
-  //   }
-  // }
+      await this.compress({
+        targetTokens: Math.floor(this.maxTokens * 0.7),
+        preserveTypes: ['system', 'summary']
+      });
+    }
+  }
   
   private estimateTokens(messages: MemoryMessage[]): number {
     return messages.reduce((sum, m) => sum + (m.metadata?.tokenCount || 0), 0);
