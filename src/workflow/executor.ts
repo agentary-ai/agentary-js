@@ -38,15 +38,15 @@ export class WorkflowExecutor {
     );
 
     // Log initial memory state
-    const initialMetrics = this.stateManager.getMemoryMetrics();
-    if (initialMetrics) {
-      logger.agent.info('Initial memory state', {
-        workflowId: agentWorkflow.id,
-        tokenCount: initialMetrics.estimatedTokens,
-        messageCount: initialMetrics.messageCount,
-        maxTokenLimit: initialMetrics.maxTokenLimit
-      });
-    }
+    // const initialMetrics = this.stateManager.getMemoryMetrics();
+    // if (initialMetrics) {
+    //   logger.agent.info('Initial memory state', {
+    //     workflowId: agentWorkflow.id,
+    //     tokenCount: initialMetrics.estimatedTokens,
+    //     messageCount: initialMetrics.messageCount,
+    //     maxTokenLimit: initialMetrics.maxTokenLimit
+    //   });
+    // }
       
     let currentStep: WorkflowStep | undefined;
     let state: WorkflowState | undefined;
@@ -78,14 +78,14 @@ export class WorkflowExecutor {
           currentStep?.generationTask
         );
       } else {
-        const finalMetrics = this.stateManager.getMemoryMetrics();
+        // const finalMetrics = this.stateManager.getMemoryMetrics();
         logger.agent.info('Workflow execution complete', { 
           workflowId: state.workflow.id,
           iterations: state.iteration,
           totalTimeMs: Date.now() - state.startTime,
-          finalTokenCount: finalMetrics?.estimatedTokens,
-          totalPruneCount: finalMetrics?.pruneCount,
-          finalMessageCount: finalMetrics?.messageCount
+          // finalTokenCount: finalMetrics?.estimatedTokens,
+          // totalPruneCount: finalMetrics?.pruneCount,
+          // finalMessageCount: finalMetrics?.messageCount
         });
       }
 
@@ -156,17 +156,17 @@ export class WorkflowExecutor {
         iteration: state.iteration
       });
         
-      // Log memory state after step execution
-      const memoryMetrics = this.stateManager.getMemoryMetrics();
-      if (memoryMetrics && this.stateManager.isContextNearLimit()) {
-        logger.agent.warn('Memory usage high after step execution', {
-          workflowId: state.workflow.id,
-          stepId: currentStep.id,
-          tokenCount: memoryMetrics.estimatedTokens,
-          utilizationPercent: (memoryMetrics.estimatedTokens / memoryMetrics.maxTokenLimit) * 100,
-          pruneCount: memoryMetrics.pruneCount
-        });
-      }
+      // // Log memory state after step execution
+      // const memoryMetrics = this.stateManager.getMemoryMetrics();
+      // if (memoryMetrics && this.stateManager.isContextNearLimit()) {
+      //   logger.agent.warn('Memory usage high after step execution', {
+      //     workflowId: state.workflow.id,
+      //     stepId: currentStep.id,
+      //     tokenCount: memoryMetrics.estimatedTokens,
+      //     utilizationPercent: (memoryMetrics.estimatedTokens / memoryMetrics.maxTokenLimit) * 100,
+      //     pruneCount: memoryMetrics.pruneCount
+      //   });
+      // }
       logger.agent.debug('Incrementing iteration', {
         workflowId: state.workflow.id,
         iteration: state.iteration

@@ -1,5 +1,5 @@
 import type { 
-  MemoryStrategy, 
+  Memory, 
   MemoryMessage, 
   RetrievalOptions, 
   CompressionOptions,
@@ -12,7 +12,7 @@ import { logger } from '../../utils/logger';
  * Sliding window memory strategy that keeps recent messages within token limit.
  * Automatically prunes old messages when approaching the limit.
  */
-export class SlidingWindowStrategy implements MemoryStrategy {
+export class SlidingWindowMemory implements Memory {
   name = 'sliding-window';
   
   private messages: MemoryMessage[] = [];
@@ -20,7 +20,7 @@ export class SlidingWindowStrategy implements MemoryStrategy {
   private maxTokens: number;
   private checkpoints: Map<string, MemoryMessage[]> = new Map();
   private compressionCount = 0;
-  private lastCompressionTime?: number;
+  private lastCompressionTime: number | undefined;
   
   constructor(maxTokens: number = 2048) {
     this.maxTokens = maxTokens;
@@ -50,7 +50,7 @@ export class SlidingWindowStrategy implements MemoryStrategy {
     });
     
     // Auto-prune if needed
-    await this.autoPrune();
+    // await this.autoPrune();
   }
   
   async retrieve(options?: RetrievalOptions): Promise<MemoryMessage[]> {
@@ -83,6 +83,7 @@ export class SlidingWindowStrategy implements MemoryStrategy {
       
       for (let i = filtered.length - 1; i >= 0; i--) {
         const msg = filtered[i];
+        if (!msg) continue;
         const msgTokens = msg.metadata?.tokenCount || 0;
         
         if (tokenCount + msgTokens > options.maxTokens) break;
@@ -112,7 +113,7 @@ export class SlidingWindowStrategy implements MemoryStrategy {
     const originalCount = this.messages.length;
     const originalTokens = this.estimateTokens(this.messages);
     
-    // Separate messages to preserve
+    // Separate messages to preserve by priority
     const priorityMessages = this.messages.filter(m => 
       options.preserveTypes?.includes(m.metadata?.type || '')
     );
@@ -130,6 +131,7 @@ export class SlidingWindowStrategy implements MemoryStrategy {
     
     for (let i = allMessages.length - 1; i >= 0; i--) {
       const msg = allMessages[i];
+      if (!msg) continue;
       const msgTokens = msg.metadata?.tokenCount || 0;
       
       if (tokenCount + msgTokens > remainingTokenBudget) break;
@@ -192,23 +194,23 @@ export class SlidingWindowStrategy implements MemoryStrategy {
     });
   }
   
-  private async autoPrune(): Promise<void> {
-    const metrics = this.getMetrics();
-    const threshold = this.maxTokens * 0.9;
+  // private async autoPrune(): Promise<void> {
+  //   const metrics = this.getMetrics();
+  //   const threshold = this.maxTokens * 0.9;
     
-    if (metrics.estimatedTokens > threshold) {
-      logger.agent.debug('Auto-pruning triggered', {
-        currentTokens: metrics.estimatedTokens,
-        threshold,
-        maxTokens: this.maxTokens
-      });
+  //   if (metrics.estimatedTokens > threshold) {
+  //     logger.agent.debug('Auto-pruning triggered', {
+  //       currentTokens: metrics.estimatedTokens,
+  //       threshold,
+  //       maxTokens: this.maxTokens
+  //     });
       
-      await this.compress({
-        targetTokens: Math.floor(this.maxTokens * 0.7),
-        preserveTypes: ['system', 'summary']
-      });
-    }
-  }
+  //     await this.compress({
+  //       targetTokens: Math.floor(this.maxTokens * 0.7),
+  //       preserveTypes: ['system', 'summary']
+  //     });
+  //   }
+  // }
   
   private estimateTokens(messages: MemoryMessage[]): number {
     return messages.reduce((sum, m) => sum + (m.metadata?.tokenCount || 0), 0);

@@ -1,14 +1,29 @@
 # Memory System Documentation
 
-The agent memory system has been redesigned to be plugin-based and agnostic to specific implementations. This allows you to customize how agent memory is stored, retrieved, and compressed.
+The agent memory system is built around a flexible, plugin-based architecture that allows you to customize how agent memory is stored, retrieved, formatted, and compressed.
 
 ## Overview
 
-The new memory system consists of three main components:
+The memory system consists of three main components managed by the `MemoryManager`:
 
-1. **Memory Strategy** - How messages are stored and retrieved
-2. **Memory Formatter** - How messages are formatted for the LLM
-3. **Compression Strategy** - How memory is compressed when it grows too large
+1. **Memory** - How messages are stored and retrieved (e.g., `SlidingWindowMemory`)
+2. **Memory Formatter** - How messages are formatted for the LLM (e.g., `DefaultMemoryFormatter`)
+3. **Memory Compressor** - How memory is compressed when it grows too large (e.g., `LLMSummarization`)
+
+## Architecture
+
+```
+MemoryManager
+    ├── Memory (storage & retrieval)
+    │   └── SlidingWindowMemory
+    │   └── Your custom implementation
+    ├── MemoryFormatter (formatting)
+    │   └── DefaultMemoryFormatter
+    │   └── Your custom formatter
+    └── MemoryCompressor (compression)
+        └── LLMSummarization
+        └── Your custom compressor
+```
 
 ## Quick Start
 
@@ -43,13 +58,13 @@ for await (const result of agent.runWorkflow('Help me plan my day', workflow)) {
 
 ### Customizing Memory Configuration
 
-For more control, configure the memory system:
+Configure memory with custom strategies:
 
 ```typescript
 import { 
   createAgentSession,
-  SlidingWindowStrategy,
-  SummarizationCompressionStrategy,
+  SlidingWindowMemory,
+  LLMSummarization,
   DefaultMemoryFormatter
 } from 'agentary';
 
@@ -58,12 +73,12 @@ const workflow = {
   systemPrompt: 'You are a helpful assistant.',
   maxIterations: 10,
   memoryConfig: {
-    strategy: new SlidingWindowStrategy(4096), // Keep last 4096 tokens
+    memory: new SlidingWindowMemory(4096), // Keep last 4096 tokens
     formatter: new DefaultMemoryFormatter({
       stepInstructionTemplate: 'Task {stepId}: {prompt}',
       toolResultsTemplate: 'Available Data:\n{results}'
     }),
-    compressionStrategy: new SummarizationCompressionStrategy({
+    memoryCompressor: new LLMSummarization({
       systemPrompt: 'Create a concise summary focusing on key decisions.',
       maxSummaryTokens: 1024
     }),
@@ -75,18 +90,18 @@ const workflow = {
 };
 ```
 
-## Built-in Strategies
+## Built-in Implementations
 
-### Memory Strategies
+### Memory Implementations
 
-#### SlidingWindowStrategy
+#### SlidingWindowMemory
 
 Keeps the most recent messages within a token limit. Automatically prunes old messages when approaching the limit.
 
 ```typescript
-import { SlidingWindowStrategy } from 'agentary';
+import { SlidingWindowMemory } from 'agentary';
 
-const strategy = new SlidingWindowStrategy(2048); // Max 2048 tokens
+const memory = new SlidingWindowMemory(2048); // Max 2048 tokens
 ```
 
 **Features:**
@@ -95,16 +110,25 @@ const strategy = new SlidingWindowStrategy(2048); // Max 2048 tokens
 - Checkpoint/rollback support
 - Fast and efficient
 
-### Compression Strategies
+**Configuration in workflow:**
+```typescript
+memoryConfig: {
+  memory: new SlidingWindowMemory(4096),
+  maxTokens: 4096,
+  compressionThreshold: 0.8
+}
+```
 
-#### SummarizationCompressionStrategy
+### Memory Compressors
+
+#### LLMSummarization
 
 Uses an LLM to summarize conversation history into a concise format.
 
 ```typescript
-import { SummarizationCompressionStrategy } from 'agentary';
+import { LLMSummarization } from 'agentary';
 
-const compression = new SummarizationCompressionStrategy({
+const compressor = new LLMSummarization({
   systemPrompt: 'Summarize the conversation focusing on key facts.',
   userPromptTemplate: 'Summarize:\n{messages}',
   temperature: 0.1,
@@ -116,6 +140,17 @@ const compression = new SummarizationCompressionStrategy({
 - Intelligent summarization preserving context
 - Customizable prompts
 - Configurable output length
+
+**Configuration in workflow:**
+```typescript
+memoryConfig: {
+  memoryCompressor: new LLMSummarization({
+    systemPrompt: 'Focus on key decisions and outcomes.',
+    maxSummaryTokens: 1024
+  }),
+  compressionThreshold: 0.8
+}
+```
 
 ### Memory Formatters
 
@@ -134,19 +169,29 @@ const formatter = new DefaultMemoryFormatter({
 });
 ```
 
-## Creating Custom Strategies
+**Configuration in workflow:**
+```typescript
+memoryConfig: {
+  formatter: new DefaultMemoryFormatter({
+    stepInstructionTemplate: '## Task: {stepId}\n{prompt}',
+    includeMetadata: true
+  })
+}
+```
 
-### Custom Memory Strategy
+## Creating Custom Implementations
+
+### Custom Memory Implementation
 
 ```typescript
 import type { 
-  MemoryStrategy, 
+  Memory, 
   MemoryMessage, 
   MemoryMetrics,
   RetrievalOptions 
 } from 'agentary';
 
-class VectorDBStrategy implements MemoryStrategy {
+class VectorDBMemory implements Memory {
   name = 'vector-db';
   private db: YourVectorDB;
   
@@ -182,7 +227,8 @@ class VectorDBStrategy implements MemoryStrategy {
     return {
       messageCount: this.db.count(),
       estimatedTokens: this.db.totalTokens(),
-      compressionCount: 0
+      compressionCount: 0,
+      lastCompressionTime: undefined
     };
   }
   
@@ -199,24 +245,24 @@ class VectorDBStrategy implements MemoryStrategy {
 // Use it in your workflow
 const workflow = {
   memoryConfig: {
-    strategy: new VectorDBStrategy('mongodb://localhost:27017'),
+    memory: new VectorDBMemory('mongodb://localhost:27017'),
     maxTokens: 8192
   },
   // ...
 };
 ```
 
-### Custom Compression Strategy
+### Custom Memory Compressor
 
 ```typescript
 import type { 
-  CompressionStrategy, 
+  MemoryCompressor, 
   MemoryMessage, 
   MemoryMetrics,
   MemoryConfig 
 } from 'agentary';
 
-class HybridCompressionStrategy implements CompressionStrategy {
+class HybridCompressor implements MemoryCompressor {
   name = 'hybrid';
   
   async compress(
@@ -304,50 +350,91 @@ class MarkdownFormatter implements MemoryFormatter {
 }
 ```
 
+## Using the MemoryManager Directly
+
+You can also use `MemoryManager` directly outside of workflows:
+
+```typescript
+import { MemoryManager, SlidingWindowMemory, LLMSummarization } from 'agentary';
+
+const memoryManager = new MemoryManager(session, {
+  memory: new SlidingWindowMemory(4096),
+  memoryCompressor: new LLMSummarization(),
+  maxTokens: 4096,
+  compressionThreshold: 0.75
+});
+
+// Add messages
+await memoryManager.addMessages([
+  { role: 'user', content: 'Hello!' },
+  { role: 'assistant', content: 'Hi! How can I help?' }
+]);
+
+// Retrieve messages
+const messages = await memoryManager.getMessages();
+
+// Get metrics
+const metrics = memoryManager.getMetrics();
+console.log(`Messages: ${metrics.messageCount}, Tokens: ${metrics.estimatedTokens}`);
+
+// Create checkpoint
+memoryManager.createCheckpoint('before-operation');
+
+// Rollback if needed
+memoryManager.rollbackToCheckpoint('before-operation');
+
+// Clear all memory
+memoryManager.clear();
+```
+
 ## Advanced Features
 
 ### Checkpoints and Rollback
 
 ```typescript
-import { SlidingWindowStrategy } from 'agentary';
+const workflow = {
+  memoryConfig: {
+    memory: new SlidingWindowMemory(2048)
+  },
+  // ...
+};
 
-const strategy = new SlidingWindowStrategy(2048);
-
+// In your workflow logic (via MemoryManager):
 // Create checkpoint before risky operation
-if (strategy.createCheckpoint) {
-  strategy.createCheckpoint('before-tool-call');
-}
+memoryManager.createCheckpoint('before-tool-call');
 
 // ... perform operation ...
 
 // Rollback if needed
-if (operationFailed && strategy.rollback) {
-  strategy.rollback('before-tool-call');
+if (operationFailed) {
+  memoryManager.rollbackToCheckpoint('before-tool-call');
 }
 ```
 
 ### Filtered Retrieval
 
+The `Memory` interface supports filtered retrieval:
+
 ```typescript
 // Retrieve only specific message types
-const systemMessages = await strategy.retrieve({
+const systemMessages = await memory.retrieve({
   includeTypes: ['system', 'summary']
 });
 
 // Retrieve messages since a timestamp
-const recentMessages = await strategy.retrieve({
+const recentMessages = await memory.retrieve({
   sinceTimestamp: Date.now() - 3600000 // Last hour
 });
 
 // Retrieve with token limit
-const limitedMessages = await strategy.retrieve({
+const limitedMessages = await memory.retrieve({
   maxTokens: 1024
 });
 ```
 
 ### Message Metadata
 
-Messages can include rich metadata for smarter retrieval:
+Messages include rich metadata for smarter retrieval:
 
 ```typescript
 const message: MemoryMessage = {
@@ -363,37 +450,219 @@ const message: MemoryMessage = {
 };
 ```
 
+## API Reference
+
+### MemoryManager
+
+```typescript
+class MemoryManager {
+  constructor(session: Session, config?: MemoryConfig);
+  
+  // Message operations
+  addMessages(messages: Message[], skipCompression?: boolean): Promise<void>;
+  getMessages(): Promise<Message[]>;
+  rollbackToCount(targetCount: number): Promise<void>;
+  
+  // Metrics and status
+  getMetrics(): MemoryMetrics;
+  getMessageCount(): number;
+  getTokenCount(): number;
+  isNearLimit(): boolean;
+  
+  // Formatting helpers
+  formatStepInstruction(stepId: string, prompt: string): string;
+  formatToolResults(results: Record<string, ToolResult>): string;
+  formatSystemPrompt(basePrompt: string, context?: string): string;
+  
+  // Checkpoint operations
+  createCheckpoint(id: string): void;
+  rollbackToCheckpoint(id: string): void;
+  
+  // Memory management
+  clear(): void;
+}
+```
+
+### Memory Interface
+
+```typescript
+interface Memory {
+  name: string;
+  
+  add(messages: MemoryMessage[]): Promise<void>;
+  retrieve(options?: RetrievalOptions): Promise<MemoryMessage[]>;
+  compress?(options?: CompressionOptions): Promise<void>;
+  getMetrics(): MemoryMetrics;
+  clear(): void;
+  rollback?(checkpoint: string): void;
+  createCheckpoint?(id: string): void;
+}
+```
+
+### MemoryCompressor Interface
+
+```typescript
+interface MemoryCompressor {
+  name: string;
+  
+  compress(
+    messages: MemoryMessage[], 
+    targetTokens: number,
+    session?: Session
+  ): Promise<MemoryMessage[]>;
+  
+  shouldCompress(metrics: MemoryMetrics, config: MemoryConfig): boolean;
+}
+```
+
+### MemoryFormatter Interface
+
+```typescript
+interface MemoryFormatter {
+  formatMessages(messages: MemoryMessage[]): Message[];
+  formatToolResults?(results: Record<string, ToolResult>): string;
+  formatStepInstruction?(stepId: string, prompt: string): string;
+  formatSystemPrompt?(basePrompt: string, context?: string): string;
+}
+```
+
+### MemoryConfig
+
+```typescript
+interface MemoryConfig {
+  memory?: Memory;
+  formatter?: MemoryFormatter;
+  memoryCompressor?: MemoryCompressor;
+  maxTokens?: number;
+  compressionThreshold?: number; // 0-1, percentage of maxTokens
+  autoCompress?: boolean;
+  checkpointInterval?: number;
+}
+```
+
 ## Best Practices
 
-1. **Choose the right strategy for your use case:**
-   - Use `SlidingWindowStrategy` for most applications
-   - Use semantic search for RAG-style applications
-   - Use custom strategies for specific requirements
+1. **Choose the right memory implementation:**
+   - Use `SlidingWindowMemory` for most applications
+   - Use semantic search/vector DB for RAG-style applications
+   - Use custom implementations for specific requirements
 
 2. **Set appropriate token limits:**
    - Leave headroom for your prompts and outputs
    - Monitor `MemoryMetrics` to tune limits
+   - Consider your model's context window
 
 3. **Customize formatters for your domain:**
    - Use clear, consistent formatting
    - Include relevant context in templates
+   - Test different formats to find what works best
 
 4. **Test compression strategies:**
    - Ensure summaries preserve critical information
    - Balance compression ratio vs. context preservation
+   - Monitor compression frequency
 
 5. **Use metadata effectively:**
    - Tag important messages with high priority
    - Use timestamps for temporal filtering
    - Use custom types for domain-specific filtering
 
-## API Reference
+6. **Leverage checkpoints:**
+   - Create checkpoints before risky operations
+   - Use rollback to recover from errors
+   - Clean up old checkpoints periodically
 
-See the [TypeScript definitions](src/types/memory.ts) for complete API documentation.
+## Common Patterns
+
+### Pattern 1: Simple Chat Agent
+
+```typescript
+const workflow = {
+  id: 'chat-agent',
+  memoryConfig: {
+    memory: new SlidingWindowMemory(2048)
+  },
+  // ...
+};
+```
+
+### Pattern 2: Long-Running Agent with Summarization
+
+```typescript
+const workflow = {
+  id: 'long-running-agent',
+  memoryConfig: {
+    memory: new SlidingWindowMemory(4096),
+    memoryCompressor: new LLMSummarization({
+      systemPrompt: 'Summarize focusing on decisions and outcomes.',
+      maxSummaryTokens: 512
+    }),
+    maxTokens: 4096,
+    compressionThreshold: 0.75
+  },
+  // ...
+};
+```
+
+### Pattern 3: RAG-Style Agent
+
+```typescript
+const workflow = {
+  id: 'rag-agent',
+  memoryConfig: {
+    memory: new VectorDBMemory('connection-string'),
+    maxTokens: 8192
+  },
+  // ...
+};
+```
+
+### Pattern 4: Multi-Step Workflow with Custom Formatting
+
+```typescript
+const workflow = {
+  id: 'multi-step-workflow',
+  memoryConfig: {
+    memory: new SlidingWindowMemory(4096),
+    formatter: new DefaultMemoryFormatter({
+      stepInstructionTemplate: '### Step {stepId}\n{prompt}',
+      toolResultsTemplate: '## Results\n{results}'
+    }),
+    maxTokens: 4096
+  },
+  // ...
+};
+```
 
 ## Examples
 
-- [Basic workflow with default memory](examples/weather-planner-demo.html)
-- [Custom memory strategy example](examples/custom-memory-strategy.ts) (TODO)
-- [Semantic search with vector DB](examples/semantic-memory.ts) (TODO)
+Check out these example implementations:
 
+- [Basic workflow with default memory](examples/weather-planner-demo.html)
+- Creating custom memory strategies (see "Creating Custom Implementations" above)
+- Using semantic search with vector databases (see "Custom Memory Implementation" above)
+
+## Troubleshooting
+
+### Memory Growing Too Fast
+
+If memory grows faster than expected:
+- Lower `maxTokens` in your config
+- Reduce `compressionThreshold` for more aggressive compression
+- Use `LLMSummarization` for better compression ratios
+
+### Losing Important Context
+
+If compression is losing critical information:
+- Tag important messages with high `priority` in metadata
+- Use `preserveTypes` in compression options
+- Increase `compressionThreshold` to compress less frequently
+- Customize summarization prompts to preserve specific information
+
+### Performance Issues
+
+If memory operations are slow:
+- Use simpler memory implementations (avoid complex DB queries)
+- Reduce compression frequency
+- Optimize your custom implementations
+- Monitor `MemoryMetrics` to identify bottlenecks

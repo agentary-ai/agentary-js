@@ -42,13 +42,7 @@ export class StepExecutor {
     // Track initial message count for potential rollback
     const initialMessageCount = this.workflowStateManager.getMessageCount();
 
-    try {
-      // Validate step before execution
-      const validationError = this.validateStep(step, stepState, stepStartTime);
-      if (validationError) {
-        return validationError;
-      }
-      
+    try {      
       // Increment attempt counter
       stepState.attempts = stepState.attempts + 1;
 
@@ -79,31 +73,6 @@ export class StepExecutor {
     } catch (error: any) {
       return this.handleError(error, step, stepState, stepStartTime, initialMessageCount);
     }
-  }
-
-  private validateStep(
-    step: WorkflowStep, 
-    stepState: any, 
-    stepStartTime: number
-  ): WorkflowIterationResponse | null {
-    // Check if step has already exceeded max retry attempts before this attempt
-    if (stepState.maxAttempts && stepState.attempts >= stepState.maxAttempts) {
-      stepState.complete = false;
-      this.workflowStateManager.handleStepCompletion(step.id, false);
-      return {
-        stepId: step.id,
-        error: {
-          message: 'Max retries exceeded'
-        },
-        metadata: {
-          duration: Date.now() - stepStartTime,
-          stepType: step.generationTask,
-          attempts: stepState.attempts,
-          maxAttempts: stepState.maxAttempts
-        }
-      };
-    }
-    return null;
   }
 
   private async prepareGeneration(
@@ -210,6 +179,7 @@ export class StepExecutor {
         thinkingContent: thinkingContent?.substring(0, 200) // Log first 200 chars of thinking
       });
       // Rollback any messages that were added during this step execution
+      // TODO: Implement checkpoint-based rollback
       this.workflowStateManager.rollbackMessagesToCount(initialMessageCount);
       this.workflowStateManager.handleStepCompletion(step.id, false);
       const willRetry = stepState.maxAttempts && stepState.attempts < stepState.maxAttempts;
@@ -281,7 +251,7 @@ export class StepExecutor {
         }
       ], isLastStep);
       
-      this.workflowStateManager.addToolResultToMemory(step.id, {
+      this.workflowStateManager.addToolResult(step.id, {
         name: toolCall.name,
         description: toolSelected.function.description,
         result: JSON.stringify(toolResult)

@@ -1,10 +1,10 @@
-import { AgentMemoryConfig, AgentWorkflow } from "./agent-session";
+import { AgentWorkflow } from "./agent-session";
 import { Tool } from "./worker";
 import { Message } from "./worker";
 
   export interface StepState {
     id: string;
-    description: string;
+    // description: string;
     result?: string;
     complete: boolean;
     attempts: number;
@@ -42,16 +42,17 @@ import { Message } from "./worker";
   
   export interface WorkflowState {
     workflow: AgentWorkflow;
-    systemPrompt?: string;
+    userPrompt: string;
     startTime: number;
     completedSteps: Set<string>;
     iteration: number;
     maxIterations: number;
     timeout: number;
     tools: Tool[];
-    memory: AgentMemory;
-    memoryConfig?: AgentMemoryConfig;
-    currentTokenCount?: number;
-    tokenCountLastUpdated?: Date;
-    memoryMetrics?: WorkflowMemoryMetrics;
+    steps: Record<string, StepState>;
+    toolResults: Record<string, ToolResult>;
+    // memory: AgentMemory;
+    // currentTokenCount?: number;
+    // tokenCountLastUpdated?: Date;
+    // memoryMetrics?: WorkflowMemoryMetrics;
   }

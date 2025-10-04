@@ -6,8 +6,9 @@ export { LogConfigs, getEnvironmentConfig, enableDebuggingMode, disableDebugging
 
 // Memory system exports
 export { 
-  SlidingWindowStrategy,
-  SummarizationCompressionStrategy,
+  MemoryManager,
+  SlidingWindowMemory,
+  LLMSummarization,
   DefaultMemoryFormatter
 } from './memory';
 export type {
@@ -15,13 +16,12 @@ export type {
   RetrievalOptions,
   CompressionOptions,
   MemoryMetrics,
-  MemoryStrategy,
+  Memory,
   MemoryFormatter,
-  CompressionStrategy,
+  MemoryCompressor,
   ToolResult,
   MemoryConfig,
-  SummarizationConfig,
-  FormatterConfig
+  LLMSummarizationConfig,
 } from './memory';
 
 export type { 

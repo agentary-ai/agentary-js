@@ -1,344 +1,85 @@
 import type { AgentWorkflow, WorkflowStep } from '../types/agent-session';
 import type { Message, Tool } from '../types/worker';
-import type { WorkflowState, AgentMemory, StepState, WorkflowMemoryMetrics } from '../types/workflow-state';
+import type { WorkflowState, StepState } from '../types/workflow-state';
 import type { Session } from '../types/session';
-import type { 
-  MemoryStrategy, 
-  MemoryFormatter, 
-  CompressionStrategy,
-  MemoryMessage,
-  MemoryConfig,
-  ToolResult
-} from '../types/memory';
+import type { MemoryConfig, ToolResult } from '../types/memory';
 
 import { logger } from '../utils/logger';
-import { TokenCounter } from '../utils/token-counter';
-import { SlidingWindowStrategy } from '../memory/strategies/sliding-window-strategy';
-import { DefaultMemoryFormatter } from '../memory/formatters/default-formatter';
+import { MemoryManager } from '../memory/memory-manager';
 
 export class WorkflowStateManager {
-  private readonly DEFAULT_MAX_TOKENS = 2048;
-  private readonly DEFAULT_WARNING_THRESHOLD = 0.8;
-
   private state?: WorkflowState;
-  private session: Session | undefined;
-  private tokenCounter: TokenCounter;
-  private memoryStrategy: MemoryStrategy;
-  private memoryFormatter: MemoryFormatter;
-  private compressionStrategy?: CompressionStrategy;
-  private memoryConfig?: MemoryConfig;
+  private session: Session;
+  private memoryManager: MemoryManager;
   
-  constructor(session?: Session, memoryConfig?: MemoryConfig) {
+  constructor(session: Session, memoryConfig?: MemoryConfig) {
     this.session = session;
-    this.tokenCounter = new TokenCounter();
-    
-    if (memoryConfig) {
-      this.memoryConfig = memoryConfig;
-    }
-    
-    // Use provided or default strategies
-    this.memoryStrategy = memoryConfig?.strategy || 
-      new SlidingWindowStrategy(memoryConfig?.maxTokens || this.DEFAULT_MAX_TOKENS);
-    
-    this.memoryFormatter = memoryConfig?.formatter || 
-      new DefaultMemoryFormatter();
-    
-    if (memoryConfig?.compressionStrategy) {
-      this.compressionStrategy = memoryConfig.compressionStrategy;
-    }
+    this.memoryManager = new MemoryManager(session, memoryConfig);
   }
 
   initializeState(userPrompt: string, workflow: AgentWorkflow, tools: Tool[]): void {
-    // Update memory config and strategy if workflow provides one
+    // Update memory manager if workflow provides config
     if (workflow.memoryConfig) {
-      this.memoryConfig = workflow.memoryConfig;
-      
-      if (workflow.memoryConfig.strategy) {
-        this.memoryStrategy = workflow.memoryConfig.strategy;
-      }
-      if (workflow.memoryConfig.formatter) {
-        this.memoryFormatter = workflow.memoryConfig.formatter;
-      }
-      if (workflow.memoryConfig.compressionStrategy) {
-        this.compressionStrategy = workflow.memoryConfig.compressionStrategy;
-      }
+      this.memoryManager = new MemoryManager(this.session, workflow.memoryConfig);
     }
+
+    const steps: Record<string, StepState> = {};
+    workflow.steps.forEach(step => {
+      steps[step.id] = {
+        id: step.id,
+        complete: false,
+        attempts: 0,
+        maxAttempts: step.maxAttempts ?? 3,
+      };
+    });
     
     this.state = {
       workflow,
+      userPrompt,
       startTime: Date.now(),
       completedSteps: new Set<string>(),
       iteration: 1,
       maxIterations: workflow.maxIterations ?? 10,
       timeout: workflow.timeout ?? 60000,
       tools: [...tools, ...workflow.tools],
-      memory: this.initializeMemory(
-        workflow.steps,
-        workflow.systemPrompt,
-        userPrompt,
-        workflow.name,
-        workflow.description,
-        workflow.context,
-      ),
-    };
-    if (workflow.systemPrompt) {
-      this.state.systemPrompt = workflow.systemPrompt;
-    }
-    
-    // Clear memory strategy for fresh start
-    this.memoryStrategy.clear();
-    
-    // Initialize memory metrics
-    this.initializeMemoryMetrics();
-  }
-
-  private initializeMemory(
-    workflowSteps: WorkflowStep[],
-    workflowSystemPrompt: string | undefined,
-    workflowUserPrompt: string,
-    workflowName: string | undefined,
-    workflowDescription: string | undefined,
-    context: Record<string, any> | undefined,
-  ): AgentMemory {
-    const stepsState: Record<string, StepState> = {};
-    workflowSteps.forEach(step => {
-      stepsState[step.id] = {
-        id: step.id,
-        description: step.description,
-        complete: false,
-        attempts: 0,
-        maxAttempts: step.maxAttempts ?? 3,
-      };
-    });
-
-    const memory: AgentMemory = {
-      workflowUserPrompt,
-      steps: stepsState,
+      steps,
       toolResults: {},
-      messages: [],
     };
-    if (workflowName) {
-      memory.workflowName = workflowName;
-    }
-    if (workflowDescription) {
-      memory.workflowDescription = workflowDescription;
-    }
-    if (workflowSystemPrompt) {
-      memory.workflowSystemPrompt = workflowSystemPrompt;
-    }
-    if (context) {
-      memory.context = context;
-    }
-    return memory;
-  }
 
-  private initializeMemoryMetrics(): void {
-    if (!this.state) {
-      throw new Error('State not initialized');
-    }
-    
-    const strategyMetrics = this.memoryStrategy.getMetrics();
-    this.state.memoryMetrics = {
-      messageCount: strategyMetrics.messageCount,
-      estimatedTokens: strategyMetrics.estimatedTokens,
-      pruneCount: strategyMetrics.compressionCount,
-      summarizationCount: strategyMetrics.compressionCount,
-      avgStepResultSize: 0,
-      maxTokenLimit: this.memoryConfig?.maxTokens || this.DEFAULT_MAX_TOKENS,
-      warningThreshold: this.memoryConfig?.compressionThreshold || this.DEFAULT_WARNING_THRESHOLD,
-    };
+    this.memoryManager.clear();
   }
-
-  private updateMemoryMetrics(): void {
-    if (!this.state) return;
-    
-    const strategyMetrics = this.memoryStrategy.getMetrics();
-    
-    // Update workflow state metrics
-    if (this.state.memoryMetrics) {
-      this.state.memoryMetrics.messageCount = strategyMetrics.messageCount;
-      this.state.memoryMetrics.estimatedTokens = strategyMetrics.estimatedTokens;
-      this.state.memoryMetrics.summarizationCount = strategyMetrics.compressionCount;
-      this.state.memoryMetrics.pruneCount = strategyMetrics.compressionCount;
-      
-      if (strategyMetrics.lastCompressionTime !== undefined) {
-        this.state.memoryMetrics.lastSummarizationTime = strategyMetrics.lastCompressionTime;
-        this.state.memoryMetrics.lastPruneTime = strategyMetrics.lastCompressionTime;
-      }
-    }
-    
-    // Calculate average step result size
-    const stepResults = Object.values(this.state.memory.steps)
-      .filter(s => s.result)
-      .map(s => s.result!.length);
-    
-    if (this.state.memoryMetrics && stepResults.length > 0) {
-      this.state.memoryMetrics.avgStepResultSize = 
-        stepResults.reduce((a, b) => a + b, 0) / stepResults.length;
-    }
-    
-    // Update current token count
-    this.state.currentTokenCount = strategyMetrics.estimatedTokens;
-    this.state.tokenCountLastUpdated = new Date();
-    
-    logger.agent.debug('Memory metrics updated', {
-      messageCount: strategyMetrics.messageCount,
-      estimatedTokens: strategyMetrics.estimatedTokens,
-      compressionCount: strategyMetrics.compressionCount
-    });
-  }
-
-  private async checkMemoryPressure(): Promise<void> {
-    if (!this.state?.memoryMetrics) return;
-    
-    const metrics = this.memoryStrategy.getMetrics();
-    const config = this.memoryConfig || { 
-      maxTokens: this.DEFAULT_MAX_TOKENS, 
-      compressionThreshold: this.DEFAULT_WARNING_THRESHOLD 
-    };
-    
-    // Check if compression is needed
-    if (this.compressionStrategy?.shouldCompress(metrics, config)) {
-      logger.agent.warn('Memory pressure detected, compressing', {
-        currentTokens: metrics.estimatedTokens,
-        maxTokens: config.maxTokens,
-        messageCount: metrics.messageCount
-      });
-      
-      const messages = await this.memoryStrategy.retrieve();
-      const targetTokens = Math.floor((config.maxTokens || this.DEFAULT_MAX_TOKENS) * 0.6);
-      
-      const compressed = await this.compressionStrategy.compress(
-        messages,
-        targetTokens,
-        this.session
-      );
-      
-      this.memoryStrategy.clear();
-      await this.memoryStrategy.add(compressed);
-      this.updateMemoryMetrics();
-    } else if (this.isContextNearLimit()) {
-      // Fallback to simple pruning if no compression strategy
-      const targetTokens = Math.floor((config.maxTokens || this.DEFAULT_MAX_TOKENS) * 0.7);
-      if (this.memoryStrategy.compress) {
-        await this.memoryStrategy.compress({
-          targetTokens,
-          preserveTypes: ['system', 'summary']
-        });
-        this.updateMemoryMetrics();
-      }
-    }
-  }
-
 
   async addMessagesToMemory(messages: Message[], skipCompression = false): Promise<void> {
-    if (!this.state) {
-      throw new Error('State not initialized');
-    }
-    
-    logger.agent.debug('Adding messages to memory', {
-      messageCount: messages.length,
-      skipCompression
-    });
-    
-    // Convert to MemoryMessage format with metadata
-    const memoryMessages: MemoryMessage[] = messages.map(m => ({
-      role: m.role,
-      content: m.content,
-      metadata: {
-        timestamp: Date.now(),
-        type: this.inferMessageType(m)
-      }
-    }));
-    
-    // Add to memory strategy
-    await this.memoryStrategy.add(memoryMessages);
-    
-    // Also add to legacy memory for backward compatibility
-    if (!this.state.memory.messages) {
-      this.state.memory.messages = [];
-    }
-    this.state.memory.messages.push(...messages);
-    
-    // Update metrics
-    this.updateMemoryMetrics();
-    
-    // Check memory pressure if not skipped
-    if (!skipCompression) {
-      await this.checkMemoryPressure();
-    }
-  }
-  
-  private inferMessageType(message: Message): 'system' | 'user' | 'assistant' | 'tool_result' | 'step' | 'summary' {
-    if (message.role === 'system') return 'system';
-    if (message.content.startsWith('**Step:**')) return 'step';
-    if (message.role === 'user') {
-      try {
-        JSON.parse(message.content);
-        return 'tool_result';
-      } catch {
-        return 'user';
-      }
-    }
-    return 'assistant';
+    await this.memoryManager.addMessages(messages, skipCompression);
   }
 
   async getMessages(): Promise<Message[]> {
-    if (!this.state) {
-      throw new Error('State not initialized');
-    }
-    
-    // Retrieve from memory strategy and format
-    const memoryMessages = await this.memoryStrategy.retrieve();
-    return this.memoryFormatter.formatMessages(memoryMessages);
+    return await this.memoryManager.getMessages();
   }
 
-  addToolResultToMemory(stepId: string, toolResult: ToolResult): void {
+  addToolResult(stepId: string, toolResult: ToolResult): void {
     if (!this.state) {
       throw new Error('State not initialized');
     }
-    
     logger.agent.debug('Adding tool result to memory', {
       stepId,
       toolResult
     });
-    this.state.memory.toolResults['step_' + stepId] = toolResult;
+    this.state.toolResults['step_' + stepId] = toolResult;
   }
   
   getToolResults(): Record<string, ToolResult> {
     if (!this.state) {
       throw new Error('State not initialized');
     }
-    return this.state.memory.toolResults;
+    return this.state.toolResults;
   }
 
   async rollbackMessagesToCount(targetCount: number) {
     if (!this.state) {
       throw new Error('State not initialized');
     }
-    
-    const currentMessages = await this.memoryStrategy.retrieve();
-    const currentCount = currentMessages.length;
-    
-    if (currentCount > targetCount) {
-      // Clear and re-add only the messages we want to keep
-      this.memoryStrategy.clear();
-      await this.memoryStrategy.add(currentMessages.slice(0, targetCount));
-      
-      // Also update legacy memory
-      if (this.state.memory.messages) {
-        this.state.memory.messages.splice(targetCount);
-      }
-      
-      this.updateMemoryMetrics();
-      
-      logger.agent.debug('Rolled back messages', { 
-        from: currentCount, 
-        to: targetCount,
-        removed: currentCount - targetCount,
-        newTokenCount: this.state.currentTokenCount
-      });
-    }
+    await this.memoryManager.rollbackToCount(targetCount);
   }
 
   getWorkflowPrompts(): Message[] {
@@ -347,62 +88,34 @@ export class WorkflowStateManager {
     }
     
     const toolResults = this.getToolResults();
-    const basePrompt = this.state.systemPrompt ?? 
+    const basePrompt = this.state.workflow.systemPrompt ?? 
       'You are a helpful AI agent. Think step-by-step. When a tool is needed, ' +
       'call it with minimal arguments. Be concise when replying to the user.';
     
-    // Format tool results using the formatter if available
-    const toolResultsContext = this.memoryFormatter.formatToolResults 
-      ? this.memoryFormatter.formatToolResults(toolResults)
-      : this.formatToolResultsDefault(toolResults);
-    
-    const systemPrompt = this.memoryFormatter.formatSystemPrompt
-      ? this.memoryFormatter.formatSystemPrompt(basePrompt, toolResultsContext)
-      : basePrompt + (toolResultsContext ? '\n' + toolResultsContext : '');
+    // Format using memory manager
+    const toolResultsContext = this.memoryManager.formatToolResults(toolResults);
+    const systemPrompt = this.memoryManager.formatSystemPrompt(basePrompt, toolResultsContext);
     
     return [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: this.state.memory.workflowUserPrompt }
+      { role: 'user', content: this.state.userPrompt }
     ];
   }
   
-  private formatToolResultsDefault(toolResults: Record<string, ToolResult>): string {
-    if (Object.values(toolResults).length === 0) return '';
-    
-    return '**Tool Results:**\n' +
-      Object.values(toolResults)
-        .map(tr => `${tr.name}: ${tr.description}\n${tr.result}`)
-        .join('\n');
-  }
-  
   getFormattedStepInstruction(stepId: string, prompt: string): string {
-    return this.memoryFormatter.formatStepInstruction
-      ? this.memoryFormatter.formatStepInstruction(stepId, prompt)
-      : `**Step:** ${stepId}: ${prompt}`;
+    return this.memoryManager.formatStepInstruction(stepId, prompt);
   }
 
   getMessageCount(): number {
-    if (!this.state) {
-      throw new Error('State not initialized');
-    }
-    return this.memoryStrategy.getMetrics().messageCount;
+    return this.memoryManager.getMessageCount();
   }
 
   getCurrentTokenCount(): number {
-    if (!this.state) {
-      throw new Error('State not initialized');
-    }
-    return this.memoryStrategy.getMetrics().estimatedTokens;
-  }
-
-  getMemoryMetrics(): WorkflowMemoryMetrics | undefined {
-    return this.state?.memoryMetrics;
+    return this.memoryManager.getTokenCount();
   }
 
   isContextNearLimit(): boolean {
-    if (!this.state?.memoryMetrics) return false;
-    const { estimatedTokens, maxTokenLimit, warningThreshold } = this.state.memoryMetrics;
-    return estimatedTokens > maxTokenLimit * warningThreshold;
+    return this.memoryManager.isNearLimit();
   }
 
   getState(): WorkflowState {
@@ -424,7 +137,9 @@ export class WorkflowStateManager {
       maxIterations: this.state.maxIterations,
       completedSteps: Array.from(this.state.completedSteps)
     });
+    
     const completedSteps = this.state.completedSteps;
+
     return this.state.workflow.steps.find(step => {
       if (!step.id || completedSteps.has(step.id)) {
         logger.agent.debug('Skipping step', {
@@ -435,7 +150,7 @@ export class WorkflowStateManager {
       }
       
       // Check if step has exceeded max retry attempts
-      const stepState = this.state!.memory.steps[step.id];
+      const stepState = this.state!.steps[step.id];
       if (stepState && stepState.maxAttempts && stepState.attempts >= stepState.maxAttempts) {
         logger.agent.debug('Step has exceeded max retry attempts', {
           stepId: step.id,
@@ -464,22 +179,22 @@ export class WorkflowStateManager {
     if (!this.state) {
       throw new Error('State not initialized');
     }
-    if (!this.state.memory.steps[stepId]) {
+    if (!this.state.steps[stepId]) {
       throw new Error('Step not found');
     }
-    return this.state.memory.steps[stepId];
+    return this.state.steps[stepId];
   }
 
   handleStepCompletion(stepId: string, complete: boolean, result?: string) {
     if (!this.state) {
       throw new Error('State not initialized');
     }
-    if (!this.state.memory.steps[stepId]) {
+    if (!this.state.steps[stepId]) {
       throw new Error('Step not found');
     }
-    this.state.memory.steps[stepId].complete = complete;
+    this.state.steps[stepId].complete = complete;
     if (result) {
-      this.state.memory.steps[stepId].result = result;
+      this.state.steps[stepId].result = result;
     }
 
     // Only add to completedSteps if the step actually completed successfully
@@ -506,7 +221,7 @@ export class WorkflowStateManager {
       const futureStep = steps[i];
       if (!futureStep?.id) continue;
       
-      const futureStepState = this.state.memory.steps[futureStep.id];
+      const futureStepState = this.state.steps[futureStep.id];
       if (!futureStepState) continue;
       
       // If this future step is not complete and hasn't exceeded max attempts, it's still pending

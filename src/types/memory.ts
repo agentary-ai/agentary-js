@@ -1,9 +1,9 @@
-import type { Message } from './worker';
+import type { Message, MessageRole } from './worker';
 import type { Session } from './session';
 
 // Core memory message with metadata
 export interface MemoryMessage {
-  role: string;
+  role: MessageRole;
   content: string;
   metadata?: {
     timestamp?: number;
@@ -26,7 +26,7 @@ export interface RetrievalOptions {
 // Options for compressing memory
 export interface CompressionOptions {
   targetTokens?: number;
-  strategy?: 'prune' | 'summarize' | 'hybrid';
+  // strategy?: 'prune' | 'summarize' | 'hybrid';
   preserveTypes?: string[]; // Message types to never compress
 }
 
@@ -35,11 +35,11 @@ export interface MemoryMetrics {
   messageCount: number;
   estimatedTokens: number;
   compressionCount: number;
-  lastCompressionTime?: number;
+  lastCompressionTime: number | undefined;
 }
 
-// Main memory strategy interface
-export interface MemoryStrategy {
+// Main memory interface
+export interface Memory {
   name: string;
   
   // Add messages to memory
@@ -80,7 +80,7 @@ export interface MemoryFormatter {
 }
 
 // Compression strategy interface
-export interface CompressionStrategy {
+export interface MemoryCompressor {
   name: string;
   
   // Compress messages
@@ -103,9 +103,9 @@ export interface ToolResult {
 
 // Memory configuration
 export interface MemoryConfig {
-  strategy?: MemoryStrategy;
+  memory?: Memory;
   formatter?: MemoryFormatter;
-  compressionStrategy?: CompressionStrategy;
+  memoryCompressor?: MemoryCompressor;
   maxTokens?: number;
   compressionThreshold?: number; // 0-1, percentage of maxTokens
   autoCompress?: boolean;

@@ -1,7 +1,10 @@
+// Memory manager
+export { MemoryManager } from './memory-manager';
+
 // Memory strategies
-export { SlidingWindowStrategy } from './strategies/sliding-window-strategy';
-export { SummarizationCompressionStrategy } from './strategies/summarization-compression';
-export type { SummarizationConfig } from './strategies/summarization-compression';
+export { SlidingWindowMemory } from './implementations/sliding-window-memory';
+export { LLMSummarization } from './implementations/llm-summarization';
+export type { LLMSummarizationConfig } from './implementations/llm-summarization';
 
 // Memory formatters
 export { DefaultMemoryFormatter } from './formatters/default-formatter';
@@ -13,9 +16,9 @@ export type {
   RetrievalOptions,
   CompressionOptions,
   MemoryMetrics,
-  MemoryStrategy,
+  Memory,
   MemoryFormatter,
-  CompressionStrategy,
+  MemoryCompressor,
   ToolResult,
   MemoryConfig
 } from '../types/memory';

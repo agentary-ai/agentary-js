@@ -1,5 +1,5 @@
 import type { 
-  CompressionStrategy, 
+  MemoryCompressor, 
   MemoryMessage, 
   MemoryMetrics, 
   MemoryConfig 
@@ -9,7 +9,7 @@ import { ContentProcessor } from '../../processing/content/processor';
 import { TokenCounter } from '../../utils/token-counter';
 import { logger } from '../../utils/logger';
 
-export interface SummarizationConfig {
+export interface LLMSummarizationConfig {
   systemPrompt?: string;
   userPromptTemplate?: string;
   temperature?: number;
@@ -20,14 +20,14 @@ export interface SummarizationConfig {
  * Compression strategy that uses LLM summarization to condense message history.
  * Generates concise summaries of conversation history to reduce token usage.
  */
-export class SummarizationCompressionStrategy implements CompressionStrategy {
-  name = 'summarization';
+export class LLMSummarization implements MemoryCompressor {
+  name = 'llm-summarization';
   
-  private config: SummarizationConfig;
+  private config: LLMSummarizationConfig;
   private contentProcessor: ContentProcessor;
   private tokenCounter: TokenCounter;
   
-  constructor(config: SummarizationConfig = {}) {
+  constructor(config: LLMSummarizationConfig = {}) {
     this.config = {
       systemPrompt: config.systemPrompt || 
         'Summarize conversation history into key facts only. Be extremely concise.',
@@ -102,7 +102,7 @@ export class SummarizationCompressionStrategy implements CompressionStrategy {
       logger.agent.info('Message history summarized', {
         originalMessageCount: messages.length,
         summaryLength: cleanContent.length,
-        summaryTokens: summaryMessage.metadata.tokenCount
+        summaryTokens: summaryMessage.metadata?.tokenCount
       });
       
       // Return summarized message
