@@ -40,7 +40,7 @@ async function handleInit(msg: InboundMessage) {
 
   const device = engine && engine !== 'auto' ? engine : 'webgpu';
 
-  // TODO: Add support for other tasks
+
   const pipelineResult = await pipeline('text-generation', model.name, {
     device: device || "auto",
     dtype: model.quantization || "auto",

@@ -34,6 +34,12 @@ export class DefaultMemoryFormatter implements MemoryFormatter {
         role: m.role,
         content: m.content
       };
+      if (m.tool_calls) {
+        message.tool_calls = m.tool_calls;
+      }
+      if (m.tool_call_id) {
+        message.tool_call_id = m.tool_call_id;
+      }
       
       // Optionally include metadata in content
       if (this.config.includeMetadata && m.metadata?.type) {

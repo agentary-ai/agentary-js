@@ -83,10 +83,13 @@ export class StepExecutor {
 
     // Use formatter to format step instruction
     const stepInstruction = this.workflowStateManager.getFormattedStepInstruction(step.id, prompt);
-    
+
     await this.workflowStateManager.addMessagesToMemory([{
       role: 'user',
       content: stepInstruction,
+      metadata: {
+        type: 'step_prompt'
+      }
     }], true);
 
     if (step.generationTask) {
@@ -157,7 +160,7 @@ export class StepExecutor {
     stepState: any,
     stepStartTime: number
   ): Promise<WorkflowIterationResponse> {
-    // Parse potential tool calls from the clean content
+    const toolCallId = (Math.random().toString(36).slice(2, 12));
     const toolCall = this.toolParser.parse(cleanContent);
     logger.agent.debug('Tool call parsing result', { 
       stepId: step.id,
@@ -237,11 +240,29 @@ export class StepExecutor {
       await this.workflowStateManager.addMessagesToMemory([
         {
           role: 'assistant',
-          content: cleanContent,
+          // content: cleanContent,
+          content: "",
+          tool_calls: [
+            {
+              id: toolCallId,
+              type: 'function',
+              function: {
+                name: toolCall.name,
+                arguments: toolCall.args
+              }
+            }
+          ],
+          metadata: {
+            type: 'step_result'
+          }
         },
         {
-          role: 'user',
+          role: 'tool',
+          tool_call_id: toolCallId,
           content: JSON.stringify(toolResult),
+          metadata: {
+            type: 'tool_result'
+          }
         }
       ], isLastStep);
       
@@ -330,8 +351,6 @@ export class StepExecutor {
       maxAttempts: stepState.maxAttempts,
       willRetry,
       checkpointId: step.id,
-      currentTokenCount: this.workflowStateManager.getCurrentTokenCount(),
-      memoryPressure: this.workflowStateManager.isContextNearLimit()
     });
     
     this.workflowStateManager.handleStepCompletion(step.id, false);

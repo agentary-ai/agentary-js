@@ -88,26 +88,6 @@ export class WorkflowStateManager {
     }
     await this.memoryManager.rollbackToCount(targetCount);
   }
-
-  // getWorkflowPrompts(): Message[] {
-  //   if (!this.state) {
-  //     throw new Error('State not initialized');
-  //   }
-    
-  //   const toolResults = this.getToolResults();
-  //   const basePrompt = this.state.workflow.systemPrompt ?? 
-  //     'You are a helpful AI agent. Think step-by-step. When a tool is needed, ' +
-  //     'call it with minimal arguments. Be concise when replying to the user.';
-    
-  //   // Format using memory manager
-  //   const toolResultsContext = this.memoryManager.formatToolResults(toolResults);
-  //   const systemPrompt = this.memoryManager.formatSystemPrompt(basePrompt, toolResultsContext);
-    
-  //   return [
-  //     { role: 'system', content: systemPrompt },
-  //     { role: 'user', content: this.state.userPrompt }
-  //   ];
-  // }
   
   getFormattedStepInstruction(stepId: string, prompt: string): string {
     return this.memoryManager.formatStepInstruction(stepId, prompt);
@@ -119,10 +99,6 @@ export class WorkflowStateManager {
 
   getCurrentTokenCount(): number {
     return this.memoryManager.getTokenCount();
-  }
-
-  isContextNearLimit(): boolean {
-    return this.memoryManager.isNearLimit();
   }
 
   getState(): WorkflowState {
