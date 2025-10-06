@@ -51,9 +51,21 @@ export class StepExecutor {
 
       // Generate response
       const stepResult = await this.executeGeneration(step, generateArgs);
-
+      logger.agent.debug('Model response received', {
+        stepId: step.id,
+        stepResult,
+        generationTask: step.generationTask,
+        currentTokenCount: this.workflowStateManager.getCurrentTokenCount(),
+        messageCount: this.workflowStateManager.getMessageCount(),
+      });
+      
       // Filter out thinking tags and extract clean content
       const { cleanContent, thinkingContent } = this.contentProcessor.removeThinkTags(stepResult);
+      logger.agent.debug('Model response parsed', {
+        stepId: step.id,
+        cleanContent,
+        thinkingContent,
+      });
       
       if (step.generationTask === 'tool_use') {
         return await this.handleToolUse(
@@ -253,7 +265,7 @@ export class StepExecutor {
             }
           ],
           metadata: {
-            type: 'step_result'
+            type: 'tool_use'
           }
         },
         {
@@ -291,6 +303,9 @@ export class StepExecutor {
       await this.workflowStateManager.addMessagesToMemory([{
         role: 'assistant',
         content: cleanContent,
+        metadata: {
+          type: 'tool_use'
+        }
       }], isLastStep);
       
       return {
@@ -318,6 +333,9 @@ export class StepExecutor {
     this.workflowStateManager.addMessagesToMemory([{
       role: 'assistant',
       content: cleanContent,
+      metadata: {
+        type: 'step_result'
+      }
     }], isLastStep);
     
     this.workflowStateManager.handleStepCompletion(step.id, true, cleanContent);

@@ -7,7 +7,6 @@ import type {
   MemoryMessage,
   MemoryConfig,
   MemoryMetrics,
-  ToolResult,
 } from '../types/memory';
 
 import { logger } from '../utils/logger';
@@ -33,7 +32,7 @@ export class MemoryManager {
     
     // Set defaults
     this.config = {
-      maxTokens: config?.maxTokens || 2048,
+      maxTokens: config?.maxTokens || 1024,
       compressionThreshold: config?.compressionThreshold || 0.8,
       ...config
     };
@@ -152,24 +151,6 @@ export class MemoryManager {
   }
   
   /**
-   * Format tool results using the configured formatter
-   */
-  formatToolResults(results: Record<string, ToolResult>): string {
-    if (Object.values(results).length === 0) return '';
-    
-    return this.formatter.formatToolResults?.(results) 
-      || this.formatToolResultsDefault(results);
-  }
-  
-  /**
-   * Format system prompt with optional context
-   */
-  formatSystemPrompt(basePrompt: string, context?: string): string {
-    return this.formatter.formatSystemPrompt?.(basePrompt, context)
-      || basePrompt + (context ? '\n' + context : '');
-  }
-  
-  /**
    * Check if memory usage is near the configured limit
    */
   isNearLimit(): boolean {
@@ -223,25 +204,17 @@ export class MemoryManager {
         newTokens: this.getTokenCount()
       });
     }
+
     // Fallback to simple pruning
     else if (this.isNearLimit() && this.memory.compress) {
-      logger.agent.debug('Using fallback compression (pruning)');
-      
+      logger.agent.debug('Memory pressure detected, pruning messages', {
+        currentTokens: metrics.estimatedTokens,
+        maxTokens: this.config.maxTokens,
+        messageCount: metrics.messageCount
+      });
       await this.memory.compress({
         targetTokens: Math.floor(this.config.maxTokens * 0.7),
-        preserveTypes: ['system', 'summary']
       });
     }
   }
-  
-  /**
-   * Default tool results formatter
-   */
-  private formatToolResultsDefault(toolResults: Record<string, ToolResult>): string {
-    return '**Tool Results:**\n' +
-      Object.values(toolResults)
-        .map(tr => `${tr.name}: ${tr.description}\n${tr.result}`)
-        .join('\n');
-  }
 }
-

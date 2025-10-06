@@ -3,7 +3,8 @@ import type {
   MemoryMessage, 
   RetrievalOptions, 
   CompressionOptions,
-  MemoryMetrics 
+  MemoryMetrics,
+  MemoryMessageType
 } from '../../types/memory';
 import { TokenCounter } from '../../utils/token-counter';
 import { logger } from '../../utils/logger';
@@ -21,9 +22,11 @@ export class SlidingWindowMemory implements Memory {
   private checkpoints: Map<string, MemoryMessage[]> = new Map();
   private compressionCount = 0;
   private lastCompressionTime: number | undefined;
-  
-  constructor(maxTokens: number = 2048) {
+  private preserveMessageTypes: MemoryMessageType[] = [];
+
+  constructor(maxTokens: number = 1024, preserveMessageTypes: MemoryMessageType[] = ['system_instruction', 'user_prompt', 'summary']) {
     this.maxTokens = maxTokens;
+    this.preserveMessageTypes = preserveMessageTypes;
     this.tokenCounter = new TokenCounter();
   }
   
@@ -115,7 +118,7 @@ export class SlidingWindowMemory implements Memory {
     
     // Separate messages to preserve by priority
     const priorityMessages = this.messages.filter(m => 
-      options.preserveTypes?.includes(m.metadata?.type || '')
+      m.metadata?.type && this.preserveMessageTypes?.includes(m.metadata.type)
     );
     
     const priorityTokens = this.estimateTokens(priorityMessages);
@@ -123,7 +126,7 @@ export class SlidingWindowMemory implements Memory {
     
     // Get recent messages that fit within remaining budget
     const allMessages = this.messages.filter(m => 
-      !options.preserveTypes?.includes(m.metadata?.type || '')
+      !m.metadata?.type || !this.preserveMessageTypes?.includes(m.metadata.type)
     );
     
     const recentMessages: MemoryMessage[] = [];
@@ -207,7 +210,6 @@ export class SlidingWindowMemory implements Memory {
       
       await this.compress({
         targetTokens: Math.floor(this.maxTokens * 0.7),
-        preserveTypes: ['system', 'summary']
       });
     }
   }

@@ -3,7 +3,7 @@ import type { Session } from './session';
 
 export type MemoryMessageType = 
   'system_instruction' | 'user_prompt' | 'step_prompt' | 
-  'step_result' | 'tool_result' | 'summary';
+  'step_result' | 'tool_use' | 'tool_result' | 'summary';
 
 // Core memory message with metadata
 export interface MemoryMessage extends Message {
@@ -29,7 +29,7 @@ export interface RetrievalOptions {
 export interface CompressionOptions {
   targetTokens?: number;
   // strategy?: 'prune' | 'summarize' | 'hybrid';
-  preserveTypes?: string[]; // Message types to never compress
+  // preserveTypes?: MemoryMessageType[]; // Message types to never compress
 }
 
 // Memory metrics for monitoring

@@ -51,8 +51,4 @@ import { Message } from "./worker";
     tools: Tool[];
     steps: Record<string, StepState>;
     toolResults: Record<string, ToolResult>;
-    // memory: AgentMemory;
-    // currentTokenCount?: number;
-    // tokenCountLastUpdated?: Date;
-    // memoryMetrics?: WorkflowMemoryMetrics;
   }
