@@ -29,7 +29,7 @@ export interface RetrievalOptions {
 export interface CompressionOptions {
   targetTokens?: number;
   // strategy?: 'prune' | 'summarize' | 'hybrid';
-  // preserveTypes?: MemoryMessageType[]; // Message types to never compress
+  preserveTypes?: MemoryMessageType[]; // Message types to never compress
 }
 
 // Memory metrics for monitoring
@@ -106,6 +106,7 @@ export interface ToolResult {
 // Memory configuration
 export interface MemoryConfig {
   memory?: Memory;
+  preserveMessageTypes?: MemoryMessageType[];
   formatter?: MemoryFormatter;
   memoryCompressor?: MemoryCompressor;
   maxTokens?: number;

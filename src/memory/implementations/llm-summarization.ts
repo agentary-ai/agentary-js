@@ -14,6 +14,7 @@ export interface LLMSummarizationConfig {
   userPromptTemplate?: string;
   temperature?: number;
   maxSummaryTokens?: number;
+  enableThinking?: boolean;
 }
 
 /**
@@ -35,6 +36,7 @@ export class LLMSummarization implements MemoryCompressor {
         'Summarize this conversation:\n{messages}',
       temperature: config.temperature ?? 0.1,
       maxSummaryTokens: config.maxSummaryTokens ?? 512,
+      enableThinking: config.enableThinking ?? false,
       ...config
     };
     this.contentProcessor = new ContentProcessor();
@@ -43,7 +45,6 @@ export class LLMSummarization implements MemoryCompressor {
   
   async compress(
     messages: MemoryMessage[], 
-    targetTokens: number,
     session?: Session
   ): Promise<MemoryMessage[]> {
     if (!session) {
@@ -57,7 +58,6 @@ export class LLMSummarization implements MemoryCompressor {
     
     logger.agent.debug('Starting message summarization', {
       messageCount: messages.length,
-      targetTokens
     });
     
     // Format messages for summarization
@@ -77,7 +77,8 @@ export class LLMSummarization implements MemoryCompressor {
           { role: 'user', content: userPrompt }
         ],
         temperature: this.config.temperature!,
-        max_new_tokens: this.config.maxSummaryTokens!
+        max_new_tokens: this.config.maxSummaryTokens!,
+        enable_thinking: this.config.enableThinking!
       }, 'chat')) {
         if (!chunk.isLast) {
           summary += chunk.token;
@@ -119,7 +120,7 @@ export class LLMSummarization implements MemoryCompressor {
   
   shouldCompress(metrics: MemoryMetrics, config: MemoryConfig): boolean {
     const threshold = config.compressionThreshold ?? 0.8;
-    const maxTokens = config.maxTokens ?? 2048;
+    const maxTokens = config.maxTokens ?? 1024;
     const shouldCompress = metrics.estimatedTokens > maxTokens * threshold;
     
     if (shouldCompress) {

@@ -11,22 +11,17 @@ import { logger } from '../../utils/logger';
 
 /**
  * Sliding window memory strategy that keeps recent messages within token limit.
- * Automatically prunes old messages when approaching the limit.
  */
 export class SlidingWindowMemory implements Memory {
   name = 'sliding-window';
   
   private messages: MemoryMessage[] = [];
   private tokenCounter: TokenCounter;
-  private maxTokens: number;
   private checkpoints: Map<string, MemoryMessage[]> = new Map();
   private compressionCount = 0;
   private lastCompressionTime: number | undefined;
-  private preserveMessageTypes: MemoryMessageType[] = [];
 
-  constructor(maxTokens: number = 1024, preserveMessageTypes: MemoryMessageType[] = ['system_instruction', 'user_prompt', 'summary']) {
-    this.maxTokens = maxTokens;
-    this.preserveMessageTypes = preserveMessageTypes;
+  constructor() {
     this.tokenCounter = new TokenCounter();
   }
   
@@ -51,9 +46,6 @@ export class SlidingWindowMemory implements Memory {
       totalCount: this.messages.length,
       estimatedTokens: this.getMetrics().estimatedTokens
     });
-    
-    // Auto-prune if needed
-    await this.autoPrune();
   }
   
   async retrieve(options?: RetrievalOptions): Promise<MemoryMessage[]> {
@@ -118,7 +110,7 @@ export class SlidingWindowMemory implements Memory {
     
     // Separate messages to preserve by priority
     const priorityMessages = this.messages.filter(m => 
-      m.metadata?.type && this.preserveMessageTypes?.includes(m.metadata.type)
+      m.metadata?.type && options.preserveTypes?.includes(m.metadata.type)
     );
     
     const priorityTokens = this.estimateTokens(priorityMessages);
@@ -126,7 +118,7 @@ export class SlidingWindowMemory implements Memory {
     
     // Get recent messages that fit within remaining budget
     const allMessages = this.messages.filter(m => 
-      !m.metadata?.type || !this.preserveMessageTypes?.includes(m.metadata.type)
+      !m.metadata?.type || !options.preserveTypes?.includes(m.metadata.type)
     );
     
     const recentMessages: MemoryMessage[] = [];
@@ -195,23 +187,6 @@ export class SlidingWindowMemory implements Memory {
       checkpoint: id, 
       messageCount: this.messages.length 
     });
-  }
-  
-  private async autoPrune(): Promise<void> {
-    const metrics = this.getMetrics();
-    const threshold = this.maxTokens * 0.9;
-    
-    if (metrics.estimatedTokens > threshold) {
-      logger.agent.debug('Auto-pruning triggered', {
-        currentTokens: metrics.estimatedTokens,
-        threshold,
-        maxTokens: this.maxTokens
-      });
-      
-      await this.compress({
-        targetTokens: Math.floor(this.maxTokens * 0.7),
-      });
-    }
   }
   
   private estimateTokens(messages: MemoryMessage[]): number {

@@ -23,7 +23,7 @@ export class MemoryManager {
   private formatter: MemoryFormatter;
   private memoryCompressor?: MemoryCompressor;
   private tokenCounter: TokenCounter;
-  private config: Required<Pick<MemoryConfig, 'maxTokens' | 'compressionThreshold'>> & MemoryConfig;
+  private config: Required<Pick<MemoryConfig, 'maxTokens' | 'compressionThreshold' | 'preserveMessageTypes'>> & MemoryConfig;
   private session?: Session;
   
   constructor(session: Session, config?: MemoryConfig) {
@@ -34,12 +34,13 @@ export class MemoryManager {
     this.config = {
       maxTokens: config?.maxTokens || 1024,
       compressionThreshold: config?.compressionThreshold || 0.8,
+      preserveMessageTypes: config?.preserveMessageTypes || ['system_instruction', 'user_prompt', 'summary'],
       ...config
     };
     
     // Initialize strategies
     this.memory = config?.memory || 
-      new SlidingWindowMemory(this.config.maxTokens);
+      new SlidingWindowMemory();
     
     this.formatter = config?.formatter || 
       new DefaultMemoryFormatter();
@@ -187,6 +188,7 @@ export class MemoryManager {
       });
       
       const messages = await this.memory.retrieve();
+
       const targetTokens = Math.floor(this.config.maxTokens * 0.6);
       
       const compressed = await this.memoryCompressor.compress(
@@ -214,6 +216,7 @@ export class MemoryManager {
       });
       await this.memory.compress({
         targetTokens: Math.floor(this.config.maxTokens * 0.7),
+        preserveTypes: this.config.preserveMessageTypes
       });
     }
   }
