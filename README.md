@@ -351,30 +351,22 @@ Returns all currently registered tools.
 | `tools` | `Tool[]` | Tools available to the workflow |
 | `timeout` | `number` | Workflow timeout in milliseconds (optional) |
 | `maxIterations` | `number` | Maximum number of iterations (optional) |
-| `memoryConfig` | `AgentMemoryConfig` | Memory management configuration (optional) |
+| `memoryConfig` | `MemoryConfig` | Memory management configuration (optional) - see [Memory System](#-memory-system) |
 
-#### AgentMemoryConfig
+#### MemoryConfig
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `enableMessageSummarization` | `boolean` | Enable automatic summarization of old messages (optional, default: false) |
-| `enableMessagePruning` | `boolean` | Enable automatic pruning of old messages when token limit is reached (optional, default: false) |
-| `enableMessageHistory` | `boolean` | Enable full message history tracking (optional, default: false) |
-| `enableToolResultStorage` | `boolean` | Enable storage of tool execution results in memory (optional, default: false) |
-| `maxMemoryTokens` | `number` | Maximum token limit for workflow memory (optional, default: 512) |
-
-
-#### AgentMemoryConfig
-
-Configure advanced memory management features for workflows to optimize token usage and performance.
+Configure advanced memory management features for workflows to optimize token usage and performance. See the [Memory System](#-memory-system) section for comprehensive documentation.
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `enableMessageSummarization` | `boolean` | Enable automatic summarization of old messages (optional, default: false) |
-| `enableMessagePruning` | `boolean` | Enable automatic pruning of old messages when token limit is reached (optional, default: false) |
-| `enableMessageHistory` | `boolean` | Enable full message history tracking (optional, default: false) |
-| `enableToolResultStorage` | `boolean` | Enable storage of tool execution results in memory (optional, default: false) |
-| `maxMemoryTokens` | `number` | Maximum token limit for workflow memory (optional, default: 512) |
+| `memory` | `Memory` | Storage strategy implementation (optional, default: `SlidingWindowMemory`) |
+| `formatter` | `MemoryFormatter` | Message formatter (optional, default: `DefaultMemoryFormatter`) |
+| `memoryCompressor` | `MemoryCompressor` | Compression strategy (optional, default: none) |
+| `maxTokens` | `number` | Maximum token limit for workflow memory (optional, default: 1024) |
+| `compressionThreshold` | `number` | Percentage (0-1) of maxTokens to trigger compression (optional, default: 0.8) |
+| `preserveMessageTypes` | `string[]` | Message types to never compress (optional) |
+| `autoCompress` | `boolean` | Auto-compress when adding messages (optional) |
+| `checkpointInterval` | `number` | Checkpoint frequency for rollback support (optional) |
 
 #### Tool
 
@@ -422,6 +414,28 @@ Enhanced response type for workflow iterations:
 | `content` | `string` | Generated content (optional) |
 | `toolCall` | `object` | Tool execution details (optional) |
 | `metadata` | `Record<string, any>` | Additional metadata (optional) |
+
+#### Memory System Types
+
+The following types and classes are exported for memory system customization. See the [Memory System](#-memory-system) section for detailed documentation.
+
+**Classes:**
+- `MemoryManager` - Main memory management class
+- `SlidingWindowMemory` - Sliding window memory implementation
+- `LLMSummarization` - LLM-based memory compression
+- `DefaultMemoryFormatter` - Default message formatter
+
+**Types:**
+- `Memory` - Memory storage interface
+- `MemoryFormatter` - Message formatting interface
+- `MemoryCompressor` - Memory compression interface
+- `MemoryMessage` - Message with metadata
+- `MemoryConfig` - Memory configuration options
+- `MemoryMetrics` - Memory usage metrics
+- `RetrievalOptions` - Message retrieval options
+- `CompressionOptions` - Compression configuration
+- `ToolResult` - Tool execution result format
+- `LLMSummarizationConfig` - LLM summarization configuration
 
 ## 🌐 Browser Support
 
@@ -566,60 +580,593 @@ Agent workflows support four main step types:
 - Set reasonable timeouts and iteration limits
 - Plan for error scenarios
 
-#### 3. Context Management & Memory Configuration
+#### 3. Memory Management
 
-Configure agent memory to optimize performance and token usage:
+Configure agent memory to optimize performance and token usage. See the [Memory System](#-memory-system) section for comprehensive documentation.
 
-##### Memory Strategy Selection
+##### Quick Memory Configuration Examples
 ```javascript
+import { SlidingWindowMemory, LLMSummarization, DefaultMemoryFormatter } from 'agentary-js';
+
 // For long-running workflows with many steps
 const longWorkflowMemory = {
-  enableMessagePruning: true,        // Auto-remove old messages
-  enableMessageSummarization: true,  // Summarize conversation history
-  maxMemoryTokens: 2048,            // Higher limit for complex workflows
-  enableToolResultStorage: false    // Disable to save tokens
-};
-
-// For tool-heavy workflows
-const toolIntensiveMemory = {
-  enableToolResultStorage: true,     // Keep tool results in memory
-  enableMessageHistory: true,        // Full history for tool context
-  maxMemoryTokens: 1536,            // Moderate limit
-  enableMessagePruning: false       // Keep all messages for tool context
+  memory: new SlidingWindowMemory(),
+  memoryCompressor: new LLMSummarization({
+    maxSummaryTokens: 512,
+    recentWindowSize: 4
+  }),
+  maxTokens: 2048,
+  compressionThreshold: 0.75
 };
 
 // For simple sequential workflows
 const simpleWorkflowMemory = {
-  enableMessagePruning: false,       // Keep all messages (small workflow)
-  enableMessageSummarization: false, // No summarization needed
-  maxMemoryTokens: 512,             // Lower limit for efficiency
-  enableMessageHistory: false       // Minimal history tracking
+  memory: new SlidingWindowMemory(),
+  maxTokens: 1024,
+  compressionThreshold: 0.9  // Less aggressive compression
+};
+
+// For workflows with custom formatting
+const customFormattedMemory = {
+  memory: new SlidingWindowMemory(),
+  formatter: new DefaultMemoryFormatter({
+    stepInstructionTemplate: '## Step {stepId}\n{prompt}',
+    includeMetadata: true
+  }),
+  maxTokens: 1536
 };
 ```
 
 ##### Best Practices
-- **Token Management**: Set `maxMemoryTokens` to 20-30% of your model's context window
-- **Step Context**: Pass only essential context between steps using structured metadata
-- **Memory Pruning**: Enable for workflows with >5 steps or long conversations
-- **Tool Results**: Store tool results only when subsequent steps need the data
-- **Summarization**: Use for workflows that reference early conversation context
-- **History Tracking**: Enable full history only when steps need complete conversation context
-
-##### Dynamic Memory Adjustment
-```javascript
-// Adjust memory config based on workflow complexity
-const getMemoryConfig = (stepCount, hasTools, maxTokens) => ({
-  enableMessagePruning: stepCount > 5,
-  enableMessageSummarization: stepCount > 8,
-  enableToolResultStorage: hasTools,
-  maxMemoryTokens: Math.min(maxTokens * 0.3, 2048)
-});
-```
+- **Token Management**: Set `maxTokens` to 20-30% of your model's context window
+- **Memory Implementation**: Use `SlidingWindowMemory` for most use cases
+- **Compression**: Use `LLMSummarization` for workflows with >5 steps that reference early context
+- **Formatting**: Customize `DefaultMemoryFormatter` templates for your domain
+- **Monitoring**: Use `memoryManager.getMetrics()` to track memory usage
 
 #### 4. Model Selection
 - Use reasoning models for analysis and inference
 - Use tool_use models for tool-specific workflows
 - Consider using specialized models for domain-specific tasks
+
+## 🧠 Memory System
+
+The memory system provides a flexible, plugin-based architecture for managing agent memory during workflow execution. It allows you to customize how messages are stored, retrieved, formatted, and compressed to optimize performance and token usage.
+
+### Architecture
+
+The memory system consists of three main components managed by the `MemoryManager`:
+
+1. **Memory** - How messages are stored and retrieved (e.g., `SlidingWindowMemory`)
+2. **Memory Formatter** - How messages are formatted for the LLM (e.g., `DefaultMemoryFormatter`)
+3. **Memory Compressor** - How memory is compressed when it grows too large (e.g., `LLMSummarization`)
+
+```
+MemoryManager
+    ├── Memory (storage & retrieval)
+    │   └── SlidingWindowMemory
+    │   └── Your custom implementation
+    ├── MemoryFormatter (formatting)
+    │   └── DefaultMemoryFormatter
+    │   └── Your custom formatter
+    └── MemoryCompressor (compression)
+        └── LLMSummarization
+        └── Your custom compressor
+```
+
+### Quick Start with Memory
+
+#### Using Default Configuration
+
+The system works out of the box with sensible defaults:
+
+```javascript
+import { createAgentSession } from 'agentary-js';
+
+const agent = await createAgentSession({
+  models: {
+    chat: {
+      name: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4'
+    }
+  }
+});
+
+const workflow = {
+  id: 'my-workflow',
+  systemPrompt: 'You are a helpful assistant.',
+  maxIterations: 10,
+  steps: [/* your steps */],
+  tools: []
+};
+
+for await (const result of agent.runWorkflow('Help me plan my day', workflow)) {
+  console.log(result);
+}
+```
+
+#### Customizing Memory Configuration
+
+Configure memory with custom strategies:
+
+```javascript
+import { 
+  createAgentSession,
+  SlidingWindowMemory,
+  LLMSummarization,
+  DefaultMemoryFormatter
+} from 'agentary-js';
+
+const workflow = {
+  id: 'my-workflow',
+  systemPrompt: 'You are a helpful assistant.',
+  maxIterations: 10,
+  memoryConfig: {
+    memory: new SlidingWindowMemory(),
+    formatter: new DefaultMemoryFormatter({
+      stepInstructionTemplate: '**Task {stepId}:** {prompt}',
+      toolResultsTemplate: '**Available Data:**\n{results}'
+    }),
+    memoryCompressor: new LLMSummarization({
+      systemPrompt: 'Create a concise summary focusing on key decisions.',
+      maxSummaryTokens: 1024
+    }),
+    maxTokens: 4096,
+    compressionThreshold: 0.75 // Compress at 75% capacity
+  },
+  steps: [/* your steps */],
+  tools: []
+};
+```
+
+### Built-in Memory Implementations
+
+#### SlidingWindowMemory
+
+Keeps the most recent messages within a token limit. Automatically prunes old messages when approaching the limit.
+
+```javascript
+import { SlidingWindowMemory } from 'agentary-js';
+
+const memory = new SlidingWindowMemory();
+```
+
+**Features:**
+- Automatic pruning based on token limits
+- Preserves system and summary messages
+- Checkpoint/rollback support
+- Fast and efficient
+
+**Configuration in workflow:**
+```javascript
+memoryConfig: {
+  memory: new SlidingWindowMemory(),
+  maxTokens: 4096,
+  compressionThreshold: 0.8
+}
+```
+
+#### LLMSummarization
+
+Uses an LLM to intelligently summarize conversation history into a concise format.
+
+```javascript
+import { LLMSummarization } from 'agentary-js';
+
+const compressor = new LLMSummarization({
+  systemPrompt: 'Summarize the conversation focusing on key facts and decisions.',
+  userPromptTemplate: 'Summarize:\n{messages}',
+  temperature: 0.1,
+  maxSummaryTokens: 512,
+  recentWindowSize: 4, // Keep last 4 messages unsummarized
+  minMessagesToSummarize: 6 // Require at least 6 messages
+});
+```
+
+**Features:**
+- Intelligent summarization preserving context
+- Customizable prompts and templates
+- Configurable output length
+- Preserves recent messages
+
+**Configuration in workflow:**
+```javascript
+memoryConfig: {
+  memoryCompressor: new LLMSummarization({
+    systemPrompt: 'Focus on key decisions and outcomes.',
+    maxSummaryTokens: 1024,
+    recentWindowSize: 4
+  }),
+  compressionThreshold: 0.8
+}
+```
+
+#### DefaultMemoryFormatter
+
+Formats messages and context for LLM consumption with customizable templates.
+
+```javascript
+import { DefaultMemoryFormatter } from 'agentary-js';
+
+const formatter = new DefaultMemoryFormatter({
+  stepInstructionTemplate: '**Step {stepId}:** {prompt}',
+  toolResultsTemplate: '**Tool Results:**\n{results}',
+  systemPromptTemplate: '{basePrompt}\n\n{context}',
+  includeMetadata: false // Don't include message type labels
+});
+```
+
+**Configuration in workflow:**
+```javascript
+memoryConfig: {
+  formatter: new DefaultMemoryFormatter({
+    stepInstructionTemplate: '## Task: {stepId}\n{prompt}',
+    includeMetadata: true
+  })
+}
+```
+
+### Memory Configuration Options
+
+The `MemoryConfig` interface provides comprehensive configuration:
+
+```typescript
+interface MemoryConfig {
+  memory?: Memory;                      // Storage strategy
+  formatter?: MemoryFormatter;          // Message formatter
+  memoryCompressor?: MemoryCompressor;  // Compression strategy
+  maxTokens?: number;                   // Max tokens (default: 1024)
+  compressionThreshold?: number;        // 0-1, trigger at % of max (default: 0.8)
+  preserveMessageTypes?: string[];      // Types to never compress
+  autoCompress?: boolean;               // Auto-compress on add
+  checkpointInterval?: number;          // Checkpoint frequency
+}
+```
+
+### Creating Custom Implementations
+
+#### Custom Memory Implementation
+
+```typescript
+import type { 
+  Memory, 
+  MemoryMessage, 
+  MemoryMetrics,
+  RetrievalOptions 
+} from 'agentary-js';
+
+class VectorDBMemory implements Memory {
+  name = 'vector-db';
+  private db: YourVectorDB;
+  
+  constructor(connectionString: string) {
+    this.db = new YourVectorDB(connectionString);
+  }
+  
+  async add(messages: MemoryMessage[]): Promise<void> {
+    // Store messages in vector DB with embeddings
+    for (const msg of messages) {
+      const embedding = await this.generateEmbedding(msg.content);
+      await this.db.insert({
+        content: msg.content,
+        role: msg.role,
+        embedding,
+        metadata: msg.metadata
+      });
+    }
+  }
+  
+  async retrieve(options?: RetrievalOptions): Promise<MemoryMessage[]> {
+    // Retrieve semantically relevant messages
+    if (options?.relevanceQuery) {
+      const queryEmbedding = await this.generateEmbedding(options.relevanceQuery);
+      return await this.db.similaritySearch(queryEmbedding, options.maxTokens);
+    }
+    
+    // Or retrieve recent messages
+    return await this.db.getRecent(options?.maxTokens || 2048);
+  }
+  
+  getMetrics(): MemoryMetrics {
+    return {
+      messageCount: this.db.count(),
+      estimatedTokens: this.db.totalTokens(),
+      compressionCount: 0,
+      lastCompressionTime: undefined
+    };
+  }
+  
+  clear(): void {
+    this.db.clear();
+  }
+  
+  private async generateEmbedding(text: string): Promise<number[]> {
+    // Your embedding logic
+    return [];
+  }
+}
+
+// Use it in your workflow
+const workflow = {
+  memoryConfig: {
+    memory: new VectorDBMemory('mongodb://localhost:27017'),
+    maxTokens: 8192
+  },
+  // ...
+};
+```
+
+#### Custom Memory Compressor
+
+```typescript
+import type { 
+  MemoryCompressor, 
+  MemoryMessage, 
+  MemoryMetrics,
+  MemoryConfig 
+} from 'agentary-js';
+
+class HybridCompressor implements MemoryCompressor {
+  name = 'hybrid';
+  
+  async compress(
+    messages: MemoryMessage[], 
+    targetTokens: number
+  ): Promise<MemoryMessage[]> {
+    // First, keep high-priority messages
+    const highPriority = messages.filter(m => 
+      m.metadata?.priority && m.metadata.priority > 5
+    );
+    
+    // Then, summarize the rest if still over budget
+    const remaining = messages.filter(m => !highPriority.includes(m));
+    
+    if (this.estimateTokens(remaining) > targetTokens * 0.5) {
+      const summary = await this.summarize(remaining);
+      return [...highPriority, summary];
+    }
+    
+    return [...highPriority, ...remaining];
+  }
+  
+  shouldCompress(metrics: MemoryMetrics, config: MemoryConfig): boolean {
+    return metrics.estimatedTokens > (config.maxTokens || 2048) * 0.8;
+  }
+  
+  private async summarize(messages: MemoryMessage[]): Promise<MemoryMessage> {
+    // Your summarization logic
+    return {
+      role: 'assistant',
+      content: 'Summary of previous conversation...',
+      metadata: { type: 'summary', timestamp: Date.now() }
+    };
+  }
+  
+  private estimateTokens(messages: MemoryMessage[]): number {
+    return messages.reduce((sum, m) => sum + (m.metadata?.tokenCount || 0), 0);
+  }
+}
+```
+
+#### Custom Formatter
+
+```typescript
+import type { MemoryFormatter, MemoryMessage, ToolResult } from 'agentary-js';
+import type { Message } from 'agentary-js';
+
+class MarkdownFormatter implements MemoryFormatter {
+  formatMessages(messages: MemoryMessage[]): Message[] {
+    return messages.map(m => ({
+      role: m.role,
+      content: this.formatAsMarkdown(m)
+    }));
+  }
+  
+  formatToolResults(results: Record<string, ToolResult>): string {
+    const entries = Object.values(results);
+    if (entries.length === 0) return '';
+    
+    return '## Available Data\n\n' + 
+      entries.map(r => `### ${r.name}\n${r.description}\n\`\`\`json\n${r.result}\n\`\`\``).join('\n\n');
+  }
+  
+  formatStepInstruction(stepId: string, prompt: string): string {
+    return `## Task: ${stepId}\n\n${prompt}`;
+  }
+  
+  formatSystemPrompt(basePrompt: string, context?: string): string {
+    let prompt = `# System Instructions\n\n${basePrompt}`;
+    if (context) {
+      prompt += `\n\n${context}`;
+    }
+    return prompt;
+  }
+  
+  private formatAsMarkdown(message: MemoryMessage): string {
+    const timestamp = message.metadata?.timestamp 
+      ? new Date(message.metadata.timestamp).toISOString() 
+      : '';
+    const type = message.metadata?.type || message.role;
+    
+    return `**[${type}]** ${timestamp ? `_${timestamp}_` : ''}\n${message.content}`;
+  }
+}
+```
+
+### Using MemoryManager Directly
+
+You can use `MemoryManager` directly outside of workflows:
+
+```javascript
+import { MemoryManager, SlidingWindowMemory, LLMSummarization } from 'agentary-js';
+
+const memoryManager = new MemoryManager(session, {
+  memory: new SlidingWindowMemory(),
+  memoryCompressor: new LLMSummarization(),
+  maxTokens: 4096,
+  compressionThreshold: 0.75
+});
+
+// Add messages
+await memoryManager.addMessages([
+  { role: 'user', content: 'Hello!' },
+  { role: 'assistant', content: 'Hi! How can I help?' }
+]);
+
+// Retrieve messages
+const messages = await memoryManager.getMessages();
+
+// Get metrics
+const metrics = memoryManager.getMetrics();
+console.log(`Messages: ${metrics.messageCount}, Tokens: ${metrics.estimatedTokens}`);
+
+// Create checkpoint
+memoryManager.createCheckpoint('before-operation');
+
+// Rollback if needed
+memoryManager.rollbackToCheckpoint('before-operation');
+
+// Clear all memory
+memoryManager.clear();
+```
+
+### Advanced Memory Features
+
+#### Checkpoints and Rollback
+
+```javascript
+// Create checkpoint before risky operation
+memoryManager.createCheckpoint('before-tool-call');
+
+// ... perform operation ...
+
+// Rollback if needed
+if (operationFailed) {
+  memoryManager.rollbackToCheckpoint('before-tool-call');
+}
+```
+
+#### Filtered Retrieval
+
+The `Memory` interface supports filtered retrieval:
+
+```javascript
+// Retrieve only specific message types
+const systemMessages = await memory.retrieve({
+  includeTypes: ['system_instruction', 'summary']
+});
+
+// Retrieve messages since a timestamp
+const recentMessages = await memory.retrieve({
+  sinceTimestamp: Date.now() - 3600000 // Last hour
+});
+
+// Retrieve with token limit
+const limitedMessages = await memory.retrieve({
+  maxTokens: 1024
+});
+```
+
+#### Message Metadata
+
+Messages include rich metadata for smarter retrieval:
+
+```javascript
+const message = {
+  role: 'assistant',
+  content: 'Important decision: We should proceed with option A.',
+  metadata: {
+    timestamp: Date.now(),
+    stepId: 'decision-step',
+    priority: 10, // High priority
+    type: 'assistant',
+    tokenCount: 15
+  }
+};
+```
+
+### Common Memory Patterns
+
+#### Pattern 1: Simple Chat Agent
+
+```javascript
+const workflow = {
+  id: 'chat-agent',
+  memoryConfig: {
+    memory: new SlidingWindowMemory(),
+    maxTokens: 2048
+  },
+  // ...
+};
+```
+
+#### Pattern 2: Long-Running Agent with Summarization
+
+```javascript
+const workflow = {
+  id: 'long-running-agent',
+  memoryConfig: {
+    memory: new SlidingWindowMemory(),
+    memoryCompressor: new LLMSummarization({
+      systemPrompt: 'Summarize focusing on decisions and outcomes.',
+      maxSummaryTokens: 512,
+      recentWindowSize: 4
+    }),
+    maxTokens: 4096,
+    compressionThreshold: 0.75
+  },
+  // ...
+};
+```
+
+#### Pattern 3: Multi-Step Workflow with Custom Formatting
+
+```javascript
+const workflow = {
+  id: 'multi-step-workflow',
+  memoryConfig: {
+    memory: new SlidingWindowMemory(),
+    formatter: new DefaultMemoryFormatter({
+      stepInstructionTemplate: '### Step {stepId}\n{prompt}',
+      toolResultsTemplate: '## Results\n{results}'
+    }),
+    maxTokens: 4096
+  },
+  // ...
+};
+```
+
+### Memory Best Practices
+
+1. **Choose the right memory implementation:**
+   - Use `SlidingWindowMemory` for most applications
+   - Use semantic search/vector DB for RAG-style applications
+   - Use custom implementations for specific requirements
+
+2. **Set appropriate token limits:**
+   - Leave headroom for your prompts and outputs
+   - Monitor `MemoryMetrics` to tune limits
+   - Consider your model's context window
+
+3. **Customize formatters for your domain:**
+   - Use clear, consistent formatting
+   - Include relevant context in templates
+   - Test different formats to find what works best
+
+4. **Test compression strategies:**
+   - Ensure summaries preserve critical information
+   - Balance compression ratio vs. context preservation
+   - Monitor compression frequency
+
+5. **Use metadata effectively:**
+   - Tag important messages with high priority
+   - Use timestamps for temporal filtering
+   - Use custom types for domain-specific filtering
+
+6. **Leverage checkpoints:**
+   - Create checkpoints before risky operations
+   - Use rollback to recover from errors
+   - Clean up old checkpoints periodically
 
 ### Advanced Workflow Features
 

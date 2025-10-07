@@ -1,5 +1,6 @@
 import { Tool, Model } from "./worker";
 import { GenerationTask, Session } from "./session";
+import { MemoryConfig } from "./memory";
 
 export interface WorkflowIterationResponse {
   stepId?: string;
@@ -31,14 +32,6 @@ export interface WorkflowStep {
   maxAttempts?: number;
 }
 
-export interface AgentMemoryConfig {
-  enableMessageSummarization?: boolean;
-  enableMessagePruning?: boolean;
-  enableMessageHistory?: boolean;
-  enableToolResultStorage?: boolean;
-  maxMemoryTokens?: number;
-}
-
 export interface AgentWorkflow {
   id: string
   name?: string;
@@ -49,7 +42,7 @@ export interface AgentWorkflow {
   tools: Tool[];
   timeout?: number;
   maxIterations?: number;
-  memoryConfig?: AgentMemoryConfig;
+  memoryConfig?: MemoryConfig;
 }
 
 export interface AgentSession extends Session {

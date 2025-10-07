@@ -1,0 +1,196 @@
+import type { 
+  Memory, 
+  MemoryMessage, 
+  RetrievalOptions, 
+  CompressionOptions,
+  MemoryMetrics,
+  MemoryMessageType
+} from '../../types/memory';
+import { TokenCounter } from '../../utils/token-counter';
+import { logger } from '../../utils/logger';
+
+/**
+ * Sliding window memory strategy that keeps recent messages within token limit.
+ */
+export class SlidingWindowMemory implements Memory {
+  name = 'sliding-window';
+  
+  private messages: MemoryMessage[] = [];
+  private tokenCounter: TokenCounter;
+  private checkpoints: Map<string, MemoryMessage[]> = new Map();
+  private compressionCount = 0;
+  private lastCompressionTime: number | undefined;
+
+  constructor() {
+    this.tokenCounter = new TokenCounter();
+  }
+  
+  async add(messages: MemoryMessage[]): Promise<void> {
+    // Add metadata if missing
+    const enrichedMessages = messages.map(msg => ({
+      ...msg,
+      metadata: {
+        timestamp: Date.now(),
+        tokenCount: this.tokenCounter.estimateTokens([{ 
+          role: msg.role, 
+          content: msg.content 
+        }]),
+        ...msg.metadata
+      }
+    }));
+    
+    this.messages.push(...enrichedMessages);
+    
+    logger.agent.debug('Added messages to memory', {
+      addedCount: messages.length,
+      totalCount: this.messages.length,
+      estimatedTokens: this.getMetrics().estimatedTokens
+    });
+  }
+  
+  async retrieve(options?: RetrievalOptions): Promise<MemoryMessage[]> {
+    let filtered = [...this.messages];
+    
+    // Filter by type
+    if (options?.includeTypes) {
+      filtered = filtered.filter(m => 
+        options.includeTypes!.includes(m.metadata?.type || 'assistant')
+      );
+    }
+    
+    if (options?.excludeTypes) {
+      filtered = filtered.filter(m => 
+        !options.excludeTypes!.includes(m.metadata?.type || 'assistant')
+      );
+    }
+    
+    // Filter by timestamp
+    if (options?.sinceTimestamp) {
+      filtered = filtered.filter(m => 
+        (m.metadata?.timestamp || 0) >= options.sinceTimestamp!
+      );
+    }
+    
+    // Limit by tokens (take most recent that fit)
+    if (options?.maxTokens) {
+      const result: MemoryMessage[] = [];
+      let tokenCount = 0;
+      
+      for (let i = filtered.length - 1; i >= 0; i--) {
+        const msg = filtered[i];
+        if (!msg) continue;
+        const msgTokens = msg.metadata?.tokenCount || 0;
+        
+        if (tokenCount + msgTokens > options.maxTokens) break;
+        
+        result.unshift(msg);
+        tokenCount += msgTokens;
+      }
+      
+      logger.agent.debug('Retrieved messages with token limit', {
+        requestedMaxTokens: options.maxTokens,
+        actualTokens: tokenCount,
+        messageCount: result.length
+      });
+      
+      return result;
+    }
+    
+    return filtered;
+  }
+  
+  async compress(options?: CompressionOptions): Promise<void> {
+    if (!options?.targetTokens) {
+      logger.agent.warn('Compression called without target tokens');
+      return;
+    }
+    
+    const originalCount = this.messages.length;
+    const originalTokens = this.estimateTokens(this.messages);
+    
+    // Separate messages to preserve by priority
+    const priorityMessages = this.messages.filter(m => 
+      m.metadata?.type && options.preserveTypes?.includes(m.metadata.type)
+    );
+    
+    const priorityTokens = this.estimateTokens(priorityMessages);
+    const remainingTokenBudget = Math.max(0, options.targetTokens - priorityTokens);
+    
+    // Get recent messages that fit within remaining budget
+    const allMessages = this.messages.filter(m => 
+      !m.metadata?.type || !options.preserveTypes?.includes(m.metadata.type)
+    );
+    
+    const recentMessages: MemoryMessage[] = [];
+    let tokenCount = 0;
+    
+    for (let i = allMessages.length - 1; i >= 0; i--) {
+      const msg = allMessages[i];
+      if (!msg) continue;
+      const msgTokens = msg.metadata?.tokenCount || 0;
+      
+      if (tokenCount + msgTokens > remainingTokenBudget) break;
+      
+      recentMessages.unshift(msg);
+      tokenCount += msgTokens;
+    }
+    
+    this.messages = [...priorityMessages, ...recentMessages];
+    this.compressionCount++;
+    this.lastCompressionTime = Date.now();
+    
+    logger.agent.info('Memory compressed', {
+      originalMessageCount: originalCount,
+      newMessageCount: this.messages.length,
+      removedMessages: originalCount - this.messages.length,
+      originalTokens,
+      newTokens: this.estimateTokens(this.messages),
+      targetTokens: options.targetTokens,
+      compressionCount: this.compressionCount
+    });
+  }
+  
+  getMetrics(): MemoryMetrics {
+    return {
+      messageCount: this.messages.length,
+      estimatedTokens: this.estimateTokens(this.messages),
+      compressionCount: this.compressionCount,
+      lastCompressionTime: this.lastCompressionTime
+    };
+  }
+  
+  clear(): void {
+    this.messages = [];
+    this.checkpoints.clear();
+    this.compressionCount = 0;
+    this.lastCompressionTime = undefined;
+    
+    logger.agent.debug('Memory cleared');
+  }
+  
+  rollback(checkpoint: string): void {
+    const checkpointMessages = this.checkpoints.get(checkpoint);
+    if (checkpointMessages) {
+      this.messages = [...checkpointMessages];
+      logger.agent.debug('Rolled back to checkpoint', { 
+        checkpoint, 
+        messageCount: this.messages.length 
+      });
+    } else {
+      logger.agent.warn('Checkpoint not found', { checkpoint });
+    }
+  }
+  
+  createCheckpoint(id: string): void {
+    this.checkpoints.set(id, [...this.messages]);
+    logger.agent.debug('Created checkpoint', { 
+      checkpoint: id, 
+      messageCount: this.messages.length 
+    });
+  }
+  
+  private estimateTokens(messages: MemoryMessage[]): number {
+    return messages.reduce((sum, m) => sum + (m.metadata?.tokenCount || 0), 0);
+  }
+}
+
