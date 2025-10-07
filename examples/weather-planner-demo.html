@@ -374,7 +374,7 @@
     </div>
 
     <script type="module">
-      import { createAgentSession, enableDebuggingMode } from '../dist/index.js';
+      import { createAgentSession, enableDebuggingMode, LLMSummarization } from '../dist/index.js';
       
       // Enable debugging mode
       enableDebuggingMode();
@@ -446,6 +446,9 @@
         timeout: 180000,
         memoryConfig: {
           maxTokens: 512,
+          memoryCompressor: new LLMSummarization({
+            recentWindowSize: 0,
+          }),
         },
         steps: [
           {

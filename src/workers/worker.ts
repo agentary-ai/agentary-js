@@ -110,8 +110,9 @@ async function handleGenerate(msg: InboundMessage) {
       ...(stop !== undefined && { stop }),
     };
     logger.worker.debug('Starting generation', generationOptions, msg.requestId);
+    const start = performance.now();
     await generator(renderedPrompt, generationOptions);
-    logger.worker.debug('Generation completed successfully', undefined, msg.requestId);
+    logger.worker.debug('Generation completed successfully', { duration: performance.now() - start }, msg.requestId);
   } finally {
     isGenerating = false;
   }
