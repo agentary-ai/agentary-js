@@ -252,7 +252,6 @@ export class StepExecutor {
       await this.workflowStateManager.addMessagesToMemory([
         {
           role: 'assistant',
-          // content: cleanContent,
           content: "",
           tool_calls: [
             {
