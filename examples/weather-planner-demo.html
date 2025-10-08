@@ -446,9 +446,7 @@
         timeout: 180000,
         memoryConfig: {
           maxTokens: 512,
-          memoryCompressor: new LLMSummarization({
-            recentWindowSize: 0,
-          }),
+          memoryCompressor: new LLMSummarization(),
         },
         steps: [
           {

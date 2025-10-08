@@ -48,13 +48,13 @@ export interface Memory {
   add(messages: MemoryMessage[]): Promise<void>;
   
   // Retrieve messages for context
-  retrieve(options?: RetrievalOptions): Promise<MemoryMessage[]>;
+  retrieve(options?:  RetrievalOptions): Promise<MemoryMessage[]>;
   
   // Compress/summarize when needed
   compress?(options?: CompressionOptions): Promise<void>;
   
   // Get current memory metrics
-  getMetrics(): MemoryMetrics;
+  getMetrics(messageTypes?: MemoryMessageType[]): MemoryMetrics;
   
   // Clear or reset memory
   clear(): void;
