@@ -13,10 +13,8 @@ export interface LLMSummarizationConfig {
   systemPrompt?: string;
   userPromptTemplate?: string;
   temperature?: number;
-  maxSummaryTokens?: number;
   enableThinking?: boolean;
   recentWindowSize?: number; // Number of recent messages to keep unsummarized
-  minMessagesToSummarize?: number; // Minimum messages needed to trigger summarization
 }
 
 /**
@@ -50,14 +48,13 @@ export class LLMSummarization implements MemoryCompressor {
         `Original Task: {userPrompt} ` +
         `Completed Steps: {stepSummaries} ` +
         `Provide a minimal bullet-point summary of data results only. ` +
-        `List what data is available for use in the next steps. ` +
-        `Keep it under {maxSummaryTokens} tokens. No prose, only facts.`,
+        `List all data is available for use in the next steps. ` +
+        `Ensure your response is less than {maxSummaryTokens} tokens.`,
       
       temperature: config.temperature ?? 0.1,
-      maxSummaryTokens: config.maxSummaryTokens ?? 512,
+      // maxSummaryTokens: config.maxSummaryTokens ?? 512,
       enableThinking: config.enableThinking ?? false,
       recentWindowSize: config.recentWindowSize ?? 4,
-      minMessagesToSummarize: config.minMessagesToSummarize ?? 6,
     };
     
     this.contentProcessor = new ContentProcessor();
@@ -82,30 +79,14 @@ export class LLMSummarization implements MemoryCompressor {
       messageCount: messages.length,
       targetTokens
     });
-    
-    // 1. Partition messages into preserved, recent, and to-summarize
-    const { preserved, recentMessages, toSummarize } = this.partitionMessages(messages);
-    
-    // 2. Check if summarization should be skipped
-    const skipReason = this.shouldSkipSummarization(preserved, recentMessages, toSummarize);
-    if (skipReason) {
-      logger.agent.debug(skipReason.message, skipReason.details);
-      return messages;
-    }
+        const { preserved, recentMessages, toSummarize } = this.partitionMessages(messages);
     
     try {
       // 3. Generate summary message
-      const summaryMessage = await this.generateSummaryMessage(messages, toSummarize, session);
+      const summaryMessage = await this.generateSummaryMessage(messages, toSummarize, targetTokens, session);
       
       // 4. Fit result within token budget
-      const result = this.fitWithinTokenBudget(
-        preserved,
-        summaryMessage,
-        recentMessages,
-        targetTokens
-      );
-      
-      return result;
+      return [...preserved, summaryMessage, ...recentMessages];
       
     } catch (error: any) {
       logger.agent.error('Failed to summarize messages', {
@@ -132,7 +113,7 @@ export class LLMSummarization implements MemoryCompressor {
     const alwaysPreserveTypes = ['system_instruction', 'user_prompt', 'summary'];
     
     // Calculate recent window start index
-    const recentWindowSize = this.config.recentWindowSize ?? 4;
+    const recentWindowSize = this.config.recentWindowSize ?? 0;
     const recentStartIndex = Math.max(0, messages.length - recentWindowSize);
     
     messages.forEach((msg, index) => {
@@ -147,64 +128,14 @@ export class LLMSummarization implements MemoryCompressor {
     
     return { preserved, recentMessages, toSummarize };
   }
-  
-  /**
-   * Check if summarization should be skipped and return reason if so
-   */
-  private shouldSkipSummarization(
-    preserved: MemoryMessage[],
-    recentMessages: MemoryMessage[],
-    toSummarize: MemoryMessage[]
-  ): { message: string; details: any } | null {
-    const minMessages = this.config.minMessagesToSummarize ?? 6;
-    
-    if (toSummarize.length === 0) {
-      return {
-        message: 'No messages to summarize',
-        details: {
-          preservedCount: preserved.length,
-          recentCount: recentMessages.length
-        }
-      };
-    }
-    
-    if (toSummarize.length < minMessages) {
-      return {
-        message: 'Not enough messages to justify summarization',
-        details: {
-          toSummarizeCount: toSummarize.length,
-          minRequired: minMessages,
-          preservedCount: preserved.length,
-          recentCount: recentMessages.length
-        }
-      };
-    }
-    
-    // Check if the messages to summarize have significant token count
-    const toSummarizeTokens = this.tokenCounter.estimateTokens(
-      toSummarize.map(m => ({ role: m.role, content: m.content }))
-    );
-    
-    if (toSummarizeTokens < this.config.maxSummaryTokens! * 1.5) {
-      return {
-        message: 'Messages to summarize do not have enough tokens to justify summarization',
-        details: {
-          toSummarizeTokens,
-          summaryMaxTokens: this.config.maxSummaryTokens,
-          threshold: this.config.maxSummaryTokens! * 1.5
-        }
-      };
-    }
-    
-    return null;
-  }
-  
+
   /**
    * Generate a summary message using the LLM
    */
   private async generateSummaryMessage(
     allMessages: MemoryMessage[],
     toSummarize: MemoryMessage[],
+    targetTokens: number,
     session: Session
   ): Promise<MemoryMessage> {
     // Group messages by workflow step for better summarization
@@ -222,7 +153,7 @@ export class LLMSummarization implements MemoryCompressor {
     const summarizationPrompt = this.config.userPromptTemplate!
       .replace('{userPrompt}', userPrompt)
       .replace('{stepSummaries}', stepSummaries)
-      .replace('{maxSummaryTokens}', String(this.config.maxSummaryTokens));
+      .replace('{maxSummaryTokens}', String(targetTokens));
     
     // Generate summary
     let summary = '';
@@ -232,7 +163,7 @@ export class LLMSummarization implements MemoryCompressor {
         { role: 'user', content: summarizationPrompt }
       ],
       temperature: this.config.temperature!,
-      max_new_tokens: this.config.maxSummaryTokens!,
+      max_new_tokens: targetTokens,
       enable_thinking: this.config.enableThinking!
     }, 'chat')) {
       if (!chunk.isLast) {
@@ -269,77 +200,9 @@ export class LLMSummarization implements MemoryCompressor {
     return summaryMessage;
   }
   
-  /**
-   * Ensure the result fits within the token budget by adjusting the recent window
-   */
-  private fitWithinTokenBudget(
-    preserved: MemoryMessage[],
-    summaryMessage: MemoryMessage,
-    recentMessages: MemoryMessage[],
-    targetTokens: number
-  ): MemoryMessage[] {
-    let finalRecentMessages = recentMessages;
-    let result = [
-      ...preserved,
-      summaryMessage,
-      ...finalRecentMessages
-    ];
-    
-    // Calculate total tokens for the result
-    let resultTokens = this.tokenCounter.estimateTokens(
-      result.map(m => ({ role: m.role, content: m.content }))
-    );
-    
-    // If we exceed the target, progressively reduce the recent window
-    while (resultTokens > targetTokens && finalRecentMessages.length > 0) {
-      logger.agent.warn('Compressed result exceeds target tokens, reducing recent window', {
-        resultTokens,
-        targetTokens,
-        recentWindowSize: finalRecentMessages.length
-      });
-      
-      // Remove the oldest message from the recent window
-      finalRecentMessages = finalRecentMessages.slice(1);
-      result = [
-        ...preserved,
-        summaryMessage,
-        ...finalRecentMessages
-      ];
-      
-      resultTokens = this.tokenCounter.estimateTokens(
-        result.map(m => ({ role: m.role, content: m.content }))
-      );
-    }
-    
-    // If we still exceed after removing all recent messages, log a warning
-    if (resultTokens > targetTokens) {
-      logger.agent.error('Compressed result still exceeds target tokens even with no recent messages', {
-        resultTokens,
-        targetTokens,
-        preservedCount: preserved.length,
-        summaryTokens: summaryMessage.metadata?.tokenCount,
-        preserved: preserved.map(m => ({
-          type: m.metadata?.type,
-          tokens: m.metadata?.tokenCount
-        }))
-      });
-    }
-    
-    logger.agent.debug('Final compressed result', {
-      totalTokens: resultTokens,
-      targetTokens,
-      preservedCount: preserved.length,
-      summaryTokens: summaryMessage.metadata?.tokenCount,
-      recentCount: finalRecentMessages.length,
-      withinBudget: resultTokens <= targetTokens
-    });
-    
-    return result;
-  }
-  
   shouldCompress(metrics: MemoryMetrics, config: MemoryConfig): boolean {
     const threshold = config.compressionThreshold ?? 0.8;
-    const maxTokens = config.maxTokens ?? 1024;
+    const maxTokens = config.maxTokens ?? 512;
     const shouldCompress = metrics.estimatedTokens > maxTokens * threshold;
     
     if (shouldCompress) {
@@ -409,14 +272,6 @@ export class LLMSummarization implements MemoryCompressor {
     }
     
     return formatted;
-  }
-  
-  /**
-   * Truncate content if it exceeds max length
-   */
-  private truncateIfNeeded(content: string, maxLength: number): string {
-    if (content.length <= maxLength) return content;
-    return content.substring(0, maxLength) + '... [truncated]';
   }
 }
 

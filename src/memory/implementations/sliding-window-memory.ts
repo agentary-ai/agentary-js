@@ -150,10 +150,17 @@ export class SlidingWindowMemory implements Memory {
     });
   }
   
-  getMetrics(): MemoryMetrics {
+  getMetrics(messageTypes?: MemoryMessageType[]): MemoryMetrics {
+    // Filter messages by type if specified
+    const messagesToCount = (messageTypes && messageTypes.length > 0)
+      ? this.messages.filter(m => 
+          m.metadata?.type && messageTypes.includes(m.metadata.type)
+        )
+      : this.messages;
+    
     return {
-      messageCount: this.messages.length,
-      estimatedTokens: this.estimateTokens(this.messages),
+      messageCount: messagesToCount.length,
+      estimatedTokens: this.estimateTokens(messagesToCount),
       compressionCount: this.compressionCount,
       lastCompressionTime: this.lastCompressionTime
     };

@@ -177,7 +177,10 @@ export class MemoryManager {
    * Check memory pressure and compress if needed
    */
   private async checkAndCompress(): Promise<void> {
-    const metrics = this.memory.getMetrics();
+
+    // TODO: Don't count tokens of preserved messages
+    const metrics = this.memory.getMetrics(this.config.preserveMessageTypes);
+    const targetTokens = Math.floor(this.config.maxTokens * 0.7);
     
     // Use memory compressor if available
     if (this.memoryCompressor?.shouldCompress(metrics, this.config)) {
@@ -188,31 +191,13 @@ export class MemoryManager {
       });
       
       const messages = await this.memory.retrieve();
-      const targetTokens = Math.floor(this.config.maxTokens * 0.6);
-      
+
       try {
         const compressed = await this.memoryCompressor.compress(
           messages,
           targetTokens,
           this.session
         );
-        
-        // Verify the compressed result actually fits within budget
-        const compressedTokens = this.tokenCounter.estimateTokens(
-          compressed.map(m => ({ role: m.role, content: m.content }))
-        );
-        
-        if (compressedTokens > targetTokens) {
-          logger.agent.warn('Compressed result still exceeds target, falling back to pruning', {
-            compressedTokens,
-            targetTokens,
-            exceedsBy: compressedTokens - targetTokens
-          });
-          
-          // Fall back to simple pruning
-          await this.fallbackToPruning(targetTokens);
-          return;
-        }
         
         this.memory.clear();
         await this.memory.add(compressed);
@@ -230,20 +215,20 @@ export class MemoryManager {
         });
         
         // Fall back to simple pruning if LLM summarization fails
-        await this.fallbackToPruning(targetTokens);
+        await this.compressMemory(targetTokens);
       }
     }
 
     // Fallback to simple pruning if no compressor or not triggered
     else if (this.isNearLimit() && this.memory.compress) {
-      await this.fallbackToPruning(Math.floor(this.config.maxTokens * 0.7));
+      await this.compressMemory(targetTokens);
     }
   }
   
   /**
    * Fall back to simple message pruning
    */
-  private async fallbackToPruning(targetTokens: number): Promise<void> {
+  private async compressMemory(targetTokens: number): Promise<void> {
     if (!this.memory.compress) {
       logger.agent.error('Cannot fall back to pruning: memory implementation does not support compress');
       return;
