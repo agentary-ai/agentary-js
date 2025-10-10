@@ -17,23 +17,23 @@ vi.mock('../../src/workers/manager', () => {
             const handler = messageHandlers.get(mockWorker)
             if (handler) {
               // Send initial chunk
-              handler({ data: { 
-                type: 'chunk', 
+              handler({ data: {
+                type: 'chunk',
                 requestId: msg.requestId,
                 args: { token: 'Hello', tokenId: 1, isFirst: true, isLast: false, ttfbMs: 100 }
               }} as MessageEvent)
-              
+
               // Send middle chunk
-              handler({ data: { 
-                type: 'chunk', 
+              handler({ data: {
+                type: 'chunk',
                 requestId: msg.requestId,
                 args: { token: ' world', tokenId: 2, isFirst: false, isLast: false }
               }} as MessageEvent)
-              
+
               // Send done
-              handler({ data: { 
-                type: 'done', 
-                requestId: msg.requestId 
+              handler({ data: {
+                type: 'done',
+                requestId: msg.requestId
               }} as MessageEvent)
             }
           }, 10)
@@ -51,9 +51,11 @@ vi.mock('../../src/workers/manager', () => {
       }),
       terminate: vi.fn()
     }
-    
+
     return {
       worker: mockWorker,
+      model: { name: 'test-model', quantization: 'q4' },
+      initialized: true,
       inflightId: 0,
       disposed: false
     }
@@ -278,8 +280,8 @@ describe('Session Management', () => {
             if (msg.type === 'generate') {
               setTimeout(() => {
                 if (messageHandler) {
-                  messageHandler({ data: { 
-                    type: 'error', 
+                  messageHandler({ data: {
+                    type: 'error',
                     requestId: msg.requestId,
                     error: 'Worker error: Model loading failed'
                   }} as MessageEvent)
@@ -297,6 +299,8 @@ describe('Session Management', () => {
           }),
           terminate: vi.fn()
         },
+        model: { name: 'test-model', quantization: 'q4' },
+        initialized: true,
         inflightId: 0,
         disposed: false
       }
@@ -338,20 +342,20 @@ describe('Session Management', () => {
               setTimeout(() => {
                 if (messageHandler) {
                   // Send debug message
-                  messageHandler({ data: { 
-                    type: 'debug', 
+                  messageHandler({ data: {
+                    type: 'debug',
                     requestId: msg.requestId,
                     args: { message: 'Model loaded successfully' }
                   }} as MessageEvent)
                   // Then send normal chunks
-                  messageHandler({ data: { 
-                    type: 'chunk', 
+                  messageHandler({ data: {
+                    type: 'chunk',
                     requestId: msg.requestId,
                     args: { token: 'Test', tokenId: 1, isFirst: true, isLast: false }
                   }} as MessageEvent)
-                  messageHandler({ data: { 
-                    type: 'done', 
-                    requestId: msg.requestId 
+                  messageHandler({ data: {
+                    type: 'done',
+                    requestId: msg.requestId
                   }} as MessageEvent)
                 }
               }, 10)
@@ -367,6 +371,8 @@ describe('Session Management', () => {
           }),
           terminate: vi.fn()
         },
+        model: { name: 'test-model', quantization: 'q4' },
+        initialized: true,
         inflightId: 0,
         disposed: false
       }
@@ -439,10 +445,12 @@ describe('Session Management', () => {
           
           const instance = {
             worker,
+            model: { name: 'test-model', quantization: 'q4' },
+            initialized: true,
             inflightId: 0,
             disposed: false
           }
-          
+
           workers.push(instance)
           return instance
         }),

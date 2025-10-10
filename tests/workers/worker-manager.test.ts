@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { WorkerManager } from '../../src/workers/manager'
+import { EventEmitter } from '../../src/utils/event-emitter'
 import type { CreateSessionArgs, GenerationTask } from '../../src/types/session'
 
 // Mock Worker to avoid actual worker creation in tests
@@ -19,7 +20,8 @@ Object.defineProperty(global, 'URL', {
 describe('WorkerManager', () => {
   let workerManager: WorkerManager;
   let mockSessionArgs: CreateSessionArgs;
-  
+  let eventEmitter: EventEmitter;
+
   beforeEach(() => {
     mockSessionArgs = {
       models: {
@@ -31,7 +33,8 @@ describe('WorkerManager', () => {
       ctx: 2048,
       hfToken: 'test-token'
     };
-    workerManager = new WorkerManager(mockSessionArgs);
+    eventEmitter = new EventEmitter();
+    workerManager = new WorkerManager(mockSessionArgs, eventEmitter);
   });
 
   afterEach(() => {
@@ -60,7 +63,8 @@ describe('WorkerManager', () => {
     });
 
     it('should fallback to Qwen model when no models configured', () => {
-      const managerWithoutModels = new WorkerManager({});
+      const emitter = new EventEmitter();
+      const managerWithoutModels = new WorkerManager({}, emitter);
       const model = managerWithoutModels['getModel']('chat');
       expect(model.name).toBe('onnx-community/Qwen3-0.6B-ONNX');
       expect(model.quantization).toBe('q4f16');
