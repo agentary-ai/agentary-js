@@ -93,7 +93,7 @@ export interface MemoryCompressor {
   ): Promise<MemoryMessage[]>;
   
   // Estimate if compression is needed
-  shouldCompress(metrics: MemoryMetrics, config: MemoryConfig): boolean;
+  // shouldCompress(metrics: MemoryMetrics, config: MemoryConfig): boolean;
 }
 
 // Tool result type

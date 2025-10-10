@@ -61,7 +61,7 @@ export class MemoryManager {
    */
   async addMessages(messages: MemoryMessage[], skipCompression = false): Promise<void> {
     logger.agent.debug('Adding messages to memory', {
-      messageCount: messages.length,
+      messages,
       skipCompression
     });
     messages = messages.map(m => ({
@@ -156,7 +156,16 @@ export class MemoryManager {
    */
   isNearLimit(): boolean {
     const metrics = this.memory.getMetrics();
-    return metrics.estimatedTokens > this.config.maxTokens * this.config.compressionThreshold;
+    const isNearLimit = metrics.estimatedTokens > this.config.maxTokens * this.config.compressionThreshold;
+    if (isNearLimit) {
+      logger.agent.warn('Memory is near limit', {
+        estimatedTokens: metrics.estimatedTokens,
+        maxTokens: this.config.maxTokens,
+        compressionThreshold: this.config.compressionThreshold,
+        messageCount: metrics.messageCount
+      });
+    }
+    return isNearLimit;
   }
   
   /**
@@ -182,46 +191,51 @@ export class MemoryManager {
     const metrics = this.memory.getMetrics(this.config.preserveMessageTypes);
     const targetTokens = Math.floor(this.config.maxTokens * 0.7);
     
-    // Use memory compressor if available
-    if (this.memoryCompressor?.shouldCompress(metrics, this.config)) {
+    if (this.isNearLimit()) {
       logger.agent.warn('Memory pressure detected, compressing', {
         currentTokens: metrics.estimatedTokens,
         maxTokens: this.config.maxTokens,
         messageCount: metrics.messageCount
       });
-      
-      const messages = await this.memory.retrieve();
 
-      try {
-        const compressed = await this.memoryCompressor.compress(
-          messages,
+      if (this.memoryCompressor) {
+        logger.agent.debug('Using memory compressor', {
+          compressor: this.memoryCompressor.name
+        });
+        const messages = await this.memory.retrieve();
+        try {
+          const compressed = await this.memoryCompressor.compress(
+            messages,
+            targetTokens,
+            this.session
+          );
+          
+          this.memory.clear();
+          await this.memory.add(compressed);
+          
+          logger.agent.info('Memory compressed', {
+            originalCount: messages.length,
+            newCount: compressed.length,
+            newTokens: this.getTokenCount()
+          });
+          
+        } catch (error: any) {
+          logger.agent.error('Memory compressor failed, falling back to pruning', {
+            error: error.message,
+            messageCount: messages.length
+          });
+          
+          // Fall back to simple pruning if LLM summarization fails
+          await this.compressMemory(targetTokens);
+        }
+      } else if (this.memory.compress) {
+        logger.agent.debug('Using simple pruning compression', {
+          currentTokens: this.getTokenCount(),
           targetTokens,
-          this.session
-        );
-        
-        this.memory.clear();
-        await this.memory.add(compressed);
-        
-        logger.agent.info('Memory compressed', {
-          originalCount: messages.length,
-          newCount: compressed.length,
-          newTokens: this.getTokenCount()
+          messageCount: this.getMessageCount()
         });
-        
-      } catch (error: any) {
-        logger.agent.error('Memory compressor failed, falling back to pruning', {
-          error: error.message,
-          messageCount: messages.length
-        });
-        
-        // Fall back to simple pruning if LLM summarization fails
         await this.compressMemory(targetTokens);
       }
-    }
-
-    // Fallback to simple pruning if no compressor or not triggered
-    else if (this.isNearLimit() && this.memory.compress) {
-      await this.compressMemory(targetTokens);
     }
   }
   
@@ -232,19 +246,11 @@ export class MemoryManager {
     if (!this.memory.compress) {
       logger.agent.error('Cannot fall back to pruning: memory implementation does not support compress');
       return;
-    }
-    
-    logger.agent.debug('Using simple pruning compression', {
-      currentTokens: this.getTokenCount(),
-      targetTokens,
-      messageCount: this.getMessageCount()
-    });
-    
+    }    
     await this.memory.compress({
       targetTokens,
       preserveTypes: this.config.preserveMessageTypes
     });
-    
     logger.agent.info('Memory pruned', {
       newTokens: this.getTokenCount(),
       newMessageCount: this.getMessageCount()

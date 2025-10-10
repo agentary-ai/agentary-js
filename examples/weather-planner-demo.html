@@ -446,7 +446,7 @@
         timeout: 180000,
         memoryConfig: {
           maxTokens: 512,
-          memoryCompressor: new LLMSummarization(),
+          memoryCompressor: new LLMSummarization({}),
         },
         steps: [
           {
@@ -498,7 +498,7 @@
           {
             id: 'filter-pois-by-budget',
             description: "Filter and rank the POIs by budget and distance practicality",
-            prompt: "Use the budget_filter tool with: 1) pois array from the 'poi-search' step result, 2) budget from the 'extract-user-input' step result.",
+            prompt: "Use the budget_filter to filter and rank the POIs by budget and distance practicality.",
             temperature: 0.1,
             generationTask: "tool_use",
             toolChoice: ["budget_filter"],

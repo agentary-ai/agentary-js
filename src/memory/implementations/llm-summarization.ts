@@ -14,7 +14,6 @@ export interface LLMSummarizationConfig {
   userPromptTemplate?: string;
   temperature?: number;
   enableThinking?: boolean;
-  recentWindowSize?: number; // Number of recent messages to keep unsummarized
 }
 
 /**
@@ -48,13 +47,12 @@ export class LLMSummarization implements MemoryCompressor {
         `Original Task: {userPrompt} ` +
         `Completed Steps: {stepSummaries} ` +
         `Provide a minimal bullet-point summary of data results only. ` +
-        `List all data is available for use in the next steps. ` +
-        `Ensure your response is less than {maxSummaryTokens} tokens.`,
+        `List all data is available for use in the next steps. `,
+        // `Ensure your response is less than {maxSummaryTokens} tokens.`,
       
       temperature: config.temperature ?? 0.1,
       // maxSummaryTokens: config.maxSummaryTokens ?? 512,
       enableThinking: config.enableThinking ?? false,
-      recentWindowSize: config.recentWindowSize ?? 4,
     };
     
     this.contentProcessor = new ContentProcessor();
@@ -77,16 +75,23 @@ export class LLMSummarization implements MemoryCompressor {
     
     logger.agent.debug('Starting message summarization', {
       messageCount: messages.length,
+      messages,
       targetTokens
     });
-        const { preserved, recentMessages, toSummarize } = this.partitionMessages(messages);
     
+    const { preserved, toSummarize } = this.partitionMessages(messages);
+    
+    logger.agent.debug('Partitioned messages', {
+      preserved,
+      toSummarize
+    });
+
     try {
       // 3. Generate summary message
       const summaryMessage = await this.generateSummaryMessage(messages, toSummarize, targetTokens, session);
       
-      // 4. Fit result within token budget
-      return [...preserved, summaryMessage, ...recentMessages];
+      // 4. Return preserved messages and summary
+      return [...preserved, summaryMessage];
       
     } catch (error: any) {
       logger.agent.error('Failed to summarize messages', {
@@ -98,35 +103,28 @@ export class LLMSummarization implements MemoryCompressor {
   }
   
   /**
-   * Partition messages into preserved, recent, and to-summarize groups
+   * Partition messages into preserved and to-summarize groups
+   * Preserved types are kept as-is, all other messages are summarized
    */
   private partitionMessages(messages: MemoryMessage[]): {
     preserved: MemoryMessage[];
-    recentMessages: MemoryMessage[];
     toSummarize: MemoryMessage[];
   } {
     const preserved: MemoryMessage[] = [];
-    const recentMessages: MemoryMessage[] = [];
     const toSummarize: MemoryMessage[] = [];
     
     // Always preserve these message types
     const alwaysPreserveTypes = ['system_instruction', 'user_prompt', 'summary'];
     
-    // Calculate recent window start index
-    const recentWindowSize = this.config.recentWindowSize ?? 0;
-    const recentStartIndex = Math.max(0, messages.length - recentWindowSize);
-    
-    messages.forEach((msg, index) => {
+    messages.forEach((msg) => {
       if (msg.metadata?.type && alwaysPreserveTypes.includes(msg.metadata.type)) {
         preserved.push(msg);
-      } else if (index >= recentStartIndex) {
-        recentMessages.push(msg);
       } else {
         toSummarize.push(msg);
       }
     });
     
-    return { preserved, recentMessages, toSummarize };
+    return { preserved, toSummarize };
   }
 
   /**
@@ -153,7 +151,7 @@ export class LLMSummarization implements MemoryCompressor {
     const summarizationPrompt = this.config.userPromptTemplate!
       .replace('{userPrompt}', userPrompt)
       .replace('{stepSummaries}', stepSummaries)
-      .replace('{maxSummaryTokens}', String(targetTokens));
+      // .replace('{maxSummaryTokens}', String(targetTokens));
     
     // Generate summary
     let summary = '';
@@ -163,7 +161,7 @@ export class LLMSummarization implements MemoryCompressor {
         { role: 'user', content: summarizationPrompt }
       ],
       temperature: this.config.temperature!,
-      max_new_tokens: targetTokens,
+      // max_new_tokens: targetTokens,
       enable_thinking: this.config.enableThinking!
     }, 'chat')) {
       if (!chunk.isLast) {
@@ -200,22 +198,29 @@ export class LLMSummarization implements MemoryCompressor {
     return summaryMessage;
   }
   
-  shouldCompress(metrics: MemoryMetrics, config: MemoryConfig): boolean {
-    const threshold = config.compressionThreshold ?? 0.8;
-    const maxTokens = config.maxTokens ?? 512;
-    const shouldCompress = metrics.estimatedTokens > maxTokens * threshold;
+  // shouldCompress(metrics: MemoryMetrics, config: MemoryConfig): boolean {
+  //   const threshold = config.compressionThreshold ?? 0.8;
+  //   const maxTokens = config.maxTokens ?? 512;
+  //   const shouldCompress = metrics.estimatedTokens > maxTokens * threshold;
     
-    if (shouldCompress) {
-      logger.agent.debug('Compression threshold reached', {
-        currentTokens: metrics.estimatedTokens,
-        maxTokens,
-        threshold,
-        utilizationPercent: (metrics.estimatedTokens / maxTokens) * 100
-      });
-    }
+  //   if (shouldCompress) {
+  //     logger.agent.debug('Compression threshold reached', {
+  //       currentTokens: metrics.estimatedTokens,
+  //       maxTokens,
+  //       threshold,
+  //       utilizationPercent: (metrics.estimatedTokens / maxTokens) * 100
+  //     });
+  //   } else {
+  //     logger.agent.debug('Compression threshold not reached', {
+  //       currentTokens: metrics.estimatedTokens,
+  //       maxTokens,
+  //       threshold,
+  //       utilizationPercent: (metrics.estimatedTokens / maxTokens) * 100
+  //     });
+  //   }
     
-    return shouldCompress;
-  }
+  //   return shouldCompress;
+  // }
   
   /**
    * Group messages by workflow step for structured summarization
