@@ -23,8 +23,8 @@ export class AgentSessionImpl implements AgentSession {
   constructor(session: Session) {
     this.session = session;
     this.workflowStateManager = new WorkflowStateManager(session);
-    this.stepExecutor = new StepExecutor(session, this.workflowStateManager);
-    this.workflowExecutor = new WorkflowExecutor(this.stepExecutor, this.tools, this.workflowStateManager);
+    this.stepExecutor = new StepExecutor(session, this.workflowStateManager, session);
+    this.workflowExecutor = new WorkflowExecutor(this.stepExecutor, this.tools, this.workflowStateManager, session);
     this.workerManager = session.workerManager;
   }
 
@@ -57,6 +57,15 @@ export class AgentSessionImpl implements AgentSession {
   ): AsyncIterable<WorkflowIterationResponse> {
     if (this.disposed) throw new Error('Agent session disposed');
     yield* this.workflowExecutor.execute(prompt, workflow);
+  }
+
+  // Delegate event methods
+  on(eventType: string | '*', handler: any) {
+    return this.session.on(eventType, handler);
+  }
+
+  off(eventType: string | '*', handler: any) {
+    this.session.off(eventType, handler);
   }
 }
 

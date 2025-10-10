@@ -4,13 +4,16 @@ import {
 } from '../types/session';
 import { GenerateArgs, WorkerInstance, Model } from '../types/worker';
 import { logger } from '../utils/logger';
+import { EventEmitter } from '../utils/event-emitter';
 
 export class WorkerManager {
   private workers: Map<string, WorkerInstance> = new Map();
   private readonly args: CreateSessionArgs;
+  private eventEmitter: EventEmitter;
 
-  constructor(args: CreateSessionArgs) {
+  constructor(args: CreateSessionArgs, eventEmitter: EventEmitter) {
     this.args = args;
+    this.eventEmitter = eventEmitter;
   }
 
   private getModel(generationTask?: GenerationTask): Model {
@@ -78,6 +81,14 @@ export class WorkerManager {
     if (!workerInstance.initialized && !workerInstance.disposed) {
       logger.workerManager.debug('Model selected for generation', { model, generationTask });
 
+      // Emit worker init start event
+      const initStartTime = Date.now();
+      this.eventEmitter.emit({
+        type: 'worker:init:start',
+        modelName: model.name,
+        timestamp: initStartTime
+      });
+
       const initId = this.nextId(workerInstance);
       workerInstance.worker.postMessage({
         type: 'init',
@@ -88,10 +99,18 @@ export class WorkerManager {
           hfToken: this.args.hfToken,
         },
       });
-      
+
       try {
         await this.once(workerInstance, initId);
         workerInstance.initialized = true;
+
+        // Emit worker init complete event
+        this.eventEmitter.emit({
+          type: 'worker:init:complete',
+          modelName: model.name,
+          duration: Date.now() - initStartTime,
+          timestamp: Date.now()
+        });
       } catch (error: any) {
         logger.workerManager.error('Worker initialization failed', { model, error: error.message });
         throw error;
@@ -120,12 +139,19 @@ export class WorkerManager {
 
   private async disposeWorker(workerInstance: WorkerInstance): Promise<void> {
     if (workerInstance.disposed) return;
-    
+
     workerInstance.disposed = true;
     const requestId = this.nextId(workerInstance);
-    
+
     workerInstance.worker.postMessage({ type: 'dispose', requestId });
     await this.once(workerInstance, requestId).catch(() => {});
     workerInstance.worker.terminate();
+
+    // Emit worker disposed event
+    this.eventEmitter.emit({
+      type: 'worker:disposed',
+      modelName: workerInstance.model.name,
+      timestamp: Date.now()
+    });
   }
 }
