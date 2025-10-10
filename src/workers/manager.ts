@@ -45,11 +45,18 @@ export class WorkerManager {
     return String(workerInstance.inflightId);
   }
 
-  private once<T = unknown>(workerInstance: WorkerInstance, requestId: string, filter?: (m: any) => boolean): Promise<T> {
+  private once<T = unknown>(workerInstance: WorkerInstance, requestId: string, filter?: (m: any) => boolean, onProgress?: (msg: any) => void): Promise<T> {
     return new Promise((resolve, reject) => {
       const onMessage = (ev: MessageEvent<any>) => {
         const msg = ev.data;
         if (!msg || msg.requestId !== requestId) return;
+
+        // Handle progress messages separately
+        if (msg.type === 'progress' && onProgress) {
+          onProgress(msg);
+          return; // Don't resolve/reject on progress
+        }
+
         if (filter && !filter(msg)) return;
         workerInstance.worker.removeEventListener('message', onMessage as any);
         workerInstance.worker.removeEventListener('error', onError as any);
@@ -101,7 +108,23 @@ export class WorkerManager {
       });
 
       try {
-        await this.once(workerInstance, initId);
+        await this.once(
+          workerInstance,
+          initId,
+          undefined,
+          // Progress callback
+          (msg) => {
+            if (msg.type === 'progress' && msg.args) {
+              this.eventEmitter.emit({
+                type: 'worker:init:progress',
+                modelName: model.name,
+                progress: msg.args.progress,
+                stage: msg.args.status || msg.args.file || 'loading',
+                timestamp: Date.now()
+              });
+            }
+          }
+        );
         workerInstance.initialized = true;
 
         // Emit worker init complete event
