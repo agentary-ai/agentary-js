@@ -1,4 +1,4 @@
-import { pipeline, TextStreamer, env as hfEnv, DataType, TextGenerationPipeline, TextGenerationConfig } from '@huggingface/transformers';
+import { pipeline, TextStreamer, env as hfEnv, DataType, TextGenerationPipeline, TextGenerationConfig, ProgressInfo } from '@huggingface/transformers';
 import { InboundMessage, OutboundMessage } from '../types/worker';
 import { logger } from '../utils/logger';
 import { InitArgs, GenerateArgs } from '../types/worker';
@@ -40,11 +40,56 @@ async function handleInit(msg: InboundMessage) {
 
   const device = engine && engine !== 'auto' ? engine : 'webgpu';
 
-
   const pipelineResult = await pipeline('text-generation', model.name, {
     device: device || "auto",
     dtype: model.quantization || "auto",
-    progress_callback: (_info: any) => {},
+    progress_callback: (info: ProgressInfo) => {
+      // Send progress updates back to main thread
+      // ProgressInfo can be InitiateProgressInfo, DownloadProgressInfo, ProgressProgressInfo, DoneProgressInfo, or ReadyProgressInfo
+      let progress = 0;
+      let loaded = 0;
+      let total = 0;
+      let name = '';
+      let file = '';
+
+      // Handle different progress info types
+      if ('progress' in info) {
+        progress = info.progress;
+      }
+      if ('loaded' in info) {
+        loaded = info.loaded;
+      }
+      if ('total' in info) {
+        total = info.total;
+      }
+      if ('name' in info) {
+        name = info.name;
+      }
+      if ('file' in info) {
+        file = info.file;
+      }
+
+      const progressPercent = total > 0 ? (loaded / total) * 100 : progress;
+
+      post({
+        type: 'progress',
+        requestId: msg.requestId,
+        args: {
+          status: info.status,
+          name: name || '',
+          file: file || '',
+          progress: Math.round(progressPercent),
+          loaded,
+          total
+        }
+      });
+
+      logger.worker.debug('Model loading progress', {
+        status: info.status,
+        file: file || 'unknown',
+        progress: `${Math.round(progressPercent)}%`
+      }, msg.requestId);
+    },
   });
   generator = pipelineResult as TextGenerationPipeline;
 

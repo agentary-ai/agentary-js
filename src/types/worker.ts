@@ -98,10 +98,19 @@ export interface ChunkArgs {
   ttfbMs?: number;
 }
 
-export type OutboundMessageType = 'chunk' | 'ack' | 'done' | 'error' | 'debug';
+export interface ProgressArgs {
+  status: string;
+  name: string;
+  file: string;
+  progress: number;
+  loaded: number;
+  total: number;
+}
+
+export type OutboundMessageType = 'chunk' | 'ack' | 'done' | 'error' | 'debug' | 'progress';
 
 export type OutboundMessage = {
   type: OutboundMessageType;
   requestId: string;
-  args?: ChunkArgs | ErrorArgs | DebugArgs;
+  args?: ChunkArgs | ErrorArgs | DebugArgs | ProgressArgs;
 }

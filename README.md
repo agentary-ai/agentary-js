@@ -1210,6 +1210,432 @@ const workflow = {
 };
 ```
 
+## 📡 Lifecycle Events
+
+Agentary.js provides a comprehensive event system that allows you to monitor and react to internal operations in real-time. You can subscribe to events for worker initialization, generation progress, tool execution, workflow steps, and more.
+
+### Quick Start
+
+```typescript
+import { createSession } from 'agentary-js';
+
+const session = await createSession({
+  models: {
+    chat: { name: 'onnx-community/gemma-3-270m-it-ONNX', quantization: 'q4' }
+  }
+});
+
+// Subscribe to all events
+session.on('*', (event) => {
+  console.log(`Event: ${event.type}`, event);
+});
+
+// Subscribe to specific event types
+session.on('worker:init:complete', (event) => {
+  console.log(`Model loaded: ${event.modelName} in ${event.duration}ms`);
+});
+
+session.on('generation:token', (event) => {
+  if (event.ttfbMs) {
+    console.log(`TTFB: ${event.ttfbMs}ms`);
+  }
+  process.stdout.write(event.token);
+});
+
+// Unsubscribe when done
+const unsubscribe = session.on('generation:complete', (event) => {
+  console.log(`Generated ${event.totalTokens} tokens in ${event.duration}ms`);
+  console.log(`Speed: ${event.tokensPerSecond?.toFixed(2)} tokens/sec`);
+});
+
+// Later: unsubscribe();
+```
+
+### Event Categories
+
+#### Worker Lifecycle Events
+
+Monitor model loading and worker initialization:
+
+```typescript
+// Worker initialization started
+session.on('worker:init:start', (event) => {
+  console.log(`Loading model: ${event.modelName}`);
+});
+
+// Worker initialization progress (if supported by the model)
+session.on('worker:init:progress', (event) => {
+  console.log(`Progress: ${event.progress}% - ${event.stage}`);
+});
+
+// Worker initialization complete
+session.on('worker:init:complete', (event) => {
+  console.log(`Model ready: ${event.modelName} (${event.duration}ms)`);
+});
+
+// Worker disposed
+session.on('worker:disposed', (event) => {
+  console.log(`Worker disposed: ${event.modelName}`);
+});
+```
+
+#### Generation Events
+
+Track text generation in real-time:
+
+```typescript
+// Generation started
+session.on('generation:start', (event) => {
+  console.log(`Starting generation with ${event.messageCount} messages`);
+});
+
+// Each token generated
+session.on('generation:token', (event) => {
+  if (event.isFirst) {
+    console.log(`First token in ${event.ttfbMs}ms`);
+  }
+  if (!event.isLast) {
+    process.stdout.write(event.token);
+  }
+});
+
+// Generation complete
+session.on('generation:complete', (event) => {
+  console.log(`\nGenerated ${event.totalTokens} tokens`);
+  console.log(`Speed: ${event.tokensPerSecond} tok/s`);
+});
+
+// Generation error
+session.on('generation:error', (event) => {
+  console.error(`Generation failed: ${event.error}`);
+});
+```
+
+#### Tool Events
+
+Monitor tool execution:
+
+```typescript
+// Tool call started
+session.on('tool:call:start', (event) => {
+  console.log(`Calling ${event.toolName}:`, event.args);
+});
+
+// Tool call completed
+session.on('tool:call:complete', (event) => {
+  console.log(`${event.toolName} completed in ${event.duration}ms`);
+  console.log('Result:', event.result);
+});
+
+// Tool call failed
+session.on('tool:call:error', (event) => {
+  console.error(`${event.toolName} failed: ${event.error}`);
+});
+```
+
+#### Workflow Events
+
+Track workflow execution and step progress:
+
+```typescript
+const agent = await createAgentSession({...});
+
+// Workflow started
+agent.on('workflow:start', (event) => {
+  console.log(`Starting workflow: ${event.workflowName}`);
+  console.log(`Steps: ${event.stepCount}`);
+});
+
+// Step started
+agent.on('workflow:step:start', (event) => {
+  console.log(`\n[Step ${event.stepId}] ${event.stepDescription}`);
+  console.log(`Iteration: ${event.iteration}`);
+});
+
+// Step completed
+agent.on('workflow:step:complete', (event) => {
+  const status = event.success ? '✓' : '✗';
+  console.log(`${status} Step ${event.stepId} (${event.duration}ms)`);
+  if (event.hasToolCall) {
+    console.log('  - Tool was called');
+  }
+});
+
+// Step retry
+agent.on('workflow:step:retry', (event) => {
+  console.log(`Retrying step ${event.stepId}`);
+  console.log(`Attempt ${event.attempt}/${event.maxAttempts}`);
+  console.log(`Reason: ${event.reason}`);
+});
+
+// Workflow complete
+agent.on('workflow:complete', (event) => {
+  console.log(`\nWorkflow complete!`);
+  console.log(`Completed ${event.totalSteps} steps in ${event.duration}ms`);
+});
+
+// Workflow timeout
+agent.on('workflow:timeout', (event) => {
+  console.warn(`Workflow timeout at step ${event.stepId}`);
+});
+
+// Workflow error
+agent.on('workflow:error', (event) => {
+  console.error(`Workflow failed: ${event.error}`);
+});
+```
+
+#### Memory Events
+
+Monitor memory operations (when using memory system):
+
+```typescript
+// Memory checkpoint created
+agent.on('memory:checkpoint', (event) => {
+  console.log(`Checkpoint: ${event.checkpointId}`);
+  console.log(`Messages: ${event.messageCount}, Tokens: ${event.estimatedTokens}`);
+});
+
+// Memory rolled back
+agent.on('memory:rollback', (event) => {
+  console.log(`Rolled back to: ${event.checkpointId}`);
+});
+
+// Memory compressed
+agent.on('memory:compressed', (event) => {
+  console.log(`Memory compressed: ${event.beforeTokens} → ${event.afterTokens}`);
+  console.log(`Ratio: ${(event.compressionRatio * 100).toFixed(1)}%`);
+});
+
+// Memory pruned
+agent.on('memory:pruned', (event) => {
+  console.log(`Pruned ${event.messagesPruned} messages`);
+  console.log(`Freed ${event.tokensFreed} tokens`);
+});
+```
+
+### Event Types Reference
+
+All events include a `timestamp` field (milliseconds since epoch) and a `type` field identifying the event.
+
+#### Worker Events
+- `worker:init:start` - Model initialization started
+- `worker:init:progress` - Initialization progress update
+- `worker:init:complete` - Model ready for inference
+- `worker:disposed` - Worker terminated
+
+#### Generation Events
+- `generation:start` - Text generation started
+- `generation:token` - Token generated
+- `generation:complete` - Generation finished
+- `generation:error` - Generation failed
+
+#### Tool Events
+- `tool:call:start` - Tool execution started
+- `tool:call:complete` - Tool execution succeeded
+- `tool:call:error` - Tool execution failed
+
+#### Workflow Events
+- `workflow:start` - Workflow execution started
+- `workflow:step:start` - Step execution started
+- `workflow:step:complete` - Step execution finished
+- `workflow:step:retry` - Step retry attempt
+- `workflow:complete` - Workflow finished successfully
+- `workflow:timeout` - Workflow exceeded timeout
+- `workflow:error` - Workflow failed
+
+#### Memory Events
+- `memory:checkpoint` - Memory checkpoint created
+- `memory:rollback` - Memory rolled back to checkpoint
+- `memory:compressed` - Memory compressed
+- `memory:pruned` - Old messages pruned
+
+### Advanced Usage
+
+#### Filtering Events
+
+```typescript
+// Only listen to workflow events
+agent.on('workflow:start', handleWorkflowStart);
+agent.on('workflow:complete', handleWorkflowComplete);
+agent.on('workflow:error', handleWorkflowError);
+
+// Build a progress UI
+agent.on('workflow:step:start', (event) => {
+  updateProgressBar(event.stepId, event.iteration);
+});
+
+agent.on('workflow:step:complete', (event) => {
+  markStepComplete(event.stepId, event.success);
+});
+```
+
+#### Building Dashboards
+
+```typescript
+const metrics = {
+  tokensGenerated: 0,
+  toolCalls: 0,
+  errors: 0,
+  avgGenerationTime: []
+};
+
+session.on('generation:complete', (event) => {
+  metrics.tokensGenerated += event.totalTokens;
+  metrics.avgGenerationTime.push(event.duration);
+  updateDashboard(metrics);
+});
+
+session.on('tool:call:complete', (event) => {
+  metrics.toolCalls++;
+  updateDashboard(metrics);
+});
+
+session.on('*:error', (event) => {
+  metrics.errors++;
+  updateDashboard(metrics);
+});
+```
+
+#### Error Handling
+
+```typescript
+session.on('generation:error', (event) => {
+  logger.error('Generation failed', {
+    requestId: event.requestId,
+    error: event.error
+  });
+  // Retry logic, user notification, etc.
+});
+
+agent.on('tool:call:error', (event) => {
+  console.error(`Tool ${event.toolName} failed:`, event.error);
+  // Fallback logic
+});
+
+agent.on('workflow:error', (event) => {
+  console.error(`Workflow ${event.workflowId} failed at step ${event.stepId}`);
+  // Cleanup, rollback, or notification
+});
+```
+
+#### Performance Monitoring
+
+```typescript
+const perfMonitor = {
+  ttfb: [],
+  throughput: [],
+  stepDurations: {}
+};
+
+session.on('generation:token', (event) => {
+  if (event.ttfbMs) {
+    perfMonitor.ttfb.push(event.ttfbMs);
+  }
+});
+
+session.on('generation:complete', (event) => {
+  if (event.tokensPerSecond) {
+    perfMonitor.throughput.push(event.tokensPerSecond);
+  }
+});
+
+agent.on('workflow:step:complete', (event) => {
+  if (!perfMonitor.stepDurations[event.stepId]) {
+    perfMonitor.stepDurations[event.stepId] = [];
+  }
+  perfMonitor.stepDurations[event.stepId].push(event.duration);
+});
+
+// Analyze performance
+function analyzePerformance() {
+  const avgTTFB = perfMonitor.ttfb.reduce((a, b) => a + b, 0) / perfMonitor.ttfb.length;
+  const avgThroughput = perfMonitor.throughput.reduce((a, b) => a + b, 0) / perfMonitor.throughput.length;
+
+  console.log(`Average TTFB: ${avgTTFB.toFixed(2)}ms`);
+  console.log(`Average throughput: ${avgThroughput.toFixed(2)} tok/s`);
+}
+```
+
+### TypeScript Support
+
+All event types are fully typed for TypeScript users:
+
+```typescript
+import type {
+  SessionEvent,
+  WorkerInitCompleteEvent,
+  GenerationTokenEvent,
+  ToolCallStartEvent,
+  WorkflowStepCompleteEvent
+} from 'agentary-js';
+
+// Type-safe event handlers
+session.on('worker:init:complete', (event: WorkerInitCompleteEvent) => {
+  console.log(event.modelName, event.duration); // Autocomplete works!
+});
+
+// Handle multiple event types
+function handleEvent(event: SessionEvent) {
+  switch (event.type) {
+    case 'worker:init:complete':
+      console.log('Model loaded:', event.modelName);
+      break;
+    case 'generation:token':
+      process.stdout.write(event.token);
+      break;
+    case 'tool:call:start':
+      console.log('Tool call:', event.toolName);
+      break;
+  }
+}
+
+session.on('*', handleEvent);
+```
+
+### Best Practices
+
+1. **Unsubscribe when done**: Always call the returned unsubscribe function to prevent memory leaks
+```typescript
+const unsubscribe = session.on('generation:token', handler);
+// Later:
+unsubscribe();
+```
+
+2. **Use wildcards sparingly**: The `*` wildcard subscribes to all events, which can be noisy
+```typescript
+// Good for debugging
+session.on('*', (e) => console.log(e.type));
+
+// Better for production
+session.on('generation:error', handleError);
+session.on('workflow:error', handleError);
+```
+
+3. **Handle errors gracefully**: Event handlers should not throw errors
+```typescript
+session.on('generation:token', (event) => {
+  try {
+    processToken(event.token);
+  } catch (error) {
+    console.error('Error processing token:', error);
+  }
+});
+```
+
+4. **Don't block event handlers**: Keep event handlers fast and non-blocking
+```typescript
+// Bad: Blocking operation
+session.on('tool:call:complete', (event) => {
+  syncExpensiveOperation(event.result); // Blocks event loop
+});
+
+// Good: Async operation
+session.on('tool:call:complete', async (event) => {
+  await asyncOperation(event.result); // Non-blocking
+});
+```
+
 ## 🔍 Logging & Debugging
 
 Agentary.js includes a comprehensive logging system for debugging and monitoring your AI applications.

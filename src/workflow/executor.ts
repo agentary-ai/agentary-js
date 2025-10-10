@@ -15,28 +15,43 @@ export class WorkflowExecutor {
   private stepExecutor: StepExecutor;
   private tools: Tool[];
   private stateManager: WorkflowStateManager;
+  private eventSession: any;
 
-  constructor(stepExecutor: StepExecutor, tools: Tool[], stateManager: WorkflowStateManager) {
+  constructor(stepExecutor: StepExecutor, tools: Tool[], stateManager: WorkflowStateManager, eventSession: any) {
     this.stepExecutor = stepExecutor;
     this.tools = tools;
     this.stateManager = stateManager;
+    this.eventSession = eventSession;
   }
 
   async* execute(userPrompt: string, agentWorkflow: AgentWorkflow): AsyncIterable<WorkflowIterationResponse> {
-    logger.agent.info('Starting workflow execution', { 
-      workflowId: agentWorkflow.id, 
+    const startTime = Date.now();
+    logger.agent.info('Starting workflow execution', {
+      workflowId: agentWorkflow.id,
       workflowName: agentWorkflow.name,
       userPrompt,
       stepCount: agentWorkflow.steps.length,
-      toolCount: agentWorkflow.tools.length 
+      toolCount: agentWorkflow.tools.length
     });
-    
+
+    // Emit workflow start event
+    const emitter = this.eventSession?._eventEmitter;
+    if (emitter) {
+      emitter.emit({
+        type: 'workflow:start',
+        workflowId: agentWorkflow.id,
+        workflowName: agentWorkflow.name,
+        stepCount: agentWorkflow.steps.length,
+        timestamp: startTime
+      });
+    }
+
     await this.stateManager.initializeState(
       userPrompt,
       agentWorkflow,
       this.tools
     );
-      
+
     let currentStep: WorkflowStep | undefined;
     let state: WorkflowState | undefined;
     
@@ -67,14 +82,36 @@ export class WorkflowExecutor {
           currentStep?.generationTask
         );
       } else {
-        logger.agent.info('Workflow execution complete', { 
+        logger.agent.info('Workflow execution complete', {
           workflowId: state.workflow.id,
           iterations: state.iteration,
           totalTimeMs: Date.now() - state.startTime,
         });
+
+        // Emit workflow complete event
+        if (emitter) {
+          emitter.emit({
+            type: 'workflow:complete',
+            workflowId: state.workflow.id,
+            totalSteps: state.completedSteps.size,
+            iterations: state.iteration,
+            duration: Date.now() - startTime,
+            timestamp: Date.now()
+          });
+        }
       }
 
     } catch (error: any) {
+      // Emit workflow error event
+      if (emitter && state) {
+        emitter.emit({
+          type: 'workflow:error',
+          workflowId: state.workflow.id,
+          stepId: currentStep?.id,
+          error: error.message,
+          timestamp: Date.now()
+        });
+      }
       if (!state) {
         // Handle state initialization failure
         logger.agent.error('Failed to initialize workflow state', { error: error.message });
@@ -116,12 +153,25 @@ export class WorkflowExecutor {
 
       // Check timeout
       if (this.stateManager.isTimeout(state)) {
-        logger.agent.warn('Workflow timeout exceeded', { 
-          workflowId: state.workflow.id, 
-          stepId: currentStep.id, 
+        logger.agent.warn('Workflow timeout exceeded', {
+          workflowId: state.workflow.id,
+          stepId: currentStep.id,
           elapsedMs: Date.now() - state.startTime,
           timeoutMs: state.timeout
         });
+
+        // Emit workflow timeout event
+        const emitter = this.eventSession?._eventEmitter;
+        if (emitter) {
+          emitter.emit({
+            type: 'workflow:timeout',
+            workflowId: state.workflow.id,
+            stepId: currentStep.id,
+            duration: Date.now() - state.startTime,
+            timestamp: Date.now()
+          });
+        }
+
         yield WorkflowResultBuilder.createTimeoutResult(
           currentStep.id,
           state.startTime,
@@ -130,9 +180,52 @@ export class WorkflowExecutor {
         break;
       }
 
+      // Emit step start event
+      const stepStartTime = Date.now();
+      const emitter = this.eventSession?._eventEmitter;
+      if (emitter) {
+        emitter.emit({
+          type: 'workflow:step:start',
+          workflowId: state.workflow.id,
+          stepId: currentStep.id,
+          stepDescription: currentStep.description,
+          iteration: state.iteration,
+          timestamp: stepStartTime
+        });
+      }
+
       // Execute the step
       const stepResult = await this.stepExecutor.execute(currentStep, state.tools);
       yield stepResult;
+
+      // Emit step complete event
+      if (emitter) {
+        emitter.emit({
+          type: 'workflow:step:complete',
+          workflowId: state.workflow.id,
+          stepId: currentStep.id,
+          success: !stepResult.error,
+          duration: Date.now() - stepStartTime,
+          hasToolCall: !!stepResult.toolCall,
+          hasError: !!stepResult.error,
+          timestamp: Date.now()
+        });
+      }
+
+      // Emit retry event if step failed and will retry
+      if (stepResult.error && stepResult.metadata?.willRetry) {
+        if (emitter) {
+          emitter.emit({
+            type: 'workflow:step:retry',
+            workflowId: state.workflow.id,
+            stepId: currentStep.id,
+            attempt: stepResult.metadata.attempt || 1,
+            maxAttempts: stepResult.metadata.maxAttempts || 1,
+            reason: stepResult.error.message,
+            timestamp: Date.now()
+          });
+        }
+      }
 
       logger.agent.debug('Step execution completed, continuing workflow', {
         stepId: currentStep.id,

@@ -4,6 +4,36 @@ export { createAgentSession } from './core/agent-session.js';
 export { logger, createLogger, setGlobalLogLevel, LogLevel } from './utils/logger';
 export { LogConfigs, getEnvironmentConfig, enableDebuggingMode, disableDebuggingMode, isDebuggingMode } from './utils/logger-config';
 
+// Event system exports
+export type {
+  SessionEvent,
+  EventHandler,
+  UnsubscribeFn,
+  WorkerInitStartEvent,
+  WorkerInitProgressEvent,
+  WorkerInitCompleteEvent,
+  WorkerDisposedEvent,
+  GenerationStartEvent,
+  GenerationTokenEvent,
+  GenerationCompleteEvent,
+  GenerationErrorEvent,
+  MemoryCheckpointEvent,
+  MemoryRollbackEvent,
+  MemoryCompressedEvent,
+  MemoryPrunedEvent,
+  ToolCallStartEvent,
+  ToolCallCompleteEvent,
+  ToolCallErrorEvent,
+  WorkflowStartEvent,
+  WorkflowStepStartEvent,
+  WorkflowStepCompleteEvent,
+  WorkflowStepRetryEvent,
+  WorkflowCompleteEvent,
+  WorkflowTimeoutEvent,
+  WorkflowErrorEvent,
+  ErrorEvent
+} from './types/events';
+
 // Memory system exports
 export { 
   MemoryManager,

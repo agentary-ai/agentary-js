@@ -15,15 +15,18 @@ export class StepExecutor {
   private toolParser: ToolParser;
   private contentProcessor: ContentProcessor;
   private workflowStateManager: WorkflowStateManager;
+  private eventSession: Session;
 
   constructor(
-    session: Session, 
+    session: Session,
     workflowStateManager: WorkflowStateManager,
+    eventSession: Session
   ) {
     this.session = session;
     this.toolParser = new ToolParser();
     this.contentProcessor = new ContentProcessor();
     this.workflowStateManager = workflowStateManager;
+    this.eventSession = eventSession;
   }
 
   async execute(
@@ -242,12 +245,60 @@ export class StepExecutor {
     }
 
     if (toolSelected.function.implementation) {
-      const toolResult = await toolSelected.function.implementation(toolCall.args);
-      logger.agent.debug('Tool execution result', {
-        stepId: step.id,
-        toolName: toolCall.name,
-        resultType: typeof toolResult
-      });
+      // Emit tool call start event
+      const toolStartTime = Date.now();
+      const emitter = (this.eventSession as any)._eventEmitter;
+      if (emitter) {
+        emitter.emit({
+          type: 'tool:call:start',
+          stepId: step.id,
+          toolName: toolCall.name,
+          args: toolCall.args,
+          timestamp: toolStartTime
+        });
+      }
+
+      let toolResult: any;
+      try {
+        toolResult = await toolSelected.function.implementation(toolCall.args);
+        logger.agent.debug('Tool execution result', {
+          stepId: step.id,
+          toolName: toolCall.name,
+          resultType: typeof toolResult
+        });
+
+        // Emit tool call complete event
+        if (emitter) {
+          emitter.emit({
+            type: 'tool:call:complete',
+            stepId: step.id,
+            toolName: toolCall.name,
+            result: toolResult,
+            duration: Date.now() - toolStartTime,
+            timestamp: Date.now()
+          });
+        }
+      } catch (error: any) {
+        logger.agent.error('Tool execution failed', {
+          stepId: step.id,
+          toolName: toolCall.name,
+          error: error.message
+        });
+
+        // Emit tool call error event
+        if (emitter) {
+          emitter.emit({
+            type: 'tool:call:error',
+            stepId: step.id,
+            toolName: toolCall.name,
+            error: error.message,
+            duration: Date.now() - toolStartTime,
+            timestamp: Date.now()
+          });
+        }
+
+        throw error;
+      }
       
       await this.workflowStateManager.addMessagesToMemory([
         {

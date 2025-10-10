@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lifecycle Events Demo - Agentary.js</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      color: white;
+      margin-bottom: 30px;
+    }
+
+    .header h1 {
+      font-size: 2.5em;
+      margin-bottom: 10px;
+    }
+
+    .header p {
+      font-size: 1.2em;
+      opacity: 0.9;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+
+    .card h2 {
+      font-size: 1.3em;
+      margin-bottom: 15px;
+      color: #667eea;
+      border-bottom: 2px solid #667eea;
+      padding-bottom: 10px;
+    }
+
+    .input-group {
+      margin-bottom: 15px;
+    }
+
+    .input-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    input, textarea {
+      width: 100%;
+      padding: 10px;
+      border: 2px solid #e0e0e0;
+      border-radius: 6px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+      font-family: inherit;
+    }
+
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      width: 100%;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .event-log {
+      height: 400px;
+      overflow-y: auto;
+      background: #f5f5f5;
+      border-radius: 6px;
+      padding: 15px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .event-entry {
+      margin-bottom: 8px;
+      padding: 8px;
+      border-radius: 4px;
+      background: white;
+      border-left: 3px solid #667eea;
+    }
+
+    .event-entry.worker { border-left-color: #4CAF50; }
+    .event-entry.generation { border-left-color: #2196F3; }
+    .event-entry.tool { border-left-color: #FF9800; }
+    .event-entry.workflow { border-left-color: #9C27B0; }
+    .event-entry.error { border-left-color: #F44336; }
+
+    .event-type {
+      font-weight: bold;
+      color: #667eea;
+      margin-right: 8px;
+    }
+
+    .event-timestamp {
+      color: #999;
+      font-size: 11px;
+    }
+
+    .event-data {
+      margin-top: 5px;
+      color: #666;
+      font-size: 11px;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+
+    .metric {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 15px;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .metric-value {
+      font-size: 2em;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .metric-label {
+      font-size: 0.9em;
+      opacity: 0.9;
+    }
+
+    .output {
+      background: #f5f5f5;
+      border-radius: 6px;
+      padding: 15px;
+      min-height: 100px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: 'Georgia', serif;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 20px;
+      color: #667eea;
+    }
+
+    .loading.active {
+      display: block;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .spinner {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #667eea;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 10px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .controls button {
+      flex: 1;
+    }
+
+    @media (max-width: 768px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .metrics {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📡 Lifecycle Events Demo</h1>
+      <p>Monitor real-time events from Agentary.js SDK</p>
+    </div>
+
+    <div class="card" style="margin-bottom: 20px;">
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-value" id="totalEvents">0</div>
+          <div class="metric-label">Total Events</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" id="tokenCount">0</div>
+          <div class="metric-label">Tokens Generated</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" id="avgTTFB">-</div>
+          <div class="metric-label">Avg TTFB (ms)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>⚙️ Configuration</h2>
+        <div class="input-group">
+          <label for="prompt">Prompt</label>
+          <textarea id="prompt" placeholder="Enter your prompt...">Tell me a short story about a robot learning to paint.</textarea>
+        </div>
+        <div class="controls">
+          <button id="generateBtn">Generate Text</button>
+          <button id="clearBtn">Clear Events</button>
+        </div>
+        <div class="loading" id="loading">
+          <div class="spinner"></div>
+          <div id="loadingText">Processing...</div>
+        </div>
+        <div style="margin-top: 15px;">
+          <div style="background: #f5f5f5; border-radius: 6px; padding: 10px;">
+            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">Model Loading Progress</div>
+            <div style="background: #e0e0e0; border-radius: 4px; height: 20px; overflow: hidden;">
+              <div id="progressBar" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); height: 100%; width: 0%; transition: width 0.3s;"></div>
+            </div>
+            <div id="progressText" style="font-size: 11px; color: #999; margin-top: 5px;">Waiting to load model...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📝 Generated Output</h2>
+        <div class="output" id="output">Output will appear here...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📊 Event Log</h2>
+      <div class="event-log" id="eventLog">
+        <div style="color: #999; text-align: center; padding: 20px;">
+          No events yet. Click "Generate Text" to start monitoring events.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { createSession } from '../dist/index.js';
+
+    let session = null;
+    let eventCount = 0;
+    let tokenCount = 0;
+    let ttfbValues = [];
+
+    const elements = {
+      generateBtn: document.getElementById('generateBtn'),
+      clearBtn: document.getElementById('clearBtn'),
+      loading: document.getElementById('loading'),
+      loadingText: document.getElementById('loadingText'),
+      output: document.getElementById('output'),
+      eventLog: document.getElementById('eventLog'),
+      prompt: document.getElementById('prompt'),
+      totalEvents: document.getElementById('totalEvents'),
+      tokenCountEl: document.getElementById('tokenCount'),
+      avgTTFB: document.getElementById('avgTTFB'),
+      progressBar: document.getElementById('progressBar'),
+      progressText: document.getElementById('progressText')
+    };
+
+    // Initialize session with event handlers
+    async function initSession() {
+      if (session) return;
+
+      try {
+        session = await createSession({
+          models: {
+            chat: {
+              name: 'onnx-community/Qwen2.5-0.5B-Instruct-ONNX',
+              quantization: 'q4'
+            }
+          },
+          engine: 'webgpu'
+        });
+
+        // Subscribe to all events for monitoring
+        session.on('*', logEvent);
+
+        // Subscribe to specific events for metrics
+        session.on('generation:token', (event) => {
+          if (event.ttfbMs) {
+            ttfbValues.push(event.ttfbMs);
+            updateMetrics();
+          }
+          if (!event.isLast) {
+            tokenCount++;
+            updateMetrics();
+          }
+        });
+
+        // Subscribe to progress events for visual feedback
+        session.on('worker:init:start', (event) => {
+          elements.loadingText.textContent = `Loading ${event.modelName}...`;
+          elements.progressBar.style.width = '0%';
+          elements.progressText.textContent = 'Starting model download...';
+        });
+
+        session.on('worker:init:progress', (event) => {
+          elements.progressBar.style.width = `${event.progress}%`;
+          elements.progressText.textContent = `${event.progress}% - ${event.stage}`;
+        });
+
+        session.on('worker:init:complete', (event) => {
+          elements.progressBar.style.width = '100%';
+          elements.progressText.textContent = `Model loaded in ${event.duration}ms`;
+          setTimeout(() => {
+            elements.loadingText.textContent = 'Processing...';
+          }, 500);
+        });
+
+        console.log('Session initialized with event handlers');
+      } catch (error) {
+        console.error('Failed to initialize session:', error);
+        alert('Failed to initialize: ' + error.message);
+      }
+    }
+
+    function logEvent(event) {
+      eventCount++;
+      const eventLogDiv = elements.eventLog;
+
+      // Clear "no events" message
+      if (eventCount === 1) {
+        eventLogDiv.innerHTML = '';
+      }
+
+      const entry = document.createElement('div');
+      entry.className = 'event-entry ' + getCategoryClass(event.type);
+
+      const typeSpan = document.createElement('span');
+      typeSpan.className = 'event-type';
+      typeSpan.textContent = event.type;
+
+      const timestampSpan = document.createElement('span');
+      timestampSpan.className = 'event-timestamp';
+      timestampSpan.textContent = new Date(event.timestamp).toLocaleTimeString();
+
+      const dataDiv = document.createElement('div');
+      dataDiv.className = 'event-data';
+      dataDiv.textContent = formatEventData(event);
+
+      entry.appendChild(typeSpan);
+      entry.appendChild(timestampSpan);
+      entry.appendChild(dataDiv);
+
+      eventLogDiv.insertBefore(entry, eventLogDiv.firstChild);
+
+      // Keep only last 100 events
+      while (eventLogDiv.children.length > 100) {
+        eventLogDiv.removeChild(eventLogDiv.lastChild);
+      }
+
+      updateMetrics();
+    }
+
+    function getCategoryClass(eventType) {
+      if (eventType.startsWith('worker:')) return 'worker';
+      if (eventType.startsWith('generation:')) return 'generation';
+      if (eventType.startsWith('tool:')) return 'tool';
+      if (eventType.startsWith('workflow:')) return 'workflow';
+      if (eventType.includes('error')) return 'error';
+      return '';
+    }
+
+    function formatEventData(event) {
+      const data = { ...event };
+      delete data.type;
+      delete data.timestamp;
+
+      const keys = Object.keys(data);
+      if (keys.length === 0) return '';
+
+      // Format key data points
+      const parts = [];
+      if (data.modelName) parts.push(`Model: ${data.modelName}`);
+      if (data.duration) parts.push(`Duration: ${data.duration}ms`);
+      if (data.requestId) parts.push(`ID: ${data.requestId}`);
+      if (data.totalTokens) parts.push(`Tokens: ${data.totalTokens}`);
+      if (data.tokensPerSecond) parts.push(`Speed: ${data.tokensPerSecond.toFixed(2)} tok/s`);
+      if (data.ttfbMs) parts.push(`TTFB: ${data.ttfbMs}ms`);
+      if (data.toolName) parts.push(`Tool: ${data.toolName}`);
+      if (data.stepId) parts.push(`Step: ${data.stepId}`);
+      if (data.error) parts.push(`Error: ${data.error}`);
+
+      return parts.join(' | ');
+    }
+
+    function updateMetrics() {
+      elements.totalEvents.textContent = eventCount;
+      elements.tokenCountEl.textContent = tokenCount;
+
+      if (ttfbValues.length > 0) {
+        const avgTTFB = ttfbValues.reduce((a, b) => a + b, 0) / ttfbValues.length;
+        elements.avgTTFB.textContent = avgTTFB.toFixed(0);
+      }
+    }
+
+    async function generate() {
+      if (!session) {
+        await initSession();
+      }
+
+      const prompt = elements.prompt.value.trim();
+      if (!prompt) {
+        alert('Please enter a prompt');
+        return;
+      }
+
+      elements.generateBtn.disabled = true;
+      elements.loading.classList.add('active');
+      elements.output.textContent = '';
+
+      try {
+        for await (const chunk of session.createResponse({
+          messages: [{ role: 'user', content: prompt }],
+          max_new_tokens: 200,
+          temperature: 0.7
+        })) {
+          if (!chunk.isLast) {
+            elements.output.textContent += chunk.token;
+          }
+        }
+      } catch (error) {
+        console.error('Generation error:', error);
+        elements.output.textContent = 'Error: ' + error.message;
+      } finally {
+        elements.generateBtn.disabled = false;
+        elements.loading.classList.remove('active');
+      }
+    }
+
+    function clearEvents() {
+      elements.eventLog.innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">Event log cleared.</div>';
+      eventCount = 0;
+      tokenCount = 0;
+      ttfbValues = [];
+      updateMetrics();
+    }
+
+    // Event listeners
+    elements.generateBtn.addEventListener('click', generate);
+    elements.clearBtn.addEventListener('click', clearEvents);
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', async () => {
+      if (session) {
+        await session.dispose();
+      }
+    });
+  </script>
+</body>
+</html>
