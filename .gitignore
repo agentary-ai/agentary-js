@@ -1,3 +1,7 @@
 /node_modules
 /dist
 /coverage
+
+# Next.js documentation site
+docs/.next
+docs/out
