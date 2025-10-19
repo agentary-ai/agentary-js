@@ -1,0 +1,13 @@
+{
+  "name": "agentary-js-docs",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.2"
+  }
+}

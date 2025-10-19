@@ -1,0 +1,41 @@
+# Installation
+
+Install Agentary JS via npm:
+
+```bash
+npm install agentary-js
+```
+
+## Requirements
+
+- Node.js 18 or higher
+- Modern browser with WebGPU or WebAssembly support
+
+## Browser Support
+
+| Browser | WebGPU | WebAssembly |
+|---------|--------|-------------|
+| Chrome 113+ | ✅ | ✅ |
+| Edge 113+ | ✅ | ✅ |
+| Firefox (with flag) | ⚠️ | ✅ |
+| Safari | Coming soon | ✅ |
+
+## Minimum Hardware Requirements
+
+- **RAM**: 4GB recommended for small models (270M-500M parameters)
+- **GPU**: Optional but recommended for WebGPU acceleration
+- **Storage**: Varies by model (typically 100MB-500MB per quantized model)
+
+## Verifying Installation
+
+Create a simple test file to verify the installation:
+
+```javascript
+import { createSession } from 'agentary-js';
+
+console.log('Agentary JS installed successfully!');
+```
+
+## Next Steps
+
+Now that you have Agentary JS installed, proceed to the [Quick Start](/getting-started/quick-start) guide to create your first session.

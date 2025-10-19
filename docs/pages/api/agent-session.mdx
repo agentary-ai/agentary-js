@@ -1,0 +1,231 @@
+# Agent Session API
+
+The Agent Session extends the basic Session with workflow capabilities.
+
+## createAgentSession
+
+Creates a new agent session with workflow support.
+
+```typescript
+function createAgentSession(args?: CreateSessionArgs): Promise<AgentSession>
+```
+
+### Example
+
+```javascript
+import { createAgentSession } from 'agentary-js';
+
+const agent = await createAgentSession({
+  models: {
+    chat: {
+      name: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4'
+    },
+    tool_use: {
+      name: 'onnx-community/Qwen2.5-0.5B-Instruct',
+      quantization: 'q4'
+    }
+  }
+});
+```
+
+## Agent Session Methods
+
+### runWorkflow
+
+Execute a multi-step agent workflow.
+
+```typescript
+runWorkflow(
+  prompt: string,
+  workflow: AgentWorkflow
+): AsyncIterable<WorkflowIterationResponse>
+```
+
+#### Parameters
+
+```typescript
+interface AgentWorkflow {
+  id: string;
+  name: string;
+  description?: string;
+  systemPrompt?: string;
+  steps: WorkflowStep[];
+  context?: Record<string, any>;
+  tools?: Tool[];
+  timeout?: number;
+  maxIterations?: number;
+  memoryConfig?: MemoryConfig;
+}
+
+interface WorkflowStep {
+  id: string;
+  description?: string;
+  prompt: string;
+  maxTokens?: number;
+  temperature?: number;
+  generationTask?: GenerationTask;
+  toolChoice?: string[];
+  maxAttempts?: number;
+}
+```
+
+#### Returns
+
+```typescript
+interface WorkflowIterationResponse {
+  stepId?: string;
+  error?: WorkflowStepError;
+  content?: string;
+  toolCall?: {
+    name?: string;
+    args?: Record<string, any>;
+    result?: string;
+  };
+  metadata?: Record<string, any>;
+}
+```
+
+#### Example
+
+```javascript
+const workflow = {
+  id: 'my-workflow',
+  name: 'My Workflow',
+  systemPrompt: 'You are a helpful assistant.',
+  maxIterations: 5,
+  steps: [
+    {
+      id: 'step1',
+      prompt: 'Analyze the input',
+      maxTokens: 200
+    }
+  ],
+  tools: []
+};
+
+for await (const iteration of agent.runWorkflow('Hello', workflow)) {
+  console.log(iteration.content);
+}
+```
+
+### registerTool
+
+Register a tool for use in workflows.
+
+```typescript
+registerTool(tool: Tool): void
+```
+
+#### Example
+
+```javascript
+agent.registerTool({
+  type: 'function',
+  function: {
+    name: 'my_tool',
+    description: 'Does something useful',
+    parameters: {
+      type: 'object',
+      properties: {
+        input: { type: 'string' }
+      },
+      required: ['input']
+    },
+    implementation: async ({ input }) => {
+      return `Processed: ${input}`;
+    }
+  }
+});
+```
+
+### getRegisteredTools
+
+Get all registered tools.
+
+```typescript
+getRegisteredTools(): Tool[]
+```
+
+#### Example
+
+```javascript
+const tools = agent.getRegisteredTools();
+console.log(`${tools.length} tools registered`);
+```
+
+### Inherited Methods
+
+Agent Session inherits all methods from [Session](/api/session):
+- `createResponse()`
+- `dispose()`
+- `on()`
+- `off()`
+
+## Memory Configuration
+
+Configure memory management for workflows.
+
+```typescript
+interface MemoryConfig {
+  memory?: Memory;
+  formatter?: MemoryFormatter;
+  memoryCompressor?: MemoryCompressor;
+  maxTokens?: number;
+  compressionThreshold?: number;
+  preserveMessageTypes?: string[];
+  autoCompress?: boolean;
+  checkpointInterval?: number;
+}
+```
+
+### Example
+
+```javascript
+import { SlidingWindowMemory, LLMSummarization } from 'agentary-js';
+
+const workflow = {
+  memoryConfig: {
+    memory: new SlidingWindowMemory(),
+    memoryCompressor: new LLMSummarization({
+      maxSummaryTokens: 512,
+      recentWindowSize: 4
+    }),
+    maxTokens: 2048,
+    compressionThreshold: 0.8
+  },
+  // ...
+};
+```
+
+## Workflow Events
+
+Monitor workflow execution with events.
+
+```typescript
+agent.on('workflow:start', (event) => {
+  console.log(`Starting: ${event.workflowName}`);
+});
+
+agent.on('workflow:step:start', (event) => {
+  console.log(`Step ${event.stepId} starting`);
+});
+
+agent.on('workflow:step:complete', (event) => {
+  console.log(`Step ${event.stepId} complete`);
+});
+
+agent.on('workflow:complete', (event) => {
+  console.log(`Workflow complete in ${event.duration}ms`);
+});
+
+agent.on('workflow:error', (event) => {
+  console.error(`Workflow failed: ${event.error}`);
+});
+```
+
+## See Also
+
+- [Session API](/api/session)
+- [Agentic Workflows Guide](/guides/agentic-workflows)
+- [Memory Management Guide](/guides/memory-management)

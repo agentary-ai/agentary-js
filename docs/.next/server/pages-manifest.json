@@ -1,0 +1,13 @@
+{
+  "/api/agent-session": "pages/api/agent-session.js",
+  "/_error": "pages/_error.js",
+  "/api/session": "pages/api/session.js",
+  "/getting-started/concepts": "pages/getting-started/concepts.js",
+  "/getting-started/installation": "pages/getting-started/installation.js",
+  "/getting-started/quick-start": "pages/getting-started/quick-start.js",
+  "/guides/agentic-workflows": "pages/guides/agentic-workflows.js",
+  "/guides/tool-calling": "pages/guides/tool-calling.js",
+  "/": "pages/index.js",
+  "/_app": "pages/_app.js",
+  "/_document": "pages/_document.js"
+}

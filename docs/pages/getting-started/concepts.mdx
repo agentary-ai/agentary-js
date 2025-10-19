@@ -1,0 +1,226 @@
+# Core Concepts
+
+Understanding the key concepts in Agentary JS will help you build powerful browser-based AI applications.
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────┐
+│           Your Application                  │
+├─────────────────────────────────────────────┤
+│         Agentary JS Session                 │
+│  ┌──────────────────────────────────────┐  │
+│  │      Worker Manager                   │  │
+│  │  ┌────────────┐  ┌────────────┐     │  │
+│  │  │ Chat Model │  │ Tool Model │     │  │
+│  │  │  Worker    │  │  Worker    │     │  │
+│  │  └────────────┘  └────────────┘     │  │
+│  └──────────────────────────────────────┘  │
+│                                             │
+│  ┌──────────────────────────────────────┐  │
+│  │      Workflow Engine                  │  │
+│  │   (for agentic workflows)            │  │
+│  └──────────────────────────────────────┘  │
+└─────────────────────────────────────────────┘
+         │                    │
+         ▼                    ▼
+    WebGPU/WASM          ONNX Models
+```
+
+## Sessions
+
+A **Session** is the main interface for interacting with language models. It manages:
+- Model initialization and loading
+- Web Workers for non-blocking inference
+- Resource cleanup
+
+### Types of Sessions
+
+**Basic Session**
+```javascript
+import { createSession } from 'agentary-js';
+const session = await createSession({ /* config */ });
+```
+Use for simple text generation and tool calling.
+
+**Agent Session**
+```javascript
+import { createAgentSession } from 'agentary-js';
+const agent = await createAgentSession({ /* config */ });
+```
+Use for multi-step workflows with memory and state management.
+
+## Models
+
+Agentary JS supports multiple models for different tasks:
+
+```javascript
+const session = await createSession({
+  models: {
+    chat: {
+      name: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4'
+    },
+    tool_use: {
+      name: 'onnx-community/Qwen2.5-0.5B-Instruct',
+      quantization: 'q4'
+    },
+    reasoning: {
+      name: 'onnx-community/Qwen2.5-0.5B-Instruct',
+      quantization: 'q4'
+    },
+    default: {
+      name: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4'
+    }
+  }
+});
+```
+
+### Model Selection
+
+- **chat**: General conversation and text generation
+- **tool_use**: Function/tool calling (requires better reasoning)
+- **reasoning**: Complex reasoning and planning
+- **default**: Fallback when no specific model is defined
+
+## Generation Tasks
+
+Specify the task type to use the appropriate model:
+
+```javascript
+// Uses the 'chat' model
+session.createResponse({ messages }, 'chat')
+
+// Uses the 'tool_use' model
+session.createResponse({ messages, tools }, 'tool_use')
+
+// Uses the 'reasoning' model
+session.createResponse({ messages }, 'reasoning')
+```
+
+## Messages
+
+Messages follow the standard chat format:
+
+```javascript
+const messages = [
+  { role: 'system', content: 'You are a helpful assistant.' },
+  { role: 'user', content: 'Hello!' },
+  { role: 'assistant', content: 'Hi! How can I help?' },
+  { role: 'user', content: 'Tell me a joke.' }
+];
+```
+
+**Roles:**
+- `system`: Instructions for the model's behavior
+- `user`: Input from the user
+- `assistant`: Model's previous responses
+
+## Streaming
+
+All generation in Agentary JS is streaming by default:
+
+```javascript
+for await (const chunk of session.createResponse({ messages })) {
+  // Process each token as it's generated
+  console.log(chunk.token);
+}
+```
+
+### Why Streaming?
+
+- **Better UX**: Show progress as the model generates
+- **Faster TTFB**: Display results immediately
+- **Cancellable**: Stop generation early if needed
+
+## Web Workers
+
+Models run in Web Workers to avoid blocking the main thread:
+
+```javascript
+// Main thread continues running while model generates
+const generationPromise = (async () => {
+  for await (const chunk of session.createResponse({ messages })) {
+    updateUI(chunk.token);
+  }
+})();
+
+// UI remains responsive
+updateProgressBar();
+```
+
+## Memory Management
+
+Agentary JS provides built-in memory management for long conversations:
+
+```javascript
+const agent = await createAgentSession({
+  models: { chat: { /* ... */ } }
+});
+
+const workflow = {
+  memoryConfig: {
+    maxTokens: 2048,              // Maximum context size
+    compressionThreshold: 0.8,    // Compress at 80% capacity
+    enablePruning: true            // Auto-remove old messages
+  },
+  // ...
+};
+```
+
+## Lifecycle Events
+
+Subscribe to events for debugging and monitoring:
+
+```javascript
+session.on('generation:start', (event) => {
+  console.log('Started generating...');
+});
+
+session.on('generation:token', (event) => {
+  console.log(event.token);
+});
+
+session.on('generation:complete', (event) => {
+  console.log(`Generated ${event.totalTokens} tokens`);
+});
+```
+
+## Tools (Function Calling)
+
+Define tools that the model can call:
+
+```javascript
+const tools = [{
+  type: 'function',
+  function: {
+    name: 'get_weather',
+    description: 'Get current weather',
+    parameters: {
+      type: 'object',
+      properties: {
+        city: { type: 'string' }
+      },
+      required: ['city']
+    },
+    implementation: async (city) => {
+      // Your implementation
+      return { temp: 72, condition: 'sunny' };
+    }
+  }
+}];
+
+for await (const chunk of session.createResponse({
+  messages,
+  tools
+})) {
+  // Model can now call your tools
+}
+```
+
+## Next Steps
+
+- Learn about [Tool Calling](/guides/tool-calling)
+- Build [Agentic Workflows](/guides/agentic-workflows)
+- Explore [API Reference](/api)

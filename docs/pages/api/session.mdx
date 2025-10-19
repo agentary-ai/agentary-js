@@ -1,0 +1,192 @@
+# Session API
+
+The Session is the main interface for text generation with language models.
+
+## createSession
+
+Creates a new inference session.
+
+```typescript
+function createSession(args?: CreateSessionArgs): Promise<Session>
+```
+
+### Parameters
+
+```typescript
+interface CreateSessionArgs {
+  models?: {
+    default?: Model;
+    tool_use?: Model;
+    chat?: Model;
+    reasoning?: Model;
+  };
+  engine?: 'auto' | 'webgpu' | 'wasm' | 'webnn';
+  hfToken?: string;
+  ctx?: number;
+}
+
+interface Model {
+  name: string;
+  quantization: 'q4' | 'q8' | 'fp16' | 'fp32';
+}
+```
+
+### Example
+
+```javascript
+import { createSession } from 'agentary-js';
+
+const session = await createSession({
+  models: {
+    chat: {
+      name: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4'
+    }
+  },
+  engine: 'webgpu'
+});
+```
+
+## Session Methods
+
+### createResponse
+
+Generate text with streaming output.
+
+```typescript
+createResponse(
+  args: GenerateArgs,
+  generationTask?: GenerationTask
+): AsyncIterable<TokenStreamChunk>
+```
+
+#### Parameters
+
+```typescript
+interface GenerateArgs {
+  messages: Message[];
+  model?: Model;
+  max_new_tokens?: number;
+  tools?: Tool[];
+  temperature?: number;
+  top_p?: number;
+  top_k?: number;
+  repetition_penalty?: number;
+  stop?: string[];
+  seed?: number;
+  deterministic?: boolean;
+}
+
+type GenerationTask = 'chat' | 'tool_use' | 'reasoning';
+```
+
+#### Returns
+
+```typescript
+interface TokenStreamChunk {
+  token: string;
+  tokenId: number;
+  isFirst: boolean;
+  isLast: boolean;
+  ttfbMs?: number;
+  tokensPerSecond?: number;
+}
+```
+
+#### Example
+
+```javascript
+for await (const chunk of session.createResponse({
+  messages: [
+    { role: 'user', content: 'Hello!' }
+  ],
+  temperature: 0.7,
+  max_new_tokens: 200
+})) {
+  console.log(chunk.token);
+}
+```
+
+### dispose
+
+Clean up session resources.
+
+```typescript
+dispose(): Promise<void>
+```
+
+#### Example
+
+```javascript
+await session.dispose();
+```
+
+### on
+
+Subscribe to lifecycle events.
+
+```typescript
+on(eventType: string | '*', handler: EventHandler): UnsubscribeFn
+```
+
+#### Example
+
+```javascript
+const unsubscribe = session.on('generation:token', (event) => {
+  console.log(event.token);
+});
+
+// Later: unsubscribe()
+```
+
+### off
+
+Unsubscribe from events.
+
+```typescript
+off(eventType: string | '*', handler: EventHandler): void
+```
+
+## Types
+
+### Message
+
+```typescript
+interface Message {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+```
+
+### Tool
+
+```typescript
+interface Tool {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: {
+      type: 'object';
+      properties: Record<string, any>;
+      required?: string[];
+    };
+    implementation?: Function;
+  };
+}
+```
+
+### Model
+
+```typescript
+interface Model {
+  name: string;
+  quantization: 'q4' | 'q8' | 'fp16' | 'fp32';
+}
+```
+
+## See Also
+
+- [Agent Session API](/api/agent-session)
+- [Type Definitions](/api/types)
+- [Quick Start Guide](/getting-started/quick-start)
