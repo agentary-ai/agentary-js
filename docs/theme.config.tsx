@@ -1,7 +1,13 @@
 import React from 'react'
+import Image from 'next/image'
+import AgentaryLogo from './assets/agentary.png'
 
 export default {
-  logo: <span style={{ fontWeight: 700, fontSize: '1.2rem' }}>🤖 Agentary JS</span>,
+  logo: (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <Image src={AgentaryLogo} alt="Agentary JS" width={148} height={24} priority />
+    </div>
+  ),
   project: {
     link: 'https://github.com/agentary-ai/agentary-js',
   },
@@ -18,10 +24,11 @@ export default {
   },
   head: () => (
     <>
+      <title>Agentary JS Docs</title>
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <meta property="og:title" content="Agentary JS" />
+      <meta property="og:title" content="Agentary JS Docs" />
       <meta property="og:description" content="Run quantized LLMs in the browser with agentic workflows" />
-      <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>" />
+      <link rel="icon" href="/favicon.ico" />
     </>
   ),
   sidebar: {
@@ -33,7 +40,8 @@ export default {
   },
   useNextSeoProps() {
     return {
-      titleTemplate: '%s – Agentary JS'
+      titleTemplate: '%s – Agentary Docs',
+      defaultTitle: 'Agentary JS Docs'
     }
   }
 }
