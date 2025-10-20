@@ -1,0 +1,446 @@
+# Agentic Workflows
+
+Build sophisticated multi-step AI agents that can reason, plan, use tools, and adapt - all running in the browser.
+
+## What are Agentic Workflows?
+
+Agentic workflows enable your AI to:
+- Break down complex tasks into steps
+- Use tools to gather information
+- Make decisions based on intermediate results
+- Maintain context across multiple steps
+- Retry failed operations
+
+## Basic Workflow
+
+```javascript
+import { createAgentSession } from 'agentary-js';
+
+const agent = await createAgentSession({
+  models: {
+    chat: {
+      name: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4'
+    },
+    tool_use: {
+      name: 'onnx-community/Qwen2.5-0.5B-Instruct',
+      quantization: 'q4'
+    }
+  }
+});
+
+const workflow = {
+  id: 'research-assistant',
+  name: 'Research Assistant',
+  systemPrompt: 'You are a helpful research assistant.',
+  maxIterations: 5,
+  steps: [
+    {
+      id: 'understand',
+      prompt: 'Break down the research topic into key questions',
+      maxTokens: 200,
+      generationTask: 'reasoning'
+    },
+    {
+      id: 'research',
+      prompt: 'Search for information about each question',
+      toolChoice: ['web_search'],
+      generationTask: 'tool_use'
+    },
+    {
+      id: 'synthesize',
+      prompt: 'Analyze findings and create a summary',
+      maxTokens: 400,
+      generationTask: 'chat'
+    }
+  ],
+  tools: [
+    {
+      type: 'function',
+      function: {
+        name: 'web_search',
+        description: 'Search the web for information',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string' }
+          },
+          required: ['query']
+        },
+        implementation: async ({ query }) => {
+          // Your search implementation
+          return `Results for: ${query}`;
+        }
+      }
+    }
+  ]
+};
+
+for await (const iteration of agent.runWorkflow(
+  'Research the benefits of renewable energy',
+  workflow
+)) {
+  if (iteration?.content) {
+    console.log(`[Step ${iteration.stepId}]: ${iteration.content}`);
+  }
+  if (iteration?.toolCall) {
+    console.log(`  🔧 Tool: ${iteration.toolCall.name}`);
+    console.log(`  📄 Result: ${iteration.toolCall.result}`);
+  }
+}
+
+await agent.dispose();
+```
+
+## Workflow Configuration
+
+### Core Properties
+
+```javascript
+const workflow = {
+  id: 'unique-workflow-id',
+  name: 'Human Readable Name',
+  description: 'Optional workflow description',
+  systemPrompt: 'System instructions for the workflow',
+  maxIterations: 10,        // Maximum iterations before stopping
+  timeout: 30000,           // Timeout in milliseconds
+  context: {                // Initial context data
+    userId: '123',
+    preferences: {}
+  },
+  memoryConfig: {           // Memory management
+    maxTokens: 2048,
+    compressionThreshold: 0.8
+  },
+  steps: [ /* ... */ ],
+  tools: [ /* ... */ ]
+};
+```
+
+## Workflow Steps
+
+Each step defines a discrete action:
+
+```javascript
+{
+  id: 'analyze',
+  description: 'Analyze the user input',
+  prompt: 'Examine the input and identify key topics',
+  maxTokens: 300,
+  temperature: 0.7,
+  generationTask: 'reasoning',
+  toolChoice: ['search', 'calculate'],
+  maxAttempts: 3
+}
+```
+
+### Step Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | string | Unique step identifier |
+| `description` | string | Short description for memory |
+| `prompt` | string | Instructions for this step |
+| `maxTokens` | number | Token limit for generation |
+| `temperature` | number | Sampling temperature |
+| `generationTask` | string | Task type (chat, tool_use, reasoning) |
+| `toolChoice` | string[] | Available tools for this step |
+| `maxAttempts` | number | Retry attempts on failure |
+
+## Step Types
+
+### 1. Reasoning Steps
+
+For analysis and planning:
+
+```javascript
+{
+  id: 'plan',
+  prompt: 'Create a step-by-step plan to solve this problem',
+  generationTask: 'reasoning',
+  maxTokens: 300
+}
+```
+
+### 2. Tool Use Steps
+
+For actions and data gathering:
+
+```javascript
+{
+  id: 'fetch-data',
+  prompt: 'Gather the necessary information',
+  generationTask: 'tool_use',
+  toolChoice: ['web_search', 'database_query']
+}
+```
+
+### 3. Chat Steps
+
+For final responses:
+
+```javascript
+{
+  id: 'respond',
+  prompt: 'Provide a comprehensive answer based on the findings',
+  generationTask: 'chat',
+  maxTokens: 500
+}
+```
+
+## Memory Management
+
+Workflows automatically manage conversation history:
+
+```javascript
+const workflow = {
+  memoryConfig: {
+    maxTokens: 2048,              // Maximum context size
+    compressionThreshold: 0.8,    // Compress at 80% capacity
+    memory: new SlidingWindowMemory(),
+    memoryCompressor: new LLMSummarization({
+      maxSummaryTokens: 512,
+      recentWindowSize: 4
+    })
+  },
+  // ...
+};
+```
+
+### Memory Strategies
+
+**Sliding Window** (default):
+```javascript
+import { SlidingWindowMemory } from 'agentary-js';
+
+memoryConfig: {
+  memory: new SlidingWindowMemory(),
+  maxTokens: 2048
+}
+```
+
+**With Compression**:
+```javascript
+import { SlidingWindowMemory, LLMSummarization } from 'agentary-js';
+
+memoryConfig: {
+  memory: new SlidingWindowMemory(),
+  memoryCompressor: new LLMSummarization({
+    maxSummaryTokens: 512,
+    recentWindowSize: 4
+  }),
+  maxTokens: 4096,
+  compressionThreshold: 0.75
+}
+```
+
+## Error Handling and Retries
+
+Steps can automatically retry on failure:
+
+```javascript
+{
+  id: 'api-call',
+  prompt: 'Fetch user data from the API',
+  generationTask: 'tool_use',
+  maxAttempts: 3,  // Retry up to 3 times
+  toolChoice: ['fetch_user_data']
+}
+```
+
+Monitor errors with events:
+
+```javascript
+agent.on('workflow:step:retry', (event) => {
+  console.log(`Retrying step ${event.stepId}`);
+  console.log(`Attempt ${event.attempt}/${event.maxAttempts}`);
+});
+
+agent.on('workflow:error', (event) => {
+  console.error(`Workflow failed: ${event.error}`);
+});
+```
+
+## Context Passing
+
+Pass data between steps using context:
+
+```javascript
+const workflow = {
+  context: {
+    initialData: 'some value'
+  },
+  steps: [
+    {
+      id: 'step1',
+      prompt: 'Process the initial data'
+      // Can access context.initialData
+    },
+    {
+      id: 'step2',
+      prompt: 'Use results from step 1'
+      // Can access previous step results
+    }
+  ]
+};
+```
+
+## Workflow Events
+
+Monitor workflow execution in real-time:
+
+```javascript
+agent.on('workflow:start', (event) => {
+  console.log(`Starting workflow: ${event.workflowName}`);
+});
+
+agent.on('workflow:step:start', (event) => {
+  console.log(`[Step ${event.stepId}] Starting...`);
+});
+
+agent.on('workflow:step:complete', (event) => {
+  console.log(`[Step ${event.stepId}] Completed in ${event.duration}ms`);
+  if (event.hasToolCall) {
+    console.log('  - Tool was called');
+  }
+});
+
+agent.on('workflow:complete', (event) => {
+  console.log(`Workflow complete! ${event.totalSteps} steps in ${event.duration}ms`);
+});
+```
+
+## Complete Example: Math Problem Solver
+
+```javascript
+import { createAgentSession } from 'agentary-js';
+
+const agent = await createAgentSession({
+  models: {
+    chat: { name: 'onnx-community/gemma-3-270m-it-ONNX', quantization: 'q4' },
+    tool_use: { name: 'onnx-community/Qwen2.5-0.5B-Instruct', quantization: 'q4' }
+  }
+});
+
+const mathWorkflow = {
+  id: 'math-solver',
+  name: 'Math Problem Solver',
+  systemPrompt: 'You are a math tutor that helps solve problems step-by-step.',
+  maxIterations: 5,
+  steps: [
+    {
+      id: 'understand',
+      prompt: 'Identify what mathematical operation is needed',
+      maxTokens: 150,
+      generationTask: 'reasoning'
+    },
+    {
+      id: 'calculate',
+      prompt: 'Use the calculator to compute the result',
+      toolChoice: ['calculator'],
+      generationTask: 'tool_use'
+    },
+    {
+      id: 'explain',
+      prompt: 'Explain the solution in simple terms',
+      maxTokens: 200,
+      generationTask: 'chat'
+    }
+  ],
+  tools: [{
+    type: 'function',
+    function: {
+      name: 'calculator',
+      description: 'Evaluate mathematical expressions',
+      parameters: {
+        type: 'object',
+        properties: {
+          expression: { type: 'string', description: 'Math expression' }
+        },
+        required: ['expression']
+      },
+      implementation: async ({ expression }) => {
+        try {
+          // Safe evaluation (use a proper math parser in production)
+          const result = eval(expression);
+          return String(result);
+        } catch (error) {
+          return 'Invalid expression';
+        }
+      }
+    }
+  }]
+};
+
+for await (const iteration of agent.runWorkflow(
+  'What is 15% of 250?',
+  mathWorkflow
+)) {
+  if (iteration?.content) {
+    console.log(`\n[${iteration.stepId}]:`);
+    console.log(iteration.content);
+  }
+}
+```
+
+## Best Practices
+
+### 1. Keep Steps Focused
+
+Each step should have a single, clear purpose:
+
+```javascript
+// ❌ Bad: Too many responsibilities
+{
+  id: 'do-everything',
+  prompt: 'Research, analyze, and respond'
+}
+
+// ✅ Good: Focused steps
+{
+  id: 'research',
+  prompt: 'Search for relevant information'
+},
+{
+  id: 'analyze',
+  prompt: 'Analyze the gathered information'
+},
+{
+  id: 'respond',
+  prompt: 'Provide a comprehensive answer'
+}
+```
+
+### 2. Limit Workflow Complexity
+
+Keep workflows to 3-7 steps for best performance:
+
+```javascript
+maxIterations: 7  // Reasonable limit
+```
+
+### 3. Set Appropriate Timeouts
+
+Prevent workflows from running too long:
+
+```javascript
+timeout: 30000  // 30 seconds
+```
+
+### 4. Monitor Performance
+
+Use events to track execution:
+
+```javascript
+agent.on('workflow:step:complete', (event) => {
+  if (event.duration > 5000) {
+    console.warn(`Step ${event.stepId} took ${event.duration}ms`);
+  }
+});
+```
+
+## Next Steps
+
+- Learn about [Memory Management](/guides/memory-management) in detail
+- Explore [Lifecycle Events](/guides/lifecycle-events) for monitoring
+- Check out [API Reference](/api) for all options

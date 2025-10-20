@@ -1,0 +1,76 @@
+---
+title: Agentary JS Docs
+---
+
+# Agentary JS
+
+Run quantized small language models directly in the browser with WebGPU and WebAssembly, featuring built-in support for agentic workflows.
+
+## Features
+
+- 🚀 **Browser-Native** - Run LLMs directly in the browser without server dependencies
+- ⚡ **WebGPU Acceleration** - Leverage WebGPU for high-performance inference
+- 🤖 **Agentic Workflows** - Create and execute complex multi-step agent workflows
+- 🧠 **Memory Management** - Smart context compression and pruning for long conversations
+- 🛠️ **Function Calling** - Built-in support for tool/function calling
+- 📊 **Multi-Model Support** - Use different models for chat, tool use, and reasoning
+- 📡 **Lifecycle Events** - Built-in event system for monitoring and debugging
+
+## Quick Start
+
+Install via npm:
+
+```bash
+npm install agentary-js
+```
+
+Basic example:
+
+```javascript
+import { createSession } from 'agentary-js';
+
+const session = await createSession({
+  models: {
+    chat: {
+      name: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4'
+    }
+  },
+  engine: 'webgpu'
+});
+
+for await (const chunk of session.createResponse({
+  messages: [{ role: 'user', content: 'Hello!' }]
+})) {
+  process.stdout.write(chunk.token);
+}
+
+await session.dispose();
+```
+
+## Why Agentary JS?
+
+### Browser-Native AI
+Run powerful language models directly in users' browsers - no server costs, maximum privacy, and instant responses.
+
+### Agentic Workflows
+Build sophisticated multi-step AI agents that can think, plan, use tools, and adapt - all running client-side.
+
+### Production Ready
+Built with observability, error handling, memory management, and performance optimization from the ground up.
+
+## Browser Support
+
+- **WebGPU**: Chrome 113+, Edge 113+, Firefox with WebGPU enabled
+- **WebAssembly**: All modern browsers
+- **Minimum Requirements**: 4GB RAM recommended for small models
+
+## Get Started
+
+Ready to build? Check out the [Getting Started](/getting-started) guide.
+
+## Community
+
+- [GitHub Repository](https://github.com/agentary-ai/agentary-js)
+- [Issue Tracker](https://github.com/agentary-ai/agentary-js/issues)
+- [Discussions](https://github.com/agentary-ai/agentary-js/discussions)

@@ -1,0 +1,131 @@
+# Quick Start
+
+This guide will walk you through creating your first Agentary JS application.
+
+## Basic Text Generation
+
+Create a simple chat session:
+
+```javascript
+import { createSession } from 'agentary-js';
+
+// Create a session with a quantized model
+const session = await createSession({
+  models: {
+    chat: {
+      name: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4'
+    }
+  },
+  engine: 'webgpu' // or 'wasm'
+});
+
+// Generate text with streaming
+for await (const chunk of session.createResponse({
+  messages: [{ role: 'user', content: 'Hello, how are you today?' }]
+})) {
+  if (chunk.isFirst && chunk.ttfbMs) {
+    console.log(`Time to first byte: ${chunk.ttfbMs}ms`);
+  }
+  if (!chunk.isLast) {
+    process.stdout.write(chunk.token);
+  }
+}
+
+// Clean up resources
+await session.dispose();
+```
+
+## Understanding the Code
+
+### 1. Create a Session
+
+```javascript
+const session = await createSession({
+  models: {
+    chat: {
+      name: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4'
+    }
+  },
+  engine: 'webgpu'
+});
+```
+
+The session initializes the model and manages the Web Worker for inference.
+
+**Key options:**
+- `models.chat`: The model to use for chat completions
+- `quantization`: Quantization level (q4, q8, fp16, fp32)
+- `engine`: Inference engine (webgpu, wasm, auto)
+
+### 2. Generate Responses
+
+```javascript
+for await (const chunk of session.createResponse({
+  messages: [{ role: 'user', content: 'Hello!' }]
+})) {
+  process.stdout.write(chunk.token);
+}
+```
+
+The `createResponse` method returns an async iterable that yields tokens as they're generated.
+
+**Chunk properties:**
+- `token`: The generated text token
+- `tokenId`: Numeric token ID
+- `isFirst`: True for the first token
+- `isLast`: True for the final token
+- `ttfbMs`: Time to first byte (only on first chunk)
+
+### 3. Clean Up
+
+```javascript
+await session.dispose();
+```
+
+Always dispose of sessions to free up memory and terminate workers.
+
+## Configuration Options
+
+### Engine Selection
+
+```javascript
+engine: 'auto'    // Automatically selects best available
+engine: 'webgpu'  // Force WebGPU (fastest, but limited browser support)
+engine: 'wasm'    // Force WebAssembly (universal compatibility)
+```
+
+### Model Quantization
+
+Quantization reduces model size and improves performance:
+
+| Level | Size | Speed | Quality |
+|-------|------|-------|---------|
+| `q4` | Smallest | Fastest | Good |
+| `q8` | Small | Fast | Better |
+| `fp16` | Medium | Moderate | Great |
+| `fp32` | Large | Slow | Best |
+
+## Generation Parameters
+
+Control the output with generation parameters:
+
+```javascript
+for await (const chunk of session.createResponse({
+  messages: [{ role: 'user', content: 'Write a poem' }],
+  temperature: 0.7,        // Randomness (0.0-2.0)
+  max_new_tokens: 200,     // Maximum tokens to generate
+  top_p: 0.9,              // Nucleus sampling
+  top_k: 50,               // Top-k sampling
+  repetition_penalty: 1.1  // Penalty for repetition
+})) {
+  process.stdout.write(chunk.token);
+}
+```
+
+## Next Steps
+
+- Learn about [Core Concepts](/getting-started/concepts)
+- Explore [Tool Calling](/guides/tool-calling)
+- Build [Agentic Workflows](/guides/agentic-workflows)

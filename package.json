@@ -28,7 +28,10 @@
     "pack:clean": "rm -f agentary-js-*.tgz",
     "version:patch": "npm version patch",
     "version:minor": "npm version minor",
-    "version:major": "npm version major"
+    "version:major": "npm version major",
+    "docs:dev": "cd docs && npm run dev",
+    "docs:build": "cd docs && npm run build",
+    "docs:start": "cd docs && npm run start"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.0.0",
@@ -40,6 +43,11 @@
     "@vitest/ui": "^3.2.4",
     "happy-dom": "^18.0.1",
     "jsdom": "^27.0.0",
+    "next": "^15.5.6",
+    "nextra": "^3.3.1",
+    "nextra-theme-docs": "^3.3.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
     "rimraf": "^5.0.5",
     "tsup": "^8.1.0",
     "typescript": "^5.5.4",
@@ -48,7 +56,7 @@
   "engines": {
     "node": ">=18"
   },
-  "homepage": "https://github.com/agentary-ai/agentary-js#readme",
+  "homepage": "https://agentary-js.vercel.app",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/agentary-ai/agentary-js.git"

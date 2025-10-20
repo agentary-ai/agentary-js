@@ -1,0 +1,324 @@
+# Tool Calling
+
+Enable your language models to call functions and interact with external systems.
+
+## Basic Tool Calling
+
+Define tools with a schema and implementation:
+
+```javascript
+import { createSession } from 'agentary-js';
+
+const session = await createSession({
+  models: {
+    chat: {
+      name: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4'
+    },
+    tool_use: {
+      name: 'onnx-community/Qwen2.5-0.5B-Instruct',
+      quantization: 'q4'
+    }
+  }
+});
+
+const tools = [{
+  type: 'function',
+  function: {
+    name: 'get_weather',
+    description: 'Get current weather for a city',
+    parameters: {
+      type: 'object',
+      properties: {
+        city: {
+          type: 'string',
+          description: 'City name'
+        },
+        units: {
+          type: 'string',
+          enum: ['celsius', 'fahrenheit'],
+          description: 'Temperature units'
+        }
+      },
+      required: ['city']
+    },
+    implementation: async ({ city, units = 'celsius' }) => {
+      // Call your weather API
+      const response = await fetch(`https://api.weather.com/${city}`);
+      const data = await response.json();
+      return JSON.stringify(data);
+    }
+  }
+}];
+
+for await (const chunk of session.createResponse({
+  messages: [{ role: 'user', content: 'What is the weather in Tokyo?' }],
+  tools
+})) {
+  process.stdout.write(chunk.token);
+}
+```
+
+## Tool Schema
+
+Tools use JSON Schema for parameter validation:
+
+```javascript
+{
+  type: 'function',
+  function: {
+    name: 'search_database',
+    description: 'Search a database with filters',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query'
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum results',
+          minimum: 1,
+          maximum: 100
+        },
+        filters: {
+          type: 'object',
+          properties: {
+            category: { type: 'string' },
+            minPrice: { type: 'number' },
+            maxPrice: { type: 'number' }
+          }
+        }
+      },
+      required: ['query']
+    }
+  }
+}
+```
+
+## Multiple Tools
+
+Provide multiple tools for complex tasks:
+
+```javascript
+const tools = [
+  {
+    type: 'function',
+    function: {
+      name: 'calculate',
+      description: 'Perform mathematical calculations',
+      parameters: {
+        type: 'object',
+        properties: {
+          expression: { type: 'string', description: 'Math expression to evaluate' }
+        },
+        required: ['expression']
+      },
+      implementation: async ({ expression }) => {
+        // Safe math evaluation
+        return String(eval(expression));
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_date',
+      description: 'Get current date and time',
+      parameters: {
+        type: 'object',
+        properties: {
+          timezone: { type: 'string', description: 'Timezone (optional)' }
+        }
+      },
+      implementation: async ({ timezone = 'UTC' }) => {
+        return new Date().toLocaleString('en-US', { timeZone: timezone });
+      }
+    }
+  }
+];
+```
+
+## Tool Execution Flow
+
+1. **Model generates tool call** - Outputs structured tool call
+2. **Automatic execution** - Implementation is called with parameters
+3. **Result returned** - Tool result is added to context
+4. **Model continues** - Can call more tools or generate final response
+
+```javascript
+// The model can chain multiple tool calls
+for await (const chunk of session.createResponse({
+  messages: [{
+    role: 'user',
+    content: 'Calculate 15% tip on $47.50 and tell me the current time in New York'
+  }],
+  tools
+})) {
+  // Model will call calculate(), then get_date(), then provide answer
+  process.stdout.write(chunk.token);
+}
+```
+
+## Agent Session with Tools
+
+For workflows, register tools globally:
+
+```javascript
+import { createAgentSession } from 'agentary-js';
+
+const agent = await createAgentSession({
+  models: { /* ... */ }
+});
+
+// Register tools
+agent.registerTool({
+  type: 'function',
+  function: {
+    name: 'web_search',
+    description: 'Search the web',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' }
+      },
+      required: ['query']
+    },
+    implementation: async ({ query }) => {
+      // Your search implementation
+      return searchResults;
+    }
+  }
+});
+
+// Tools available in all workflow steps
+const workflow = {
+  steps: [
+    {
+      id: 'research',
+      prompt: 'Research the topic',
+      toolChoice: ['web_search'],  // Restrict to specific tools
+      generationTask: 'tool_use'
+    }
+  ]
+};
+```
+
+## Tool Calling Best Practices
+
+### 1. Clear Descriptions
+
+Write clear, specific descriptions:
+
+```javascript
+// ❌ Bad
+description: 'Gets data'
+
+// ✅ Good
+description: 'Retrieves user profile data including name, email, and preferences from the database'
+```
+
+### 2. Parameter Validation
+
+Use JSON Schema constraints:
+
+```javascript
+parameters: {
+  type: 'object',
+  properties: {
+    email: {
+      type: 'string',
+      format: 'email',
+      description: 'Valid email address'
+    },
+    age: {
+      type: 'number',
+      minimum: 0,
+      maximum: 150,
+      description: 'User age in years'
+    }
+  }
+}
+```
+
+### 3. Error Handling
+
+Handle errors gracefully in implementations:
+
+```javascript
+implementation: async ({ city }) => {
+  try {
+    const response = await fetch(`https://api.weather.com/${city}`);
+    if (!response.ok) {
+      return JSON.stringify({ error: 'City not found' });
+    }
+    return JSON.stringify(await response.json());
+  } catch (error) {
+    return JSON.stringify({ error: error.message });
+  }
+}
+```
+
+### 4. Return Format
+
+Return JSON strings for complex data:
+
+```javascript
+implementation: async ({ query }) => {
+  const results = await search(query);
+  return JSON.stringify({
+    count: results.length,
+    items: results.slice(0, 5),
+    hasMore: results.length > 5
+  });
+}
+```
+
+## Monitoring Tool Calls
+
+Use lifecycle events to monitor tool execution:
+
+```javascript
+session.on('tool:call:start', (event) => {
+  console.log(`Calling ${event.toolName}:`, event.args);
+});
+
+session.on('tool:call:complete', (event) => {
+  console.log(`${event.toolName} completed in ${event.duration}ms`);
+  console.log('Result:', event.result);
+});
+
+session.on('tool:call:error', (event) => {
+  console.error(`${event.toolName} failed:`, event.error);
+});
+```
+
+## Model Selection for Tools
+
+Different models have different tool-calling capabilities:
+
+| Model | Tool Calling | Reliability |
+|-------|--------------|-------------|
+| Qwen2.5-0.5B | ✅ Good | High |
+| Gemma-270M | ⚠️ Limited | Medium |
+| Phi-3 | ✅ Good | High |
+
+Use the `tool_use` model configuration for best results:
+
+```javascript
+const session = await createSession({
+  models: {
+    tool_use: {
+      name: 'onnx-community/Qwen2.5-0.5B-Instruct',
+      quantization: 'q4'
+    }
+  }
+});
+```
+
+## Next Steps
+
+- Build [Agentic Workflows](/guides/agentic-workflows) with tools
+- Learn about [Memory Management](/guides/memory-management)
+- Explore [Lifecycle Events](/guides/lifecycle-events)
