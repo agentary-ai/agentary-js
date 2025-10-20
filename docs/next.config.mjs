@@ -17,5 +17,6 @@ export default withNextra({
     unoptimized: true
   },
   basePath: process.env.BASE_PATH || '',
-  trailingSlash: true
+  trailingSlash: true,
+  outputFileTracingRoot: process.cwd()
 })
