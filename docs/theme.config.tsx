@@ -1,13 +1,41 @@
 import React from 'react'
 import Image from 'next/image'
-import AgentaryLogo from './assets/agentary.png'
+import { useTheme } from 'next-themes'
+import AgentaryLogoLight from './assets/agentary-light.png'
+import AgentaryLogoDark from './assets/agentary-dark.png'
+
+const Logo = () => {
+  const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = React.useState(false)
+
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Avoid hydration mismatch by not rendering until mounted on client
+  if (!mounted) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: 148, height: 24 }} />
+    )
+  }
+
+  const logo = resolvedTheme === 'dark' ? AgentaryLogoLight : AgentaryLogoDark
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <Image
+        src={logo}
+        alt="Agentary Logo"
+        width={148}
+        height={24}
+        priority
+      />
+    </div>
+  )
+}
 
 export default {
-  logo: (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-      <Image src={AgentaryLogo} alt="Agentary JS" width={148} height={24} priority />
-    </div>
-  ),
+  logo: <Logo />,
   project: {
     link: 'https://github.com/agentary-ai/agentary-js',
   },
