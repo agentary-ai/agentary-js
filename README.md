@@ -134,14 +134,14 @@ await agent.dispose();
 
 ## 📚 Documentation
 
-**[Full Documentation →](https://agentary-js.vercel.app)**
+**[Full Documentation →](https://docs.agentary.ai)**
 
-- [Getting Started](https://agentary-js.vercel.app/getting-started/installation)
-- [Quick Start Guide](https://agentary-js.vercel.app/getting-started/quick-start)
-- [Tool Calling](https://agentary-js.vercel.app/guides/tool-calling)
-- [Agentic Workflows](https://agentary-js.vercel.app/guides/agentic-workflows)
-- [Memory Management](https://agentary-js.vercel.app/guides/memory-management)
-- [API Reference](https://agentary-js.vercel.app/api/session)
+- [Getting Started](https://docs.agentary.ai/getting-started/installation)
+- [Quick Start Guide](https://docs.agentary.ai/getting-started/quick-start)
+- [Tool Calling](https://docs.agentary.ai/guides/tool-calling)
+- [Agentic Workflows](https://docs.agentary.ai/guides/agentic-workflows)
+- [Memory Management](https://docs.agentary.ai/guides/memory-management)
+- [API Reference](https://docs.agentary.ai/api/session)
 
 ## 🌐 Browser Support
 
@@ -175,7 +175,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙋‍♀️ Support
 
-- 📖 [Documentation](https://agentary-js.vercel.app)
+- 📖 [Documentation](https://docs.agentary.ai)
 - 🐛 [Issue Tracker](https://github.com/agentary-ai/agentary-js/issues)
 - 💬 [Discussions](https://github.com/agentary-ai/agentary-js/discussions)
 
