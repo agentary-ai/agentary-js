@@ -1,0 +1,859 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Creative Writing Assistant - Agentary JS Demo</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: #334155;
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 40px;
+      }
+      h1 {
+        color: white;
+        text-align: center;
+        margin-bottom: 8px;
+        font-size: 2.5rem;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+      }
+      .subtitle {
+        text-align: center;
+        color: rgba(255, 255, 255, 0.9);
+        margin-bottom: 16px;
+        font-size: 18px;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+      }
+      .feature-badge {
+        text-align: center;
+        margin-bottom: 32px;
+        padding: 12px 24px;
+        background: rgba(245, 87, 108, 0.2);
+        border: 2px solid rgba(245, 87, 108, 0.5);
+        border-radius: 24px;
+        color: white;
+        font-weight: 600;
+        display: inline-block;
+        width: fit-content;
+        margin-left: auto;
+        margin-right: auto;
+        display: block;
+        backdrop-filter: blur(10px);
+      }
+
+      .demo-panel {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        padding: 32px;
+      }
+
+      .input-section {
+        margin-bottom: 32px;
+        padding: 24px;
+        background: linear-gradient(145deg, #fff5f7, #ffe0e6);
+        border-radius: 12px;
+        border: 1px solid #fecdd3;
+      }
+      .input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      label {
+        font-weight: 600;
+        color: #475569;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      input, select, textarea {
+        padding: 12px 16px;
+        border: 2px solid #fecdd3;
+        border-radius: 8px;
+        font-size: 14px;
+        font-family: inherit;
+        transition: all 0.2s;
+        background: white;
+      }
+      input:focus, select:focus, textarea:focus {
+        outline: none;
+        border-color: #f5576c;
+        box-shadow: 0 0 0 3px rgba(245, 87, 108, 0.1);
+        transform: translateY(-1px);
+      }
+
+      .mode-selector {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      .mode-btn {
+        background: white;
+        border: 2px solid #fecdd3;
+        padding: 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.2s;
+        text-align: center;
+      }
+      .mode-btn:hover {
+        border-color: #f5576c;
+        transform: translateY(-2px);
+      }
+      .mode-btn.active {
+        background: linear-gradient(145deg, #f093fb, #f5576c);
+        color: white;
+        border-color: #f5576c;
+      }
+
+      .example-buttons {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+      .example-btn {
+        background: #f5576c;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        transition: all 0.2s;
+      }
+      .example-btn:hover {
+        background: #dc2f3f;
+        transform: translateY(-1px);
+      }
+
+      .run-section {
+        text-align: center;
+        margin-top: 24px;
+      }
+      .run-btn {
+        background: linear-gradient(145deg, #f093fb, #f5576c);
+        color: white;
+        border: none;
+        padding: 16px 32px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 16px;
+        transition: all 0.3s;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        box-shadow: 0 4px 15px rgba(245, 87, 108, 0.4);
+      }
+      .run-btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(245, 87, 108, 0.6);
+      }
+      .run-btn:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+      .clear-btn {
+        background: #6b7280;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 500;
+        margin-left: 12px;
+        transition: all 0.2s;
+      }
+      .clear-btn:hover {
+        background: #4b5563;
+      }
+
+      .output-section {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+      .output-header {
+        background: linear-gradient(145deg, #1e293b, #334155);
+        color: white;
+        padding: 16px 20px;
+        font-weight: 600;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .status {
+        font-size: 12px;
+        padding: 4px 12px;
+        border-radius: 16px;
+        background: #374151;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 500;
+      }
+      .status.running {
+        background: linear-gradient(145deg, #059669, #047857);
+        animation: pulse 2s infinite;
+      }
+      .status.completed {
+        background: linear-gradient(145deg, #059669, #047857);
+      }
+      .status.error {
+        background: linear-gradient(145deg, #dc2626, #b91c1c);
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+      .output-content {
+        padding: 20px;
+        max-height: 600px;
+        overflow-y: auto;
+        background: white;
+      }
+
+      .step {
+        margin-bottom: 20px;
+        padding: 16px;
+        border-radius: 12px;
+        border-left: 4px solid #e2e8f0;
+        background: #fafafa;
+        transition: all 0.3s;
+      }
+      .step:hover {
+        transform: translateX(4px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      }
+      .step.thinking {
+        background: linear-gradient(145deg, #fef3c7, #fde68a);
+        border-left-color: #f59e0b;
+      }
+      .step.tool_call {
+        background: linear-gradient(145deg, #dbeafe, #bfdbfe);
+        border-left-color: #3b82f6;
+      }
+      .step.response {
+        background: linear-gradient(145deg, #fff5f7, #ffe0e6);
+        border-left-color: #f5576c;
+      }
+      .step.error {
+        background: linear-gradient(145deg, #fef2f2, #fecaca);
+        border-left-color: #ef4444;
+      }
+      .step-header {
+        font-weight: 700;
+        margin-bottom: 8px;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .step-content {
+        color: #4b5563;
+        line-height: 1.6;
+        font-size: 14px;
+        white-space: pre-wrap;
+      }
+      .tool-info {
+        background: rgba(0, 0, 0, 0.05);
+        padding: 12px;
+        border-radius: 8px;
+        margin-top: 12px;
+        font-family: 'SF Mono', Monaco, monospace;
+        font-size: 12px;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+      }
+
+      .empty-state {
+        text-align: center;
+        color: #9ca3af;
+        padding: 80px 20px;
+      }
+      .empty-state h3 {
+        margin-bottom: 12px;
+        color: #6b7280;
+      }
+
+      @media (max-width: 768px) {
+        .mode-selector {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .run-section {
+          flex-direction: column;
+          align-items: center;
+          gap: 12px;
+        }
+        .clear-btn {
+          margin-left: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>✍️ Creative Writing Assistant</h1>
+      <p class="subtitle">Unlimited brainstorming, editing, and ideation powered by on-device AI</p>
+      <div class="feature-badge">
+        ♾️ No Usage Limits • Works Offline • Your Ideas Stay Private
+      </div>
+
+      <div class="demo-panel">
+        <div class="input-section">
+          <div class="input-group">
+            <label>📝 Writing Mode</label>
+            <div class="mode-selector">
+              <button class="mode-btn active" data-mode="brainstorm">💡 Brainstorm</button>
+              <button class="mode-btn" data-mode="character">👤 Character</button>
+              <button class="mode-btn" data-mode="plot">📖 Plot Twist</button>
+              <button class="mode-btn" data-mode="improve">✨ Improve</button>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label for="prompt">💬 Your Writing Prompt</label>
+            <textarea
+              id="prompt"
+              rows="4"
+              placeholder="Describe what you need help with..."
+            >I need ideas for a science fiction short story about AI consciousness. The setting is a near-future Mars colony.</textarea>
+          </div>
+
+          <div class="input-group" id="text-input-group" style="display: none;">
+            <label for="text-to-improve">📄 Text to Improve</label>
+            <textarea
+              id="text-to-improve"
+              rows="6"
+              placeholder="Paste your text here..."
+            ></textarea>
+          </div>
+
+          <div class="example-buttons">
+            <button class="example-btn" onclick="loadExample('scifi')">🚀 Sci-Fi Story</button>
+            <button class="example-btn" onclick="loadExample('mystery')">🔍 Mystery Plot</button>
+            <button class="example-btn" onclick="loadExample('fantasy')">🐉 Fantasy World</button>
+            <button class="example-btn" onclick="loadExample('romance')">💕 Romance Scene</button>
+          </div>
+
+          <div class="run-section">
+            <button id="run-btn" class="run-btn">✨ Generate Ideas</button>
+            <button id="clear-btn" class="clear-btn">🗑️ Clear</button>
+          </div>
+        </div>
+
+        <div class="output-section">
+          <div class="output-header">
+            <span>🤖 Creative Writing Agent</span>
+            <span id="status" class="status">Ready</span>
+          </div>
+          <div class="output-content" id="output">
+            <div class="empty-state">
+              <h3>Ready to unleash your creativity!</h3>
+              <p>Select a writing mode and describe what you need:</p>
+              <ul style="text-align: left; display: inline-block; margin-top: 20px;">
+                <li>💡 <strong>Brainstorm</strong>: Generate story ideas and concepts</li>
+                <li>👤 <strong>Character</strong>: Create detailed character profiles</li>
+                <li>📖 <strong>Plot Twist</strong>: Suggest unexpected story developments</li>
+                <li>✨ <strong>Improve</strong>: Enhance existing text</li>
+              </ul>
+              <p style="margin-top: 20px; font-style: italic; font-size: 14px;">
+                All processing happens locally. No API costs, no usage limits!
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { createAgentSession, enableDebuggingMode } from '../dist/index.js';
+
+      enableDebuggingMode();
+
+      const promptInput = document.getElementById('prompt');
+      const textToImprove = document.getElementById('text-to-improve');
+      const textInputGroup = document.getElementById('text-input-group');
+      const runBtn = document.getElementById('run-btn');
+      const clearBtn = document.getElementById('clear-btn');
+      const output = document.getElementById('output');
+      const status = document.getElementById('status');
+      const modeButtons = document.querySelectorAll('.mode-btn');
+
+      let currentMode = 'brainstorm';
+
+      // Mode selection
+      modeButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          modeButtons.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentMode = btn.dataset.mode;
+
+          // Show/hide text input for improve mode
+          if (currentMode === 'improve') {
+            textInputGroup.style.display = 'flex';
+            runBtn.textContent = '✨ Improve Text';
+          } else {
+            textInputGroup.style.display = 'none';
+            runBtn.textContent = '✨ Generate Ideas';
+          }
+        });
+      });
+
+      window.loadExample = function(type) {
+        const examples = {
+          scifi: {
+            mode: 'brainstorm',
+            prompt: "I need ideas for a science fiction short story about AI consciousness. The setting is a near-future Mars colony."
+          },
+          mystery: {
+            mode: 'plot',
+            prompt: "I'm writing a mystery novel set in Victorian London. The detective has just discovered the victim wasn't who they claimed to be. What plot twist should come next?"
+          },
+          fantasy: {
+            mode: 'character',
+            prompt: "Create a complex character for my fantasy epic: a reluctant dragon rider who fears heights."
+          },
+          romance: {
+            mode: 'improve',
+            prompt: "Improve this romance scene to make it more emotionally compelling.",
+            text: "She looked at him. He smiled. They both knew this was the moment they had been waiting for. She said yes."
+          }
+        };
+
+        const example = examples[type];
+        if (example) {
+          // Set mode
+          modeButtons.forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.mode === example.mode) {
+              btn.classList.add('active');
+            }
+          });
+          currentMode = example.mode;
+
+          // Set inputs
+          promptInput.value = example.prompt;
+          if (example.text) {
+            textToImprove.value = example.text;
+            textInputGroup.style.display = 'flex';
+            runBtn.textContent = '✨ Improve Text';
+          } else {
+            textInputGroup.style.display = 'none';
+            runBtn.textContent = '✨ Generate Ideas';
+          }
+        }
+      };
+
+      const writingWorkflow = {
+        id: "creative-writing-assistant",
+        name: "Creative Writing Assistant",
+        systemPrompt: "You are a creative writing assistant helping authors with brainstorming, character development, plot creation, and text improvement. Be imaginative, specific, and supportive. Provide actionable suggestions.",
+        maxIterations: 8,
+        timeout: 120000,
+        steps: [
+          {
+            id: "understand-request",
+            description: "Understand the writing request",
+            prompt: "Analyze the user's request. Identify: 1) The writing mode (brainstorm/character/plot/improve), 2) Genre or context, 3) Specific requirements or constraints mentioned.",
+            temperature: 0.2,
+            generationTask: "chat",
+            maxAttempts: 2,
+          },
+          {
+            id: "generate-ideas",
+            description: "Generate creative ideas or improvements",
+            prompt: "Use the appropriate tool based on the mode: generateStoryIdeas for brainstorming, createCharacter for character development, suggestPlotTwist for plot ideas, or improveText for text enhancement.",
+            temperature: 0.7,
+            generationTask: "tool_use",
+            toolChoice: ["generateStoryIdeas", "createCharacter", "suggestPlotTwist", "improveText"],
+            maxAttempts: 2,
+          },
+          {
+            id: "expand-details",
+            description: "Expand and refine the creative output",
+            prompt: "Use expandIdeas to add more depth, context, and actionable suggestions to the generated ideas.",
+            temperature: 0.6,
+            generationTask: "tool_use",
+            toolChoice: ["expandIdeas"],
+            maxAttempts: 2,
+          },
+          {
+            id: "compose-response",
+            description: "Compose the final creative output",
+            prompt: "Create an engaging response that presents the ideas clearly. Use formatting (bullet points, sections) to organize the content. Be encouraging and specific.",
+            temperature: 0.5,
+            generationTask: "chat",
+            maxAttempts: 2,
+          }
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "generateStoryIdeas",
+              description: "Generate creative story ideas based on genre, themes, and setting.",
+              parameters: {
+                type: "object",
+                properties: {
+                  genre: {
+                    type: "string",
+                    description: "Story genre (sci-fi, fantasy, mystery, romance, etc.)"
+                  },
+                  themes: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Key themes or topics"
+                  },
+                  setting: {
+                    type: "string",
+                    description: "Story setting or context"
+                  }
+                },
+                required: ["genre", "themes"]
+              },
+              implementation: async ({ genre, themes, setting }) => {
+                const ideas = [
+                  {
+                    title: `${themes[0]} in ${setting || 'an unexpected place'}`,
+                    logline: `A story exploring ${themes.join(' and ')} through the lens of ${genre}.`,
+                    hook: `What if ${themes[0]} wasn't what it seemed?`,
+                    protagonist: "A character who challenges the status quo",
+                    conflict: `Internal struggle with ${themes[0]} vs external forces`
+                  },
+                  {
+                    title: `The ${setting || 'Unknown'} Paradox`,
+                    logline: `When ${themes[0]} meets ${themes[1] || 'destiny'}, reality shifts.`,
+                    hook: "A discovery that changes everything",
+                    protagonist: "An unlikely hero with a unique perspective",
+                    conflict: "Choice between safety and truth"
+                  },
+                  {
+                    title: "Beyond Expectations",
+                    logline: `${genre} story that subverts expectations about ${themes.join(', ')}`,
+                    hook: "Nothing is as it appears",
+                    protagonist: "A morally complex lead character",
+                    conflict: `${themes[0]} forces an impossible decision`
+                  }
+                ];
+
+                return { ideas, count: ideas.length };
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "createCharacter",
+              description: "Create a detailed character profile with background, traits, and arc.",
+              parameters: {
+                type: "object",
+                properties: {
+                  characterType: {
+                    type: "string",
+                    description: "Type of character (protagonist, antagonist, sidekick, etc.)"
+                  },
+                  context: {
+                    type: "string",
+                    description: "Story context or character's role"
+                  }
+                },
+                required: ["characterType", "context"]
+              },
+              implementation: async ({ characterType, context }) => {
+                return {
+                  profile: {
+                    name: "To be decided by author",
+                    age: "Late 20s to early 30s",
+                    occupation: `Related to ${context}`,
+                    personality: {
+                      strengths: ["Resourceful", "Determined", "Empathetic"],
+                      weaknesses: ["Self-doubt", "Impulsive", "Overly trusting"],
+                      quirks: ["Specific habit or trait that makes them memorable"]
+                    },
+                    background: {
+                      origin: `Shaped by experiences related to ${context}`,
+                      motivation: "Deep-seated desire driving their actions",
+                      fear: "Core fear they must overcome"
+                    },
+                    arc: {
+                      beginning: "Where they start (flawed but relatable)",
+                      middle: "Challenges that test their core beliefs",
+                      end: "Transformation through confronting their fear"
+                    },
+                    relationships: {
+                      ally: "Someone who believes in them",
+                      rival: "Someone who challenges them",
+                      mentor: "Someone who guides them (or whose absence is felt)"
+                    }
+                  }
+                };
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "suggestPlotTwist",
+              description: "Suggest unexpected plot developments and twists.",
+              parameters: {
+                type: "object",
+                properties: {
+                  currentSituation: {
+                    type: "string",
+                    description: "Current plot situation"
+                  },
+                  genre: {
+                    type: "string",
+                    description: "Story genre"
+                  }
+                },
+                required: ["currentSituation"]
+              },
+              implementation: async ({ currentSituation, genre }) => {
+                return {
+                  twists: [
+                    {
+                      type: "Identity Revelation",
+                      description: "The assumed identity is a cover for something deeper",
+                      impact: "Forces protagonist to question everything",
+                      setup: "Subtle clues planted earlier now make sense"
+                    },
+                    {
+                      type: "False Antagonist",
+                      description: "The perceived villain is actually trying to help",
+                      impact: "Shifts the entire conflict direction",
+                      setup: "Real antagonist has been hiding in plain sight"
+                    },
+                    {
+                      type: "Hidden Connection",
+                      description: "Key characters share an unknown past",
+                      impact: "Personal stakes intensify dramatically",
+                      setup: "Background details take on new meaning"
+                    }
+                  ],
+                  recommendation: "Choose the twist that serves your theme and character arcs best"
+                };
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "improveText",
+              description: "Analyze and improve existing text for better impact.",
+              parameters: {
+                type: "object",
+                properties: {
+                  originalText: {
+                    type: "string",
+                    description: "Text to improve"
+                  },
+                  focus: {
+                    type: "string",
+                    description: "What aspect to improve (emotion, clarity, pacing, description)"
+                  }
+                },
+                required: ["originalText"]
+              },
+              implementation: async ({ originalText, focus = "overall" }) => {
+                return {
+                  analysis: {
+                    strengths: ["Clear basic intent"],
+                    weaknesses: [
+                      "Could use more sensory details",
+                      "Emotions feel stated rather than shown",
+                      "Pacing could be varied for impact"
+                    ]
+                  },
+                  suggestions: [
+                    "Show emotions through actions, body language, and internal thoughts",
+                    "Add sensory details (what characters see, hear, feel)",
+                    "Vary sentence length for rhythm and emphasis",
+                    "Use more specific, evocative verbs instead of generic ones"
+                  ],
+                  improvedVersion: "Enhanced version will incorporate these principles to create stronger emotional resonance and reader engagement"
+                };
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "expandIdeas",
+              description: "Expand and add depth to generated creative ideas.",
+              parameters: {
+                type: "object",
+                properties: {
+                  ideas: {
+                    type: "object",
+                    description: "Ideas object to expand"
+                  }
+                },
+                required: ["ideas"]
+              },
+              implementation: async ({ ideas }) => {
+                return {
+                  expanded: ideas,
+                  nextSteps: [
+                    "Choose the idea that resonates most with your vision",
+                    "Develop the core conflict in detail",
+                    "Outline key scenes or turning points",
+                    "Consider the emotional journey",
+                    "Start writing a first draft"
+                  ],
+                  tips: [
+                    "Don't aim for perfection in the first draft",
+                    "Let characters surprise you",
+                    "Write the scenes that excite you first",
+                    "Trust your creative instincts"
+                  ]
+                };
+              }
+            }
+          }
+        ]
+      };
+
+      function updateStatus(text, className = '') {
+        status.textContent = text;
+        status.className = `status ${className}`;
+      }
+
+      function addStep(stepResult) {
+        const stepDiv = document.createElement('div');
+        const stepType = stepResult.error ? 'error' : stepResult.toolCall ? 'tool_call' : 'response';
+        stepDiv.className = `step ${stepType}`;
+
+        const header = document.createElement('div');
+        header.className = 'step-header';
+
+        const typeIcons = {
+          thinking: '🤔',
+          tool_call: '🔧',
+          response: '✍️',
+          error: '❌'
+        };
+
+        if (stepResult.stepId) {
+          header.innerHTML = `${typeIcons[stepType] || '•'} <strong>${getStepDescription(stepResult.stepId)}</strong>`;
+        }
+
+        const content = document.createElement('div');
+        content.className = 'step-content';
+
+        if (stepResult.error) {
+          content.textContent = stepResult.error.message;
+        } else {
+          content.textContent = stepResult.content || '';
+        }
+
+        stepDiv.appendChild(header);
+        stepDiv.appendChild(content);
+
+        if (stepResult.toolCall) {
+          const toolInfo = document.createElement('div');
+          toolInfo.className = 'tool-info';
+          toolInfo.innerHTML = `<strong>🔧 ${stepResult.toolCall.name}</strong><br/>${JSON.stringify(stepResult.toolCall.args, null, 2)}`;
+          stepDiv.appendChild(toolInfo);
+        }
+
+        output.appendChild(stepDiv);
+        output.scrollTop = output.scrollHeight;
+      }
+
+      function getStepDescription(stepId) {
+        const descriptions = {
+          'understand-request': 'Understanding your request',
+          'generate-ideas': 'Generating creative ideas',
+          'expand-details': 'Expanding and refining',
+          'compose-response': 'Composing final output'
+        };
+        return descriptions[stepId] || 'Processing';
+      }
+
+      function clearOutput() {
+        output.innerHTML = `
+          <div class="empty-state">
+            <h3>Ready for more creativity!</h3>
+            <p>Try another writing mode or prompt.</p>
+          </div>
+        `;
+        updateStatus('Ready');
+      }
+
+      async function runAgent() {
+        let query = promptInput.value.trim();
+        if (!query) {
+          alert('Please enter a prompt!');
+          return;
+        }
+
+        // Add text to improve if in improve mode
+        if (currentMode === 'improve' && textToImprove.value.trim()) {
+          query += `\n\nText to improve:\n${textToImprove.value.trim()}`;
+        }
+
+        runBtn.disabled = true;
+        clearOutput();
+        updateStatus('Generating ideas...', 'running');
+
+        try {
+          const agent = await createAgentSession();
+          updateStatus('Agent running...', 'running');
+
+          let stepCount = 0;
+          for await (const stepResult of agent.runWorkflow(query, writingWorkflow)) {
+            stepCount++;
+            console.log(stepResult);
+            addStep(stepResult);
+
+            if (stepResult.error) {
+              console.warn('Step error:', stepResult.error.message);
+            }
+          }
+
+          updateStatus(`Ideas generated! (${stepCount} steps)`, 'completed');
+          await agent.dispose();
+
+        } catch (error) {
+          console.error('Agent error:', error);
+          updateStatus('Generation failed', 'error');
+
+          const errorDiv = document.createElement('div');
+          errorDiv.className = 'step error';
+          errorDiv.innerHTML = `
+            <div class="step-header">❌ <strong>Error</strong></div>
+            <div class="step-content">Failed to run writing assistant: ${error.message}</div>
+          `;
+          output.appendChild(errorDiv);
+        } finally {
+          runBtn.disabled = false;
+        }
+      }
+
+      runBtn.addEventListener('click', runAgent);
+      clearBtn.addEventListener('click', clearOutput);
+
+      promptInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          runAgent();
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,890 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Email & Writing Assistant - Agentary JS Demo</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        color: #334155;
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 40px;
+      }
+      h1 {
+        color: white;
+        text-align: center;
+        margin-bottom: 8px;
+        font-size: 2.5rem;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+      }
+      .subtitle {
+        text-align: center;
+        color: rgba(255, 255, 255, 0.9);
+        margin-bottom: 16px;
+        font-size: 18px;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+      }
+      .privacy-badge {
+        text-align: center;
+        margin-bottom: 32px;
+        padding: 12px 24px;
+        background: rgba(250, 112, 154, 0.3);
+        border: 2px solid rgba(250, 112, 154, 0.5);
+        border-radius: 24px;
+        color: white;
+        font-weight: 600;
+        display: inline-block;
+        width: fit-content;
+        margin-left: auto;
+        margin-right: auto;
+        display: block;
+        backdrop-filter: blur(10px);
+      }
+
+      .demo-panel {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        padding: 32px;
+      }
+
+      .input-section {
+        margin-bottom: 32px;
+        padding: 24px;
+        background: linear-gradient(145deg, #fff5f7, #fff1e6);
+        border-radius: 12px;
+        border: 1px solid #fde68a;
+      }
+      .input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      label {
+        font-weight: 600;
+        color: #475569;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      input, select, textarea {
+        padding: 12px 16px;
+        border: 2px solid #fde68a;
+        border-radius: 8px;
+        font-size: 14px;
+        font-family: inherit;
+        transition: all 0.2s;
+        background: white;
+      }
+      input:focus, select:focus, textarea:focus {
+        outline: none;
+        border-color: #fa709a;
+        box-shadow: 0 0 0 3px rgba(250, 112, 154, 0.1);
+        transform: translateY(-1px);
+      }
+
+      .mode-selector {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      .mode-btn {
+        background: white;
+        border: 2px solid #fde68a;
+        padding: 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.2s;
+        text-align: center;
+      }
+      .mode-btn:hover {
+        border-color: #fa709a;
+        transform: translateY(-2px);
+      }
+      .mode-btn.active {
+        background: linear-gradient(145deg, #fa709a, #fee140);
+        color: white;
+        border-color: #fa709a;
+      }
+
+      .tone-selector {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .tone-btn {
+        background: #fee140;
+        color: #78350f;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        transition: all 0.2s;
+      }
+      .tone-btn:hover {
+        background: #fbbf24;
+        transform: translateY(-1px);
+      }
+      .tone-btn.active {
+        background: #fa709a;
+        color: white;
+      }
+
+      .example-buttons {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+      .example-btn {
+        background: #fa709a;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        transition: all 0.2s;
+      }
+      .example-btn:hover {
+        background: #ec4899;
+        transform: translateY(-1px);
+      }
+
+      .run-section {
+        text-align: center;
+        margin-top: 24px;
+      }
+      .run-btn {
+        background: linear-gradient(145deg, #fa709a, #fee140);
+        color: white;
+        border: none;
+        padding: 16px 32px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 16px;
+        transition: all 0.3s;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        box-shadow: 0 4px 15px rgba(250, 112, 154, 0.4);
+      }
+      .run-btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(250, 112, 154, 0.6);
+      }
+      .run-btn:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+      .clear-btn {
+        background: #6b7280;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 500;
+        margin-left: 12px;
+        transition: all 0.2s;
+      }
+      .clear-btn:hover {
+        background: #4b5563;
+      }
+
+      .output-section {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+      .output-header {
+        background: linear-gradient(145deg, #1e293b, #334155);
+        color: white;
+        padding: 16px 20px;
+        font-weight: 600;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .status {
+        font-size: 12px;
+        padding: 4px 12px;
+        border-radius: 16px;
+        background: #374151;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 500;
+      }
+      .status.running {
+        background: linear-gradient(145deg, #059669, #047857);
+        animation: pulse 2s infinite;
+      }
+      .status.completed {
+        background: linear-gradient(145deg, #059669, #047857);
+      }
+      .status.error {
+        background: linear-gradient(145deg, #dc2626, #b91c1c);
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+      .output-content {
+        padding: 20px;
+        max-height: 600px;
+        overflow-y: auto;
+        background: white;
+      }
+
+      .step {
+        margin-bottom: 20px;
+        padding: 16px;
+        border-radius: 12px;
+        border-left: 4px solid #e2e8f0;
+        background: #fafafa;
+        transition: all 0.3s;
+      }
+      .step:hover {
+        transform: translateX(4px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      }
+      .step.thinking {
+        background: linear-gradient(145deg, #fff7ed, #ffedd5);
+        border-left-color: #fb923c;
+      }
+      .step.tool_call {
+        background: linear-gradient(145deg, #fef3c7, #fde68a);
+        border-left-color: #eab308;
+      }
+      .step.response {
+        background: linear-gradient(145deg, #fff5f7, #ffe0e6);
+        border-left-color: #fa709a;
+      }
+      .step.error {
+        background: linear-gradient(145deg, #fef2f2, #fecaca);
+        border-left-color: #ef4444;
+      }
+      .step-header {
+        font-weight: 700;
+        margin-bottom: 8px;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .step-content {
+        color: #4b5563;
+        line-height: 1.6;
+        font-size: 14px;
+        white-space: pre-wrap;
+      }
+      .tool-info {
+        background: rgba(0, 0, 0, 0.05);
+        padding: 12px;
+        border-radius: 8px;
+        margin-top: 12px;
+        font-family: 'SF Mono', Monaco, monospace;
+        font-size: 12px;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+      }
+
+      .empty-state {
+        text-align: center;
+        color: #9ca3af;
+        padding: 80px 20px;
+      }
+      .empty-state h3 {
+        margin-bottom: 12px;
+        color: #6b7280;
+      }
+
+      @media (max-width: 768px) {
+        .mode-selector {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .run-section {
+          flex-direction: column;
+          align-items: center;
+          gap: 12px;
+        }
+        .clear-btn {
+          margin-left: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>✉️ Email & Writing Assistant</h1>
+      <p class="subtitle">Draft, refine, and adjust tone without sending sensitive messages to servers</p>
+      <div class="privacy-badge">
+        🔒 Workplace Privacy: Your emails never leave your device
+      </div>
+
+      <div class="demo-panel">
+        <div class="input-section">
+          <div class="input-group">
+            <label>✏️ Writing Mode</label>
+            <div class="mode-selector">
+              <button class="mode-btn active" data-mode="draft">📝 Draft</button>
+              <button class="mode-btn" data-mode="reply">💬 Reply</button>
+              <button class="mode-btn" data-mode="tone">🎭 Adjust Tone</button>
+              <button class="mode-btn" data-mode="summarize">📋 Summarize</button>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label>🎨 Tone</label>
+            <div class="tone-selector">
+              <button class="tone-btn active" data-tone="professional">Professional</button>
+              <button class="tone-btn" data-tone="friendly">Friendly</button>
+              <button class="tone-btn" data-tone="formal">Formal</button>
+              <button class="tone-btn" data-tone="casual">Casual</button>
+              <button class="tone-btn" data-tone="empathetic">Empathetic</button>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label for="context">💬 Context / Instructions</label>
+            <textarea
+              id="context"
+              rows="2"
+              placeholder="Describe what you need..."
+            >I need to decline a meeting request politely because I'm overbooked this week.</textarea>
+          </div>
+
+          <div class="input-group" id="original-text-group" style="display: none;">
+            <label for="original-text">📄 Original Email/Text</label>
+            <textarea
+              id="original-text"
+              rows="4"
+              placeholder="Paste the original email or text here..."
+            ></textarea>
+          </div>
+
+          <div class="example-buttons">
+            <button class="example-btn" onclick="loadExample('decline')">🚫 Decline Request</button>
+            <button class="example-btn" onclick="loadExample('followup')">📬 Follow Up</button>
+            <button class="example-btn" onclick="loadExample('apologize')">🙏 Apologize</button>
+            <button class="example-btn" onclick="loadExample('thread')">📊 Summarize Thread</button>
+          </div>
+
+          <div class="run-section">
+            <button id="run-btn" class="run-btn">✨ Generate</button>
+            <button id="clear-btn" class="clear-btn">🗑️ Clear</button>
+          </div>
+        </div>
+
+        <div class="output-section">
+          <div class="output-header">
+            <span>🤖 Email Writing Agent</span>
+            <span id="status" class="status">Ready</span>
+          </div>
+          <div class="output-content" id="output">
+            <div class="empty-state">
+              <h3>Ready to help with your writing!</h3>
+              <p>Select a mode and describe what you need. The AI will:</p>
+              <ul style="text-align: left; display: inline-block; margin-top: 20px;">
+                <li>📝 Draft professional emails from scratch</li>
+                <li>💬 Compose thoughtful replies to messages</li>
+                <li>🎭 Adjust tone to match your intent (formal/casual/friendly)</li>
+                <li>📋 Summarize long email threads</li>
+                <li>✨ Improve clarity and professionalism</li>
+              </ul>
+              <p style="margin-top: 20px; font-style: italic; font-size: 14px;">
+                Perfect for sensitive workplace communications that should stay private.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { createAgentSession, enableDebuggingMode } from '../dist/index.js';
+
+      enableDebuggingMode();
+
+      const contextInput = document.getElementById('context');
+      const originalTextInput = document.getElementById('original-text');
+      const originalTextGroup = document.getElementById('original-text-group');
+      const runBtn = document.getElementById('run-btn');
+      const clearBtn = document.getElementById('clear-btn');
+      const output = document.getElementById('output');
+      const status = document.getElementById('status');
+      const modeButtons = document.querySelectorAll('.mode-btn');
+      const toneButtons = document.querySelectorAll('.tone-btn');
+
+      let currentMode = 'draft';
+      let currentTone = 'professional';
+
+      // Mode selection
+      modeButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          modeButtons.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentMode = btn.dataset.mode;
+
+          // Show/hide original text input for certain modes
+          if (['reply', 'tone', 'summarize'].includes(currentMode)) {
+            originalTextGroup.style.display = 'flex';
+          } else {
+            originalTextGroup.style.display = 'none';
+          }
+
+          // Update button text
+          const buttonTexts = {
+            draft: '✨ Generate Draft',
+            reply: '💬 Generate Reply',
+            tone: '🎭 Adjust Tone',
+            summarize: '📋 Summarize'
+          };
+          runBtn.textContent = buttonTexts[currentMode];
+        });
+      });
+
+      // Tone selection
+      toneButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          toneButtons.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentTone = btn.dataset.tone;
+        });
+      });
+
+      window.loadExample = function(type) {
+        const examples = {
+          decline: {
+            mode: 'draft',
+            tone: 'professional',
+            context: "I need to decline a meeting request politely because I'm overbooked this week.",
+            originalText: ""
+          },
+          followup: {
+            mode: 'draft',
+            tone: 'friendly',
+            context: "Follow up on the proposal I sent last week. Ask if they have any questions and when we might discuss next steps.",
+            originalText: ""
+          },
+          apologize: {
+            mode: 'draft',
+            tone: 'empathetic',
+            context: "Apologize for missing the deadline and explain I had unexpected personal matters. Provide new timeline.",
+            originalText: ""
+          },
+          thread: {
+            mode: 'summarize',
+            tone: 'professional',
+            context: "Summarize this email thread into key points and action items.",
+            originalText: "From: John\nWe need to finalize the Q4 budget by next Friday.\n\nFrom: Sarah\nI'll need input from marketing and engineering first.\n\nFrom: John\nCan you coordinate with them and send me a draft by Wednesday?\n\nFrom: Sarah\nYes, I'll set up meetings this week."
+          }
+        };
+
+        const example = examples[type];
+        if (example) {
+          // Set mode
+          modeButtons.forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.mode === example.mode) {
+              btn.classList.add('active');
+            }
+          });
+          currentMode = example.mode;
+
+          // Set tone
+          toneButtons.forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.tone === example.tone) {
+              btn.classList.add('active');
+            }
+          });
+          currentTone = example.tone;
+
+          // Set inputs
+          contextInput.value = example.context;
+          originalTextInput.value = example.originalText;
+
+          // Show/hide original text
+          if (['reply', 'tone', 'summarize'].includes(currentMode)) {
+            originalTextGroup.style.display = 'flex';
+          } else {
+            originalTextGroup.style.display = 'none';
+          }
+        }
+      };
+
+      const emailWorkflow = {
+        id: "email-writing-assistant",
+        name: "Email & Writing Assistant",
+        systemPrompt: "You are a professional email and writing assistant. Help users craft clear, appropriate communications for workplace and personal contexts. Respect tone preferences and be concise.",
+        maxIterations: 8,
+        timeout: 120000,
+        steps: [
+          {
+            id: "analyze-request",
+            description: "Analyze the writing request",
+            prompt: "Identify: 1) The mode (draft, reply, tone adjustment, summarize), 2) Desired tone, 3) Key points to communicate, 4) Any constraints or requirements.",
+            temperature: 0.2,
+            generationTask: "chat",
+            maxAttempts: 2,
+          },
+          {
+            id: "determine-structure",
+            description: "Determine appropriate structure",
+            prompt: "Use determineStructure to plan the email/message structure based on the mode and context.",
+            temperature: 0.3,
+            generationTask: "tool_use",
+            toolChoice: ["determineStructure"],
+            maxAttempts: 2,
+          },
+          {
+            id: "draft-content",
+            description: "Draft the email content",
+            prompt: "Use draftEmail to create the email content following the structure and tone requirements.",
+            temperature: 0.5,
+            generationTask: "tool_use",
+            toolChoice: ["draftEmail"],
+            maxAttempts: 2,
+          },
+          {
+            id: "refine-tone",
+            description: "Refine tone and language",
+            prompt: "Use adjustTone to ensure the draft matches the desired tone perfectly (professional, friendly, formal, casual, or empathetic).",
+            temperature: 0.4,
+            generationTask: "tool_use",
+            toolChoice: ["adjustTone"],
+            maxAttempts: 2,
+          },
+          {
+            id: "finalize",
+            description: "Finalize and present the email",
+            prompt: "Present the final email with: 1) Subject line (if applicable), 2) Body text, 3) Brief explanation of approach, 4) Alternative phrasing suggestions if helpful.",
+            temperature: 0.3,
+            generationTask: "chat",
+            maxAttempts: 2,
+          }
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "determineStructure",
+              description: "Determine the appropriate structure for the email based on mode and context.",
+              parameters: {
+                type: "object",
+                properties: {
+                  mode: {
+                    type: "string",
+                    enum: ["draft", "reply", "tone", "summarize"],
+                    description: "Writing mode"
+                  },
+                  context: {
+                    type: "string",
+                    description: "User's context or instructions"
+                  }
+                },
+                required: ["mode", "context"]
+              },
+              implementation: async ({ mode, context }) => {
+                const structures = {
+                  draft: {
+                    sections: ["greeting", "context", "main_message", "action_or_next_steps", "closing"],
+                    notes: "Standard professional email structure"
+                  },
+                  reply: {
+                    sections: ["acknowledgment", "response_to_points", "additional_info", "closing"],
+                    notes: "Reply structure addressing original message"
+                  },
+                  tone: {
+                    sections: ["maintain_core_message", "adjust_language", "modify_formality"],
+                    notes: "Focus on tone adjustment while preserving meaning"
+                  },
+                  summarize: {
+                    sections: ["overview", "key_points", "action_items", "decisions"],
+                    notes: "Concise summary structure"
+                  }
+                };
+
+                return {
+                  structure: structures[mode],
+                  recommendations: [
+                    "Keep paragraphs short and focused",
+                    "Use clear, direct language",
+                    "End with specific next steps when applicable"
+                  ]
+                };
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "draftEmail",
+              description: "Draft email content based on structure and requirements.",
+              parameters: {
+                type: "object",
+                properties: {
+                  structure: {
+                    type: "object",
+                    description: "Structure from determineStructure"
+                  },
+                  context: {
+                    type: "string",
+                    description: "User's instructions"
+                  },
+                  tone: {
+                    type: "string",
+                    description: "Desired tone"
+                  },
+                  originalText: {
+                    type: "string",
+                    description: "Original text (for reply/tone/summarize modes)"
+                  }
+                },
+                required: ["structure", "context", "tone"]
+              },
+              implementation: async ({ structure, context, tone, originalText }) => {
+                return {
+                  draft: {
+                    subject: "[Subject line based on context]",
+                    body: "[Draft body following structure sections]",
+                    greeting: "Hi [Name],",
+                    mainContent: "[Content addressing the context with appropriate tone]",
+                    closing: "Best regards,",
+                    signature: "[Your name]"
+                  },
+                  wordCount: 150,
+                  estimatedReadTime: "1 minute"
+                };
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "adjustTone",
+              description: "Adjust the tone of drafted text to match requirements.",
+              parameters: {
+                type: "object",
+                properties: {
+                  draft: {
+                    type: "object",
+                    description: "Draft from draftEmail"
+                  },
+                  targetTone: {
+                    type: "string",
+                    enum: ["professional", "friendly", "formal", "casual", "empathetic"],
+                    description: "Target tone"
+                  }
+                },
+                required: ["draft", "targetTone"]
+              },
+              implementation: async ({ draft, targetTone }) => {
+                const toneGuidelines = {
+                  professional: "Clear, respectful, focused on business outcomes",
+                  friendly: "Warm, approachable, maintains professionalism",
+                  formal: "Traditional business language, very polite",
+                  casual: "Conversational, relaxed but still appropriate",
+                  empathetic: "Understanding, supportive, acknowledges feelings"
+                };
+
+                return {
+                  adjustedDraft: draft,
+                  toneNote: `Adjusted to ${targetTone} tone: ${toneGuidelines[targetTone]}`,
+                  changes: [
+                    "Modified greeting for appropriate warmth level",
+                    "Adjusted language formality",
+                    "Ensured closing matches tone"
+                  ]
+                };
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "improveClarity",
+              description: "Improve clarity and conciseness of text.",
+              parameters: {
+                type: "object",
+                properties: {
+                  text: {
+                    type: "string",
+                    description: "Text to improve"
+                  }
+                },
+                required: ["text"]
+              },
+              implementation: async ({ text }) => {
+                return {
+                  improved: text,
+                  improvements: [
+                    "Shortened sentences for better readability",
+                    "Removed redundant phrases",
+                    "Made action items more explicit",
+                    "Improved paragraph structure"
+                  ],
+                  clarityScore: 8.5
+                };
+              }
+            }
+          }
+        ]
+      };
+
+      function updateStatus(text, className = '') {
+        status.textContent = text;
+        status.className = `status ${className}`;
+      }
+
+      function addStep(stepResult) {
+        const stepDiv = document.createElement('div');
+        const stepType = stepResult.error ? 'error' : stepResult.toolCall ? 'tool_call' : 'response';
+        stepDiv.className = `step ${stepType}`;
+
+        const header = document.createElement('div');
+        header.className = 'step-header';
+
+        const typeIcons = {
+          thinking: '🤔',
+          tool_call: '🔧',
+          response: '✉️',
+          error: '❌'
+        };
+
+        if (stepResult.stepId) {
+          header.innerHTML = `${typeIcons[stepType] || '•'} <strong>${getStepDescription(stepResult.stepId)}</strong>`;
+        }
+
+        const content = document.createElement('div');
+        content.className = 'step-content';
+
+        if (stepResult.error) {
+          content.textContent = stepResult.error.message;
+        } else {
+          content.textContent = stepResult.content || '';
+        }
+
+        stepDiv.appendChild(header);
+        stepDiv.appendChild(content);
+
+        if (stepResult.toolCall) {
+          const toolInfo = document.createElement('div');
+          toolInfo.className = 'tool-info';
+          const argsToShow = { ...stepResult.toolCall.args };
+          if (argsToShow.context && argsToShow.context.length > 100) {
+            argsToShow.context = `${argsToShow.context.substring(0, 100)}...`;
+          }
+          if (argsToShow.originalText && argsToShow.originalText.length > 100) {
+            argsToShow.originalText = `${argsToShow.originalText.substring(0, 100)}...`;
+          }
+          toolInfo.innerHTML = `<strong>🔧 ${stepResult.toolCall.name}</strong><br/>${JSON.stringify(argsToShow, null, 2)}`;
+          stepDiv.appendChild(toolInfo);
+        }
+
+        output.appendChild(stepDiv);
+        output.scrollTop = output.scrollHeight;
+      }
+
+      function getStepDescription(stepId) {
+        const descriptions = {
+          'analyze-request': 'Understanding your needs',
+          'determine-structure': 'Planning email structure',
+          'draft-content': 'Drafting content',
+          'refine-tone': 'Refining tone and style',
+          'finalize': 'Finalizing your email'
+        };
+        return descriptions[stepId] || 'Processing';
+      }
+
+      function clearOutput() {
+        output.innerHTML = `
+          <div class="empty-state">
+            <h3>Ready to help with your next email!</h3>
+            <p>Describe what you need to write.</p>
+          </div>
+        `;
+        updateStatus('Ready');
+      }
+
+      async function runAgent() {
+        const context = contextInput.value.trim();
+        const originalText = originalTextInput.value.trim();
+
+        if (!context) {
+          alert('Please describe what you need!');
+          return;
+        }
+
+        let fullQuery = `Mode: ${currentMode}\nTone: ${currentTone}\nContext: ${context}`;
+
+        if (originalText && ['reply', 'tone', 'summarize'].includes(currentMode)) {
+          fullQuery += `\n\nOriginal Text:\n${originalText}`;
+        }
+
+        runBtn.disabled = true;
+        clearOutput();
+        updateStatus('Drafting...', 'running');
+
+        try {
+          const agent = await createAgentSession();
+          updateStatus('Writing in progress...', 'running');
+
+          let stepCount = 0;
+          for await (const stepResult of agent.runWorkflow(fullQuery, emailWorkflow)) {
+            stepCount++;
+            console.log(stepResult);
+            addStep(stepResult);
+
+            if (stepResult.error) {
+              console.warn('Step error:', stepResult.error.message);
+            }
+          }
+
+          updateStatus(`Draft completed! (${stepCount} steps)`, 'completed');
+          await agent.dispose();
+
+        } catch (error) {
+          console.error('Agent error:', error);
+          updateStatus('Draft failed', 'error');
+
+          const errorDiv = document.createElement('div');
+          errorDiv.className = 'step error';
+          errorDiv.innerHTML = `
+            <div class="step-header">❌ <strong>Error</strong></div>
+            <div class="step-content">Failed to draft email: ${error.message}</div>
+          `;
+          output.appendChild(errorDiv);
+        } finally {
+          runBtn.disabled = false;
+        }
+      }
+
+      runBtn.addEventListener('click', runAgent);
+      clearBtn.addEventListener('click', clearOutput);
+
+      contextInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          runAgent();
+        }
+      });
+    </script>
+  </body>
+</html>

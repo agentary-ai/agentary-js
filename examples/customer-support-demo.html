@@ -1,0 +1,878 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Customer Support Agent - Agentary JS Demo</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+        color: #334155;
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 40px;
+      }
+      h1 {
+        color: white;
+        text-align: center;
+        margin-bottom: 8px;
+        font-size: 2.5rem;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+      }
+      .subtitle {
+        text-align: center;
+        color: rgba(255, 255, 255, 0.9);
+        margin-bottom: 16px;
+        font-size: 18px;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+      }
+      .feature-badge {
+        text-align: center;
+        margin-bottom: 32px;
+        padding: 12px 24px;
+        background: rgba(59, 130, 246, 0.3);
+        border: 2px solid rgba(59, 130, 246, 0.5);
+        border-radius: 24px;
+        color: white;
+        font-weight: 600;
+        display: inline-block;
+        width: fit-content;
+        margin-left: auto;
+        margin-right: auto;
+        display: block;
+        backdrop-filter: blur(10px);
+      }
+
+      .demo-panel {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        padding: 32px;
+      }
+
+      .chat-container {
+        display: grid;
+        grid-template-columns: 300px 1fr;
+        gap: 24px;
+        margin-bottom: 24px;
+      }
+
+      .sidebar {
+        background: linear-gradient(145deg, #eff6ff, #dbeafe);
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #bfdbfe;
+      }
+      .sidebar h3 {
+        margin-top: 0;
+        margin-bottom: 16px;
+        color: #1e40af;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .category-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      .category-item {
+        padding: 10px 12px;
+        margin-bottom: 8px;
+        background: white;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: 2px solid transparent;
+        font-size: 14px;
+      }
+      .category-item:hover {
+        border-color: #3b82f6;
+        transform: translateX(4px);
+      }
+      .category-item.active {
+        background: #3b82f6;
+        color: white;
+        font-weight: 600;
+      }
+
+      .chat-area {
+        background: white;
+      }
+      .input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      label {
+        font-weight: 600;
+        color: #475569;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      input, select, textarea {
+        padding: 12px 16px;
+        border: 2px solid #bfdbfe;
+        border-radius: 8px;
+        font-size: 14px;
+        font-family: inherit;
+        transition: all 0.2s;
+        background: white;
+      }
+      input:focus, select:focus, textarea:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        transform: translateY(-1px);
+      }
+
+      .example-queries {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      .example-query {
+        background: linear-gradient(145deg, #f8fafc, #f1f5f9);
+        border: 2px solid #e2e8f0;
+        padding: 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 13px;
+      }
+      .example-query:hover {
+        border-color: #3b82f6;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      .run-section {
+        text-align: center;
+        margin-top: 24px;
+      }
+      .run-btn {
+        background: linear-gradient(145deg, #3b82f6, #8b5cf6);
+        color: white;
+        border: none;
+        padding: 16px 32px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 16px;
+        transition: all 0.3s;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+      }
+      .run-btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
+      }
+      .run-btn:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+      .clear-btn {
+        background: #6b7280;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 500;
+        margin-left: 12px;
+        transition: all 0.2s;
+      }
+      .clear-btn:hover {
+        background: #4b5563;
+      }
+
+      .output-section {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+      .output-header {
+        background: linear-gradient(145deg, #1e293b, #334155);
+        color: white;
+        padding: 16px 20px;
+        font-weight: 600;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .status {
+        font-size: 12px;
+        padding: 4px 12px;
+        border-radius: 16px;
+        background: #374151;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 500;
+      }
+      .status.running {
+        background: linear-gradient(145deg, #059669, #047857);
+        animation: pulse 2s infinite;
+      }
+      .status.completed {
+        background: linear-gradient(145deg, #059669, #047857);
+      }
+      .status.error {
+        background: linear-gradient(145deg, #dc2626, #b91c1c);
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+      .output-content {
+        padding: 20px;
+        max-height: 500px;
+        overflow-y: auto;
+        background: white;
+      }
+
+      .step {
+        margin-bottom: 20px;
+        padding: 16px;
+        border-radius: 12px;
+        border-left: 4px solid #e2e8f0;
+        background: #fafafa;
+        transition: all 0.3s;
+      }
+      .step:hover {
+        transform: translateX(4px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      }
+      .step.thinking {
+        background: linear-gradient(145deg, #eff6ff, #dbeafe);
+        border-left-color: #3b82f6;
+      }
+      .step.tool_call {
+        background: linear-gradient(145deg, #f5f3ff, #ede9fe);
+        border-left-color: #8b5cf6;
+      }
+      .step.response {
+        background: linear-gradient(145deg, #ecfdf5, #d1fae5);
+        border-left-color: #10b981;
+      }
+      .step.error {
+        background: linear-gradient(145deg, #fef2f2, #fecaca);
+        border-left-color: #ef4444;
+      }
+      .step-header {
+        font-weight: 700;
+        margin-bottom: 8px;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .step-content {
+        color: #4b5563;
+        line-height: 1.6;
+        font-size: 14px;
+        white-space: pre-wrap;
+      }
+      .tool-info {
+        background: rgba(0, 0, 0, 0.05);
+        padding: 12px;
+        border-radius: 8px;
+        margin-top: 12px;
+        font-family: 'SF Mono', Monaco, monospace;
+        font-size: 12px;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+      }
+
+      .empty-state {
+        text-align: center;
+        color: #9ca3af;
+        padding: 80px 20px;
+      }
+      .empty-state h3 {
+        margin-bottom: 12px;
+        color: #6b7280;
+      }
+
+      @media (max-width: 768px) {
+        .chat-container {
+          grid-template-columns: 1fr;
+        }
+        .example-queries {
+          grid-template-columns: 1fr;
+        }
+        .run-section {
+          flex-direction: column;
+          align-items: center;
+          gap: 12px;
+        }
+        .clear-btn {
+          margin-left: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>💬 Customer Support Agent</h1>
+      <p class="subtitle">AI-powered support that handles common queries instantly while keeping user data private</p>
+      <div class="feature-badge">
+        💰 Reduce Server Costs • 🔒 User Privacy Protected • ⚡ Instant Responses
+      </div>
+
+      <div class="demo-panel">
+        <div class="chat-container">
+          <div class="sidebar">
+            <h3>📂 Support Categories</h3>
+            <ul class="category-list">
+              <li class="category-item active" data-category="general">❓ General Inquiry</li>
+              <li class="category-item" data-category="account">👤 Account Issues</li>
+              <li class="category-item" data-category="billing">💳 Billing & Payment</li>
+              <li class="category-item" data-category="technical">🔧 Technical Support</li>
+              <li class="category-item" data-category="product">📦 Product Info</li>
+              <li class="category-item" data-category="shipping">🚚 Shipping & Returns</li>
+            </ul>
+          </div>
+
+          <div class="chat-area">
+            <div class="input-group">
+              <label for="query">💬 Customer Query</label>
+              <textarea
+                id="query"
+                rows="3"
+                placeholder="How can we help you today?"
+              >I forgot my password and can't log into my account. How do I reset it?</textarea>
+            </div>
+
+            <div class="example-queries">
+              <div class="example-query" onclick="loadExample('password')">
+                <strong>🔐 Password Reset</strong><br/>
+                <small>How do I reset my password?</small>
+              </div>
+              <div class="example-query" onclick="loadExample('shipping')">
+                <strong>📦 Track Order</strong><br/>
+                <small>Where is my order?</small>
+              </div>
+              <div class="example-query" onclick="loadExample('refund')">
+                <strong>💰 Refund Request</strong><br/>
+                <small>How do I get a refund?</small>
+              </div>
+              <div class="example-query" onclick="loadExample('feature')">
+                <strong>✨ Feature Question</strong><br/>
+                <small>Does your product support X?</small>
+              </div>
+            </div>
+
+            <div class="run-section">
+              <button id="run-btn" class="run-btn">🚀 Get Support</button>
+              <button id="clear-btn" class="clear-btn">🗑️ Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="output-section">
+          <div class="output-header">
+            <span>🤖 Support Agent</span>
+            <span id="status" class="status">Ready</span>
+          </div>
+          <div class="output-content" id="output">
+            <div class="empty-state">
+              <h3>Ready to help your customers!</h3>
+              <p>Enter a customer query and the AI agent will:</p>
+              <ul style="text-align: left; display: inline-block; margin-top: 20px;">
+                <li>🔍 Search the FAQ database for relevant answers</li>
+                <li>📖 Provide clear, accurate responses</li>
+                <li>🎯 Identify the issue category automatically</li>
+                <li>📝 Offer step-by-step solutions</li>
+                <li>🆘 Escalate to human support when needed</li>
+              </ul>
+              <p style="margin-top: 20px; font-style: italic; font-size: 14px;">
+                Perfect for handling common support queries 24/7 without API costs.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { createAgentSession, enableDebuggingMode } from '../dist/index.js';
+
+      enableDebuggingMode();
+
+      const queryInput = document.getElementById('query');
+      const runBtn = document.getElementById('run-btn');
+      const clearBtn = document.getElementById('clear-btn');
+      const output = document.getElementById('output');
+      const status = document.getElementById('status');
+      const categoryItems = document.querySelectorAll('.category-item');
+
+      let currentCategory = 'general';
+
+      // Category selection
+      categoryItems.forEach(item => {
+        item.addEventListener('click', () => {
+          categoryItems.forEach(i => i.classList.remove('active'));
+          item.classList.add('active');
+          currentCategory = item.dataset.category;
+        });
+      });
+
+      window.loadExample = function(type) {
+        const examples = {
+          password: {
+            category: 'account',
+            query: "I forgot my password and can't log into my account. How do I reset it?"
+          },
+          shipping: {
+            category: 'shipping',
+            query: "I placed an order 3 days ago but haven't received a tracking number. Where is my package?"
+          },
+          refund: {
+            category: 'billing',
+            query: "I was charged twice for the same order. How do I get a refund for the duplicate charge?"
+          },
+          feature: {
+            category: 'product',
+            query: "Does your premium plan support team collaboration features? How many users can I add?"
+          }
+        };
+
+        const example = examples[type];
+        if (example) {
+          categoryItems.forEach(item => {
+            item.classList.remove('active');
+            if (item.dataset.category === example.category) {
+              item.classList.add('active');
+            }
+          });
+          currentCategory = example.category;
+          queryInput.value = example.query;
+        }
+      };
+
+      // Mock FAQ database
+      const faqDatabase = {
+        account: [
+          {
+            id: 'acc-001',
+            question: 'How do I reset my password?',
+            answer: 'Click "Forgot Password" on the login page, enter your email, and follow the reset link sent to your inbox. The link expires in 24 hours.',
+            keywords: ['password', 'reset', 'forgot', 'login', 'access']
+          },
+          {
+            id: 'acc-002',
+            question: 'How do I change my email address?',
+            answer: 'Go to Settings > Account > Email. Enter your new email and verify it by clicking the confirmation link.',
+            keywords: ['email', 'change', 'update', 'settings']
+          }
+        ],
+        billing: [
+          {
+            id: 'bill-001',
+            question: 'How do I request a refund?',
+            answer: 'Refunds can be requested within 30 days of purchase. Go to Orders > Select Order > Request Refund. Refunds are processed within 5-7 business days.',
+            keywords: ['refund', 'money back', 'return', 'cancel', 'charge']
+          },
+          {
+            id: 'bill-002',
+            question: 'I was charged twice',
+            answer: 'Duplicate charges are usually pre-authorizations that drop off in 3-5 days. If it\'s a real duplicate, contact support with your order number for immediate resolution.',
+            keywords: ['duplicate', 'charged twice', 'double charge', 'two charges']
+          }
+        ],
+        shipping: [
+          {
+            id: 'ship-001',
+            question: 'Where is my order?',
+            answer: 'Track your order by clicking the tracking link in your confirmation email, or visit Orders in your account. Orders typically arrive in 3-7 business days.',
+            keywords: ['tracking', 'where', 'delivery', 'shipment', 'package']
+          },
+          {
+            id: 'ship-002',
+            question: 'How do I return an item?',
+            answer: 'Start a return from Orders > Select Item > Return. Print the prepaid shipping label and drop off at any carrier location. Refund processed upon receipt.',
+            keywords: ['return', 'send back', 'exchange', 'unwanted']
+          }
+        ],
+        technical: [
+          {
+            id: 'tech-001',
+            question: 'The app won\'t load',
+            answer: 'Try these steps: 1) Clear browser cache 2) Try incognito mode 3) Update your browser 4) Check if our status page shows any outages.',
+            keywords: ['not loading', 'broken', 'error', 'crash', 'down']
+          }
+        ],
+        product: [
+          {
+            id: 'prod-001',
+            question: 'What features are in the premium plan?',
+            answer: 'Premium includes: unlimited users, advanced analytics, priority support, API access, custom integrations, and 99.9% uptime SLA.',
+            keywords: ['premium', 'features', 'plan', 'upgrade', 'pricing']
+          },
+          {
+            id: 'prod-002',
+            question: 'Can I add team members?',
+            answer: 'Yes! Premium and Enterprise plans support unlimited team members. Basic plan allows up to 3 users. Add members from Settings > Team.',
+            keywords: ['team', 'collaborate', 'users', 'members', 'add']
+          }
+        ],
+        general: [
+          {
+            id: 'gen-001',
+            question: 'How do I contact support?',
+            answer: 'Email: support@company.com (24h response) | Live Chat: Available 9am-6pm EST | Phone: Enterprise customers only',
+            keywords: ['contact', 'help', 'support', 'reach', 'talk']
+          }
+        ]
+      };
+
+      const supportWorkflow = {
+        id: "customer-support-agent",
+        name: "Customer Support Agent",
+        systemPrompt: "You are a helpful customer support agent. Provide clear, accurate answers based on the FAQ database. Be friendly and professional. If you can't fully answer from the FAQs, acknowledge this and suggest contacting human support.",
+        maxIterations: 10,
+        timeout: 120000,
+        steps: [
+          {
+            id: "categorize-query",
+            description: "Categorize the customer query",
+            prompt: "Use categorizeQuery to identify the type of support needed (account, billing, shipping, technical, product, or general).",
+            temperature: 0.2,
+            generationTask: "tool_use",
+            toolChoice: ["categorizeQuery"],
+            maxAttempts: 2,
+          },
+          {
+            id: "search-faq",
+            description: "Search FAQ database",
+            prompt: "Use searchFAQ to find relevant articles from the FAQ database based on the query and category.",
+            temperature: 0.1,
+            generationTask: "tool_use",
+            toolChoice: ["searchFAQ"],
+            maxAttempts: 2,
+          },
+          {
+            id: "evaluate-solution",
+            description: "Evaluate if FAQ answers the query",
+            prompt: "Use evaluateSolution to determine if the FAQ results fully answer the customer's question or if escalation is needed.",
+            temperature: 0.3,
+            generationTask: "tool_use",
+            toolChoice: ["evaluateSolution"],
+            maxAttempts: 2,
+          },
+          {
+            id: "compose-response",
+            description: "Compose support response",
+            prompt: "Create a friendly, helpful response that: 1) Acknowledges the issue, 2) Provides clear steps or information, 3) Offers additional help if needed. If escalation is recommended, include contact information.",
+            temperature: 0.4,
+            generationTask: "chat",
+            maxAttempts: 2,
+          }
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "categorizeQuery",
+              description: "Categorize the customer query into support categories.",
+              parameters: {
+                type: "object",
+                properties: {
+                  query: {
+                    type: "string",
+                    description: "Customer's query"
+                  }
+                },
+                required: ["query"]
+              },
+              implementation: async ({ query }) => {
+                const queryLower = query.toLowerCase();
+                const categoryKeywords = {
+                  account: ['password', 'login', 'account', 'email', 'username', 'access'],
+                  billing: ['payment', 'charge', 'refund', 'invoice', 'billing', 'price', 'cost'],
+                  shipping: ['shipping', 'delivery', 'tracking', 'package', 'order', 'return'],
+                  technical: ['error', 'broken', 'bug', 'not working', 'crash', 'loading'],
+                  product: ['feature', 'plan', 'upgrade', 'premium', 'works', 'support']
+                };
+
+                let bestCategory = 'general';
+                let maxMatches = 0;
+
+                Object.entries(categoryKeywords).forEach(([category, keywords]) => {
+                  const matches = keywords.filter(kw => queryLower.includes(kw)).length;
+                  if (matches > maxMatches) {
+                    maxMatches = matches;
+                    bestCategory = category;
+                  }
+                });
+
+                return {
+                  category: bestCategory,
+                  confidence: maxMatches > 0 ? 'high' : 'low',
+                  alternativeCategories: maxMatches === 0 ? ['general'] : []
+                };
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "searchFAQ",
+              description: "Search the FAQ database for relevant articles.",
+              parameters: {
+                type: "object",
+                properties: {
+                  query: {
+                    type: "string",
+                    description: "Customer's query"
+                  },
+                  category: {
+                    type: "string",
+                    description: "Query category from categorizeQuery"
+                  }
+                },
+                required: ["query", "category"]
+              },
+              implementation: async ({ query, category }) => {
+                const queryLower = query.toLowerCase();
+                const categoryFAQs = faqDatabase[category] || faqDatabase.general;
+
+                // Score each FAQ by keyword matches
+                const scoredFAQs = categoryFAQs.map(faq => {
+                  const matches = faq.keywords.filter(kw => queryLower.includes(kw)).length;
+                  return { ...faq, relevanceScore: matches };
+                });
+
+                const relevantFAQs = scoredFAQs
+                  .filter(faq => faq.relevanceScore > 0)
+                  .sort((a, b) => b.relevanceScore - a.relevanceScore)
+                  .slice(0, 3);
+
+                return {
+                  results: relevantFAQs.length > 0 ? relevantFAQs : [categoryFAQs[0]],
+                  totalResults: relevantFAQs.length,
+                  category
+                };
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "evaluateSolution",
+              description: "Evaluate if FAQ results adequately answer the query.",
+              parameters: {
+                type: "object",
+                properties: {
+                  faqResults: {
+                    type: "object",
+                    description: "Results from searchFAQ"
+                  },
+                  originalQuery: {
+                    type: "string",
+                    description: "Original customer query"
+                  }
+                },
+                required: ["faqResults", "originalQuery"]
+              },
+              implementation: async ({ faqResults, originalQuery }) => {
+                const hasResults = faqResults.results && faqResults.results.length > 0;
+                const topResult = hasResults ? faqResults.results[0] : null;
+                const highRelevance = topResult && topResult.relevanceScore >= 2;
+
+                return {
+                  canAnswerFully: hasResults && highRelevance,
+                  confidence: highRelevance ? 'high' : hasResults ? 'medium' : 'low',
+                  recommendation: hasResults && highRelevance ?
+                    'Provide answer from FAQ with additional context' :
+                    hasResults ?
+                    'Provide FAQ answer but suggest contacting support for specifics' :
+                    'Escalate to human support',
+                  escalate: !hasResults || !highRelevance
+                };
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "escalateToHuman",
+              description: "Generate escalation information for human support.",
+              parameters: {
+                type: "object",
+                properties: {
+                  reason: {
+                    type: "string",
+                    description: "Reason for escalation"
+                  },
+                  category: {
+                    type: "string",
+                    description: "Support category"
+                  }
+                },
+                required: ["reason", "category"]
+              },
+              implementation: async ({ reason, category }) => {
+                const contactInfo = {
+                  account: 'Email: accounts@company.com | Live Chat available',
+                  billing: 'Email: billing@company.com | Phone: 1-800-BILLING',
+                  shipping: 'Email: shipping@company.com | Live Chat available',
+                  technical: 'Email: support@company.com | Priority: Technical issues',
+                  product: 'Email: sales@company.com | Live Chat available',
+                  general: 'Email: support@company.com | Live Chat: 9am-6pm EST'
+                };
+
+                return {
+                  escalated: true,
+                  contactInfo: contactInfo[category] || contactInfo.general,
+                  ticketPriority: category === 'billing' || category === 'technical' ? 'high' : 'normal',
+                  estimatedResponseTime: '2-4 hours'
+                };
+              }
+            }
+          }
+        ]
+      };
+
+      function updateStatus(text, className = '') {
+        status.textContent = text;
+        status.className = `status ${className}`;
+      }
+
+      function addStep(stepResult) {
+        const stepDiv = document.createElement('div');
+        const stepType = stepResult.error ? 'error' : stepResult.toolCall ? 'tool_call' : 'response';
+        stepDiv.className = `step ${stepType}`;
+
+        const header = document.createElement('div');
+        header.className = 'step-header';
+
+        const typeIcons = {
+          thinking: '🤔',
+          tool_call: '🔧',
+          response: '💬',
+          error: '❌'
+        };
+
+        if (stepResult.stepId) {
+          header.innerHTML = `${typeIcons[stepType] || '•'} <strong>${getStepDescription(stepResult.stepId)}</strong>`;
+        }
+
+        const content = document.createElement('div');
+        content.className = 'step-content';
+
+        if (stepResult.error) {
+          content.textContent = stepResult.error.message;
+        } else {
+          content.textContent = stepResult.content || '';
+        }
+
+        stepDiv.appendChild(header);
+        stepDiv.appendChild(content);
+
+        if (stepResult.toolCall) {
+          const toolInfo = document.createElement('div');
+          toolInfo.className = 'tool-info';
+          const argsToShow = { ...stepResult.toolCall.args };
+          if (argsToShow.query && argsToShow.query.length > 80) {
+            argsToShow.query = `${argsToShow.query.substring(0, 80)}...`;
+          }
+          toolInfo.innerHTML = `<strong>🔧 ${stepResult.toolCall.name}</strong><br/>${JSON.stringify(argsToShow, null, 2)}`;
+          stepDiv.appendChild(toolInfo);
+        }
+
+        output.appendChild(stepDiv);
+        output.scrollTop = output.scrollHeight;
+      }
+
+      function getStepDescription(stepId) {
+        const descriptions = {
+          'categorize-query': 'Categorizing your question',
+          'search-faq': 'Searching FAQ database',
+          'evaluate-solution': 'Evaluating solution',
+          'compose-response': 'Composing support response'
+        };
+        return descriptions[stepId] || 'Processing';
+      }
+
+      function clearOutput() {
+        output.innerHTML = `
+          <div class="empty-state">
+            <h3>Ready to help the next customer!</h3>
+            <p>Enter another support query.</p>
+          </div>
+        `;
+        updateStatus('Ready');
+      }
+
+      async function runAgent() {
+        const query = queryInput.value.trim();
+
+        if (!query) {
+          alert('Please enter a customer query!');
+          return;
+        }
+
+        const fullQuery = `Category: ${currentCategory}\nQuery: ${query}`;
+
+        runBtn.disabled = true;
+        clearOutput();
+        updateStatus('Processing query...', 'running');
+
+        try {
+          const agent = await createAgentSession();
+          updateStatus('Agent running...', 'running');
+
+          let stepCount = 0;
+          for await (const stepResult of agent.runWorkflow(fullQuery, supportWorkflow)) {
+            stepCount++;
+            console.log(stepResult);
+            addStep(stepResult);
+
+            if (stepResult.error) {
+              console.warn('Step error:', stepResult.error.message);
+            }
+          }
+
+          updateStatus(`Response ready! (${stepCount} steps)`, 'completed');
+          await agent.dispose();
+
+        } catch (error) {
+          console.error('Agent error:', error);
+          updateStatus('Response failed', 'error');
+
+          const errorDiv = document.createElement('div');
+          errorDiv.className = 'step error';
+          errorDiv.innerHTML = `
+            <div class="step-header">❌ <strong>Error</strong></div>
+            <div class="step-content">Failed to process support query: ${error.message}</div>
+          `;
+          output.appendChild(errorDiv);
+        } finally {
+          runBtn.disabled = false;
+        }
+      }
+
+      runBtn.addEventListener('click', runAgent);
+      clearBtn.addEventListener('click', clearOutput);
+
+      queryInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          runAgent();
+        }
+      });
+    </script>
+  </body>
+</html>

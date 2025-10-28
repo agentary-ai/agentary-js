@@ -1,0 +1,797 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Document Q&A Assistant - Agentary JS Demo</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+        color: #334155;
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 40px;
+      }
+      h1 {
+        color: white;
+        text-align: center;
+        margin-bottom: 8px;
+        font-size: 2.5rem;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+      }
+      .subtitle {
+        text-align: center;
+        color: rgba(255, 255, 255, 0.9);
+        margin-bottom: 16px;
+        font-size: 18px;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+      }
+      .privacy-badge {
+        text-align: center;
+        margin-bottom: 32px;
+        padding: 12px 24px;
+        background: rgba(168, 237, 234, 0.3);
+        border: 2px solid rgba(168, 237, 234, 0.6);
+        border-radius: 24px;
+        color: white;
+        font-weight: 600;
+        display: inline-block;
+        width: fit-content;
+        margin-left: auto;
+        margin-right: auto;
+        display: block;
+        backdrop-filter: blur(10px);
+      }
+
+      .demo-panel {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        padding: 32px;
+      }
+
+      .input-section {
+        margin-bottom: 32px;
+        padding: 24px;
+        background: linear-gradient(145deg, #f0fdfa, #ccfbf1);
+        border-radius: 12px;
+        border: 1px solid #99f6e4;
+      }
+      .input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      label {
+        font-weight: 600;
+        color: #475569;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      input, select, textarea {
+        padding: 12px 16px;
+        border: 2px solid #99f6e4;
+        border-radius: 8px;
+        font-size: 14px;
+        font-family: inherit;
+        transition: all 0.2s;
+        background: white;
+      }
+      input:focus, select:focus, textarea:focus {
+        outline: none;
+        border-color: #5eead4;
+        box-shadow: 0 0 0 3px rgba(94, 234, 212, 0.1);
+        transform: translateY(-1px);
+      }
+
+      .document-area {
+        background: white;
+        border: 2px dashed #99f6e4;
+        border-radius: 8px;
+        padding: 16px;
+        min-height: 200px;
+        font-family: 'Georgia', serif;
+        line-height: 1.8;
+        color: #1e293b;
+      }
+      .document-stats {
+        display: flex;
+        gap: 16px;
+        margin-top: 8px;
+        font-size: 12px;
+        color: #64748b;
+      }
+
+      .example-buttons {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+      .example-btn {
+        background: #5eead4;
+        color: #134e4a;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        transition: all 0.2s;
+      }
+      .example-btn:hover {
+        background: #2dd4bf;
+        transform: translateY(-1px);
+      }
+
+      .run-section {
+        text-align: center;
+        margin-top: 24px;
+      }
+      .run-btn {
+        background: linear-gradient(145deg, #5eead4, #2dd4bf);
+        color: #134e4a;
+        border: none;
+        padding: 16px 32px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 16px;
+        transition: all 0.3s;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        box-shadow: 0 4px 15px rgba(94, 234, 212, 0.4);
+      }
+      .run-btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(94, 234, 212, 0.6);
+      }
+      .run-btn:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+      .clear-btn {
+        background: #6b7280;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 500;
+        margin-left: 12px;
+        transition: all 0.2s;
+      }
+      .clear-btn:hover {
+        background: #4b5563;
+      }
+
+      .output-section {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+      .output-header {
+        background: linear-gradient(145deg, #1e293b, #334155);
+        color: white;
+        padding: 16px 20px;
+        font-weight: 600;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .status {
+        font-size: 12px;
+        padding: 4px 12px;
+        border-radius: 16px;
+        background: #374151;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 500;
+      }
+      .status.running {
+        background: linear-gradient(145deg, #059669, #047857);
+        animation: pulse 2s infinite;
+      }
+      .status.completed {
+        background: linear-gradient(145deg, #059669, #047857);
+      }
+      .status.error {
+        background: linear-gradient(145deg, #dc2626, #b91c1c);
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+      .output-content {
+        padding: 20px;
+        max-height: 600px;
+        overflow-y: auto;
+        background: white;
+      }
+
+      .step {
+        margin-bottom: 20px;
+        padding: 16px;
+        border-radius: 12px;
+        border-left: 4px solid #e2e8f0;
+        background: #fafafa;
+        transition: all 0.3s;
+      }
+      .step:hover {
+        transform: translateX(4px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      }
+      .step.thinking {
+        background: linear-gradient(145deg, #f0fdfa, #ccfbf1);
+        border-left-color: #5eead4;
+      }
+      .step.tool_call {
+        background: linear-gradient(145deg, #fef3c7, #fde68a);
+        border-left-color: #f59e0b;
+      }
+      .step.response {
+        background: linear-gradient(145deg, #ede9fe, #ddd6fe);
+        border-left-color: #8b5cf6;
+      }
+      .step.error {
+        background: linear-gradient(145deg, #fef2f2, #fecaca);
+        border-left-color: #ef4444;
+      }
+      .step-header {
+        font-weight: 700;
+        margin-bottom: 8px;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .step-content {
+        color: #4b5563;
+        line-height: 1.6;
+        font-size: 14px;
+        white-space: pre-wrap;
+      }
+      .tool-info {
+        background: rgba(0, 0, 0, 0.05);
+        padding: 12px;
+        border-radius: 8px;
+        margin-top: 12px;
+        font-family: 'SF Mono', Monaco, monospace;
+        font-size: 12px;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+      }
+
+      .empty-state {
+        text-align: center;
+        color: #9ca3af;
+        padding: 80px 20px;
+      }
+      .empty-state h3 {
+        margin-bottom: 12px;
+        color: #6b7280;
+      }
+
+      @media (max-width: 768px) {
+        .run-section {
+          flex-direction: column;
+          align-items: center;
+          gap: 12px;
+        }
+        .clear-btn {
+          margin-left: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>📄 Document Q&A Assistant</h1>
+      <p class="subtitle">Ask questions about your documents without ever uploading them</p>
+      <div class="privacy-badge">
+        🔒 Confidential Research: Documents are processed locally only
+      </div>
+
+      <div class="demo-panel">
+        <div class="input-section">
+          <div class="input-group">
+            <label for="document">📄 Your Document (paste text below)</label>
+            <div class="document-area" id="document" contenteditable="true">
+Quantum Computing Research Notes
+
+Quantum computers use quantum bits (qubits) instead of classical bits. While classical bits can only be in states 0 or 1, qubits can exist in a superposition of both states simultaneously. This property, combined with quantum entanglement, gives quantum computers their unique computational advantages.
+
+Current State of Technology:
+- IBM, Google, and others have built quantum computers with 50-100 qubits
+- These systems require extreme cooling (near absolute zero)
+- Error rates remain a significant challenge
+- Quantum supremacy was claimed by Google in 2019
+
+Potential Applications:
+1. Cryptography: Breaking current encryption methods, creating quantum-secure communications
+2. Drug Discovery: Simulating molecular interactions at quantum level
+3. Optimization: Solving complex logistics and scheduling problems
+4. Machine Learning: Faster training of certain AI models
+
+Challenges:
+- Quantum decoherence (qubits losing their quantum state)
+- High error rates requiring error correction
+- Scalability issues as qubit count increases
+- Extremely expensive infrastructure requirements
+
+Timeline: Experts predict practical quantum advantage for specific applications within 5-10 years, though general-purpose quantum computing may take decades.
+            </div>
+            <div class="document-stats">
+              <span id="word-count">📊 Words: 0</span>
+              <span id="char-count">📝 Characters: 0</span>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label for="question">💬 Ask a Question About the Document</label>
+            <textarea
+              id="question"
+              rows="2"
+              placeholder="What would you like to know?"
+            >What are the main challenges facing quantum computing development?</textarea>
+          </div>
+
+          <div class="example-buttons">
+            <button class="example-btn" onclick="loadExample('summarize')">📋 Summarize</button>
+            <button class="example-btn" onclick="loadExample('keypoints')">🎯 Key Points</button>
+            <button class="example-btn" onclick="loadExample('specific')">🔍 Specific Info</button>
+            <button class="example-btn" onclick="loadExample('compare')">⚖️ Compare</button>
+          </div>
+
+          <div class="run-section">
+            <button id="run-btn" class="run-btn">🔍 Analyze Document</button>
+            <button id="clear-btn" class="clear-btn">🗑️ Clear</button>
+          </div>
+        </div>
+
+        <div class="output-section">
+          <div class="output-header">
+            <span>🤖 Document Analysis Agent</span>
+            <span id="status" class="status">Ready</span>
+          </div>
+          <div class="output-content" id="output">
+            <div class="empty-state">
+              <h3>Ready to analyze your document!</h3>
+              <p>Paste your document and ask questions. The AI will:</p>
+              <ul style="text-align: left; display: inline-block; margin-top: 20px;">
+                <li>📖 Extract relevant information from your text</li>
+                <li>🎯 Identify key points and themes</li>
+                <li>💡 Answer specific questions about the content</li>
+                <li>📝 Summarize sections or the entire document</li>
+                <li>🔗 Find connections and relationships in the text</li>
+              </ul>
+              <p style="margin-top: 20px; font-style: italic; font-size: 14px;">
+                Perfect for research notes, contracts, reports, or any text analysis.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { createAgentSession, enableDebuggingMode } from '../dist/index.js';
+
+      enableDebuggingMode();
+
+      const documentArea = document.getElementById('document');
+      const questionInput = document.getElementById('question');
+      const runBtn = document.getElementById('run-btn');
+      const clearBtn = document.getElementById('clear-btn');
+      const output = document.getElementById('output');
+      const status = document.getElementById('status');
+      const wordCount = document.getElementById('word-count');
+      const charCount = document.getElementById('char-count');
+
+      // Update document stats
+      function updateDocumentStats() {
+        const text = documentArea.textContent;
+        const words = text.trim().split(/\s+/).filter(w => w.length > 0).length;
+        const chars = text.length;
+
+        wordCount.textContent = `📊 Words: ${words}`;
+        charCount.textContent = `📝 Characters: ${chars}`;
+      }
+
+      documentArea.addEventListener('input', updateDocumentStats);
+      updateDocumentStats();
+
+      window.loadExample = function(type) {
+        const examples = {
+          summarize: "Provide a concise summary of this document in 3-4 sentences.",
+          keypoints: "Extract the 5 most important key points from this document.",
+          specific: "What are the main challenges facing quantum computing development?",
+          compare: "Compare the potential applications mentioned with the challenges discussed."
+        };
+
+        if (examples[type]) {
+          questionInput.value = examples[type];
+        }
+      };
+
+      const documentQAWorkflow = {
+        id: "document-qa-assistant",
+        name: "Document Q&A Assistant",
+        systemPrompt: "You are a document analysis assistant. Help users understand their documents by answering questions, extracting key information, and providing clear summaries. Base all responses strictly on the provided document content.",
+        maxIterations: 10,
+        timeout: 120000,
+        steps: [
+          {
+            id: "parse-question",
+            description: "Parse the user's question",
+            prompt: "Analyze the question to understand: 1) What type of information is requested (summary, specific fact, comparison, key points, etc.), 2) Which parts of the document are most relevant.",
+            temperature: 0.2,
+            generationTask: "chat",
+            maxAttempts: 2,
+          },
+          {
+            id: "chunk-document",
+            description: "Chunk document into sections",
+            prompt: "Use chunkDocument to break the document into manageable sections for analysis.",
+            temperature: 0.1,
+            generationTask: "tool_use",
+            toolChoice: ["chunkDocument"],
+            maxAttempts: 2,
+          },
+          {
+            id: "extract-relevant",
+            description: "Extract relevant information",
+            prompt: "Use extractRelevantInfo to find the sections and passages most relevant to answering the user's question.",
+            temperature: 0.2,
+            generationTask: "tool_use",
+            toolChoice: ["extractRelevantInfo"],
+            maxAttempts: 2,
+          },
+          {
+            id: "analyze-content",
+            description: "Analyze extracted content",
+            prompt: "Use analyzeContent to deeply understand the relevant information and prepare a comprehensive answer.",
+            temperature: 0.3,
+            generationTask: "tool_use",
+            toolChoice: ["analyzeContent"],
+            maxAttempts: 2,
+          },
+          {
+            id: "compose-answer",
+            description: "Compose final answer",
+            prompt: "Create a clear, well-structured answer based on the document analysis. Include specific references or quotes when helpful. If the document doesn't contain enough information to fully answer the question, acknowledge this.",
+            temperature: 0.4,
+            generationTask: "chat",
+            maxAttempts: 2,
+          }
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "chunkDocument",
+              description: "Break document into logical chunks for processing.",
+              parameters: {
+                type: "object",
+                properties: {
+                  documentText: {
+                    type: "string",
+                    description: "Full document text"
+                  }
+                },
+                required: ["documentText"]
+              },
+              implementation: async ({ documentText }) => {
+                // Simple chunking by paragraphs
+                const chunks = documentText
+                  .split('\n\n')
+                  .filter(chunk => chunk.trim().length > 0)
+                  .map((chunk, index) => ({
+                    id: index,
+                    text: chunk.trim(),
+                    wordCount: chunk.trim().split(/\s+/).length
+                  }));
+
+                return {
+                  chunks,
+                  totalChunks: chunks.length,
+                  totalWords: chunks.reduce((sum, c) => sum + c.wordCount, 0)
+                };
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "extractRelevantInfo",
+              description: "Extract information relevant to the question from document chunks.",
+              parameters: {
+                type: "object",
+                properties: {
+                  chunks: {
+                    type: "array",
+                    description: "Document chunks from chunkDocument"
+                  },
+                  question: {
+                    type: "string",
+                    description: "User's question"
+                  }
+                },
+                required: ["chunks", "question"]
+              },
+              implementation: async ({ chunks, question }) => {
+                // Simple relevance scoring based on keyword matching
+                const keywords = question.toLowerCase()
+                  .split(/\s+/)
+                  .filter(w => w.length > 3);
+
+                const relevantChunks = chunks.map(chunk => {
+                  const text = chunk.text.toLowerCase();
+                  const relevanceScore = keywords.reduce((score, keyword) => {
+                    return score + (text.includes(keyword) ? 1 : 0);
+                  }, 0);
+
+                  return {
+                    ...chunk,
+                    relevanceScore
+                  };
+                }).filter(c => c.relevanceScore > 0)
+                  .sort((a, b) => b.relevanceScore - a.relevanceScore)
+                  .slice(0, 5);
+
+                return {
+                  relevantChunks,
+                  totalRelevant: relevantChunks.length,
+                  coverage: `Found ${relevantChunks.length} relevant sections`
+                };
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "analyzeContent",
+              description: "Deeply analyze relevant content to prepare comprehensive answer.",
+              parameters: {
+                type: "object",
+                properties: {
+                  relevantChunks: {
+                    type: "array",
+                    description: "Relevant chunks from extractRelevantInfo"
+                  },
+                  question: {
+                    type: "string",
+                    description: "User's question"
+                  }
+                },
+                required: ["relevantChunks", "question"]
+              },
+              implementation: async ({ relevantChunks, question }) => {
+                const analysis = {
+                  mainPoints: [],
+                  supportingDetails: [],
+                  quotes: [],
+                  coverage: "complete"
+                };
+
+                // Extract key information from each relevant chunk
+                relevantChunks.forEach(chunk => {
+                  const lines = chunk.text.split('\n').filter(l => l.trim());
+
+                  lines.forEach(line => {
+                    if (line.includes(':') || line.includes('-')) {
+                      analysis.mainPoints.push(line.trim());
+                    }
+                  });
+
+                  // Extract potential quotes (sentences with key information)
+                  const sentences = chunk.text.match(/[^.!?]+[.!?]+/g) || [];
+                  if (sentences.length > 0) {
+                    analysis.quotes.push(sentences[0].trim());
+                  }
+                });
+
+                return {
+                  analysis,
+                  confidence: relevantChunks.length > 0 ? "high" : "low",
+                  suggestion: relevantChunks.length === 0 ?
+                    "Document may not contain sufficient information to answer this question" :
+                    "Found relevant information in document"
+                };
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "extractKeyPoints",
+              description: "Extract key points from the entire document.",
+              parameters: {
+                type: "object",
+                properties: {
+                  documentText: {
+                    type: "string",
+                    description: "Full document text"
+                  },
+                  maxPoints: {
+                    type: "number",
+                    description: "Maximum number of key points to extract"
+                  }
+                },
+                required: ["documentText"]
+              },
+              implementation: async ({ documentText, maxPoints = 5 }) => {
+                // Simple extraction of lines that look like key points
+                const lines = documentText.split('\n')
+                  .map(l => l.trim())
+                  .filter(l => l.length > 20 && l.length < 200);
+
+                const keyPoints = [];
+
+                // Prioritize lines with numbers, bullets, or colons
+                lines.forEach(line => {
+                  if (line.match(/^[\d\-•*]/) || line.includes(':')) {
+                    keyPoints.push(line);
+                  }
+                });
+
+                return {
+                  keyPoints: keyPoints.slice(0, maxPoints),
+                  total: keyPoints.length
+                };
+              }
+            }
+          }
+        ]
+      };
+
+      function updateStatus(text, className = '') {
+        status.textContent = text;
+        status.className = `status ${className}`;
+      }
+
+      function addStep(stepResult) {
+        const stepDiv = document.createElement('div');
+        const stepType = stepResult.error ? 'error' : stepResult.toolCall ? 'tool_call' : 'response';
+        stepDiv.className = `step ${stepType}`;
+
+        const header = document.createElement('div');
+        header.className = 'step-header';
+
+        const typeIcons = {
+          thinking: '🤔',
+          tool_call: '🔧',
+          response: '📄',
+          error: '❌'
+        };
+
+        if (stepResult.stepId) {
+          header.innerHTML = `${typeIcons[stepType] || '•'} <strong>${getStepDescription(stepResult.stepId)}</strong>`;
+        }
+
+        const content = document.createElement('div');
+        content.className = 'step-content';
+
+        if (stepResult.error) {
+          content.textContent = stepResult.error.message;
+        } else {
+          content.textContent = stepResult.content || '';
+        }
+
+        stepDiv.appendChild(header);
+        stepDiv.appendChild(content);
+
+        if (stepResult.toolCall) {
+          const toolInfo = document.createElement('div');
+          toolInfo.className = 'tool-info';
+          const argsToShow = { ...stepResult.toolCall.args };
+          if (argsToShow.documentText) {
+            argsToShow.documentText = `${argsToShow.documentText.substring(0, 100)}... [truncated]`;
+          }
+          if (argsToShow.chunks) {
+            argsToShow.chunks = `[${argsToShow.chunks.length} chunks]`;
+          }
+          toolInfo.innerHTML = `<strong>🔧 ${stepResult.toolCall.name}</strong><br/>${JSON.stringify(argsToShow, null, 2)}`;
+          stepDiv.appendChild(toolInfo);
+        }
+
+        output.appendChild(stepDiv);
+        output.scrollTop = output.scrollHeight;
+      }
+
+      function getStepDescription(stepId) {
+        const descriptions = {
+          'parse-question': 'Understanding your question',
+          'chunk-document': 'Processing document sections',
+          'extract-relevant': 'Finding relevant information',
+          'analyze-content': 'Analyzing content',
+          'compose-answer': 'Composing answer'
+        };
+        return descriptions[stepId] || 'Processing';
+      }
+
+      function clearOutput() {
+        output.innerHTML = `
+          <div class="empty-state">
+            <h3>Ready to analyze another question!</h3>
+            <p>Ask something else about your document.</p>
+          </div>
+        `;
+        updateStatus('Ready');
+      }
+
+      async function runAgent() {
+        const documentText = documentArea.textContent.trim();
+        const question = questionInput.value.trim();
+
+        if (!documentText) {
+          alert('Please paste a document first!');
+          return;
+        }
+
+        if (!question) {
+          alert('Please enter a question!');
+          return;
+        }
+
+        const fullQuery = `Document:\n${documentText}\n\nQuestion: ${question}`;
+
+        runBtn.disabled = true;
+        clearOutput();
+        updateStatus('Analyzing document...', 'running');
+
+        try {
+          const agent = await createAgentSession();
+          updateStatus('Agent running...', 'running');
+
+          let stepCount = 0;
+          for await (const stepResult of agent.runWorkflow(fullQuery, documentQAWorkflow)) {
+            stepCount++;
+            console.log(stepResult);
+            addStep(stepResult);
+
+            if (stepResult.error) {
+              console.warn('Step error:', stepResult.error.message);
+            }
+          }
+
+          updateStatus(`Analysis completed! (${stepCount} steps)`, 'completed');
+          await agent.dispose();
+
+        } catch (error) {
+          console.error('Agent error:', error);
+          updateStatus('Analysis failed', 'error');
+
+          const errorDiv = document.createElement('div');
+          errorDiv.className = 'step error';
+          errorDiv.innerHTML = `
+            <div class="step-header">❌ <strong>Error</strong></div>
+            <div class="step-content">Failed to analyze document: ${error.message}</div>
+          `;
+          output.appendChild(errorDiv);
+        } finally {
+          runBtn.disabled = false;
+        }
+      }
+
+      runBtn.addEventListener('click', runAgent);
+      clearBtn.addEventListener('click', clearOutput);
+
+      questionInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          runAgent();
+        }
+      });
+    </script>
+  </body>
+</html>

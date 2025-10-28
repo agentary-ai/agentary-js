@@ -1,0 +1,772 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Health & Wellness Assistant - Agentary JS Demo</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: #334155;
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 40px;
+      }
+      h1 {
+        color: white;
+        text-align: center;
+        margin-bottom: 8px;
+        font-size: 2.5rem;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+      }
+      .subtitle {
+        text-align: center;
+        color: rgba(255, 255, 255, 0.9);
+        margin-bottom: 16px;
+        font-size: 18px;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+      }
+      .privacy-badge {
+        text-align: center;
+        margin-bottom: 32px;
+        padding: 12px 24px;
+        background: rgba(16, 185, 129, 0.2);
+        border: 2px solid rgba(16, 185, 129, 0.5);
+        border-radius: 24px;
+        color: white;
+        font-weight: 600;
+        display: inline-block;
+        width: fit-content;
+        margin-left: auto;
+        margin-right: auto;
+        display: block;
+        backdrop-filter: blur(10px);
+      }
+
+      .demo-panel {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        padding: 32px;
+        backdrop-filter: blur(10px);
+      }
+
+      .input-section {
+        margin-bottom: 32px;
+        padding: 24px;
+        background: linear-gradient(145deg, #f8fafc, #e2e8f0);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+      }
+      .input-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-bottom: 20px;
+      }
+      .input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .input-group.full-width {
+        grid-column: 1 / -1;
+      }
+      label {
+        font-weight: 600;
+        color: #475569;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      input, select, textarea {
+        padding: 12px 16px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+        font-family: inherit;
+        transition: all 0.2s;
+        background: white;
+      }
+      input:focus, select:focus, textarea:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        transform: translateY(-1px);
+      }
+
+      .example-buttons {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+      .example-btn {
+        background: #667eea;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        transition: all 0.2s;
+      }
+      .example-btn:hover {
+        background: #5a67d8;
+        transform: translateY(-1px);
+      }
+
+      .run-section {
+        text-align: center;
+        margin-top: 24px;
+      }
+      .run-btn {
+        background: linear-gradient(145deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        padding: 16px 32px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 16px;
+        transition: all 0.3s;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+      }
+      .run-btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+      }
+      .run-btn:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+      .clear-btn {
+        background: #6b7280;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 500;
+        margin-left: 12px;
+        transition: all 0.2s;
+      }
+      .clear-btn:hover {
+        background: #4b5563;
+      }
+
+      .output-section {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+      .output-header {
+        background: linear-gradient(145deg, #1e293b, #334155);
+        color: white;
+        padding: 16px 20px;
+        font-weight: 600;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .status {
+        font-size: 12px;
+        padding: 4px 12px;
+        border-radius: 16px;
+        background: #374151;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 500;
+      }
+      .status.running {
+        background: linear-gradient(145deg, #059669, #047857);
+        animation: pulse 2s infinite;
+      }
+      .status.completed {
+        background: linear-gradient(145deg, #059669, #047857);
+      }
+      .status.error {
+        background: linear-gradient(145deg, #dc2626, #b91c1c);
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+      .output-content {
+        padding: 20px;
+        max-height: 600px;
+        overflow-y: auto;
+        background: white;
+      }
+
+      .step {
+        margin-bottom: 20px;
+        padding: 16px;
+        border-radius: 12px;
+        border-left: 4px solid #e2e8f0;
+        background: #fafafa;
+        transition: all 0.3s;
+      }
+      .step:hover {
+        transform: translateX(4px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      }
+      .step.thinking {
+        background: linear-gradient(145deg, #eff6ff, #dbeafe);
+        border-left-color: #3b82f6;
+      }
+      .step.tool_call {
+        background: linear-gradient(145deg, #fff7ed, #fed7aa);
+        border-left-color: #f59e0b;
+      }
+      .step.response {
+        background: linear-gradient(145deg, #ecfdf5, #d1fae5);
+        border-left-color: #10b981;
+      }
+      .step.error {
+        background: linear-gradient(145deg, #fef2f2, #fecaca);
+        border-left-color: #ef4444;
+      }
+      .step-header {
+        font-weight: 700;
+        margin-bottom: 8px;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .step-content {
+        color: #4b5563;
+        line-height: 1.6;
+        font-size: 14px;
+      }
+      .tool-info {
+        background: rgba(0, 0, 0, 0.05);
+        padding: 12px;
+        border-radius: 8px;
+        margin-top: 12px;
+        font-family: 'SF Mono', Monaco, monospace;
+        font-size: 12px;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+      }
+
+      .empty-state {
+        text-align: center;
+        color: #9ca3af;
+        padding: 80px 20px;
+      }
+      .empty-state h3 {
+        margin-bottom: 12px;
+        color: #6b7280;
+      }
+
+      @media (max-width: 768px) {
+        .input-grid {
+          grid-template-columns: 1fr;
+        }
+        .run-section {
+          flex-direction: column;
+          align-items: center;
+          gap: 12px;
+        }
+        .clear-btn {
+          margin-left: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🏥 Health & Wellness Assistant</h1>
+      <p class="subtitle">Privacy-first personal health companion powered by on-device AI</p>
+      <div class="privacy-badge">
+        🔒 Medical-Grade Privacy: Your health data never leaves your device
+      </div>
+
+      <div class="demo-panel">
+        <div class="input-section">
+          <div class="input-grid">
+            <div class="input-group full-width">
+              <label for="query">💬 Ask Your Health Assistant</label>
+              <textarea
+                id="query"
+                rows="3"
+                placeholder="e.g., How has my sleep been this week? Any recommendations for better energy?"
+              >How has my sleep quality been this week? Do you see any patterns in my energy levels?</textarea>
+            </div>
+          </div>
+
+          <div class="example-buttons">
+            <button class="example-btn" onclick="loadExample('sleep')">😴 Sleep Analysis</button>
+            <button class="example-btn" onclick="loadExample('exercise')">🏃 Exercise Tracking</button>
+            <button class="example-btn" onclick="loadExample('nutrition')">🥗 Nutrition Insights</button>
+            <button class="example-btn" onclick="loadExample('mood')">😊 Mood Patterns</button>
+          </div>
+
+          <div class="run-section">
+            <button id="run-btn" class="run-btn">🚀 Analyze Health Data</button>
+            <button id="clear-btn" class="clear-btn">🗑️ Clear</button>
+          </div>
+        </div>
+
+        <div class="output-section">
+          <div class="output-header">
+            <span>🤖 Health Analysis Agent</span>
+            <span id="status" class="status">Ready</span>
+          </div>
+          <div class="output-content" id="output">
+            <div class="empty-state">
+              <h3>Ready to analyze your health data!</h3>
+              <p>Ask a question above and the AI agent will:</p>
+              <ul style="text-align: left; display: inline-block; margin-top: 20px;">
+                <li>📊 Retrieve your health logs from local storage</li>
+                <li>🔍 Analyze patterns and trends</li>
+                <li>💡 Identify correlations (sleep vs energy, exercise vs mood)</li>
+                <li>📋 Generate personalized recommendations</li>
+                <li>🎯 Suggest actionable next steps</li>
+              </ul>
+              <p style="margin-top: 20px; font-style: italic; font-size: 14px;">
+                All processing happens locally in your browser. No health data is ever transmitted to servers.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { createAgentSession, enableDebuggingMode } from '../dist/index.js';
+
+      enableDebuggingMode();
+
+      const queryInput = document.getElementById('query');
+      const runBtn = document.getElementById('run-btn');
+      const clearBtn = document.getElementById('clear-btn');
+      const output = document.getElementById('output');
+      const status = document.getElementById('status');
+
+      // Mock health data stored locally
+      const healthData = {
+        sleepLogs: [
+          { date: '2025-10-16', hours: 7.5, quality: 'good', wakeups: 1 },
+          { date: '2025-10-17', hours: 6.0, quality: 'poor', wakeups: 3 },
+          { date: '2025-10-18', hours: 8.0, quality: 'excellent', wakeups: 0 },
+          { date: '2025-10-19', hours: 7.0, quality: 'good', wakeups: 1 },
+          { date: '2025-10-20', hours: 5.5, quality: 'poor', wakeups: 4 },
+          { date: '2025-10-21', hours: 8.5, quality: 'excellent', wakeups: 0 },
+          { date: '2025-10-22', hours: 7.5, quality: 'good', wakeups: 1 }
+        ],
+        exerciseLogs: [
+          { date: '2025-10-16', type: 'running', durationMin: 30, intensity: 'moderate' },
+          { date: '2025-10-18', type: 'yoga', durationMin: 45, intensity: 'light' },
+          { date: '2025-10-19', type: 'gym', durationMin: 60, intensity: 'high' },
+          { date: '2025-10-21', type: 'running', durationMin: 40, intensity: 'moderate' }
+        ],
+        moodLogs: [
+          { date: '2025-10-16', mood: 'happy', energy: 7, stress: 3 },
+          { date: '2025-10-17', mood: 'tired', energy: 4, stress: 6 },
+          { date: '2025-10-18', mood: 'energetic', energy: 9, stress: 2 },
+          { date: '2025-10-19', mood: 'neutral', energy: 6, stress: 4 },
+          { date: '2025-10-20', mood: 'stressed', energy: 3, stress: 8 },
+          { date: '2025-10-21', mood: 'relaxed', energy: 8, stress: 2 },
+          { date: '2025-10-22', mood: 'happy', energy: 7, stress: 3 }
+        ],
+        nutritionLogs: [
+          { date: '2025-10-16', meals: 3, water: 8, vegetables: 4 },
+          { date: '2025-10-17', meals: 2, water: 5, vegetables: 2 },
+          { date: '2025-10-18', meals: 3, water: 10, vegetables: 5 },
+          { date: '2025-10-19', meals: 3, water: 7, vegetables: 3 },
+          { date: '2025-10-20', meals: 2, water: 4, vegetables: 1 },
+          { date: '2025-10-21', meals: 3, water: 9, vegetables: 5 },
+          { date: '2025-10-22', meals: 3, water: 8, vegetables: 4 }
+        ]
+      };
+
+      window.loadExample = function(type) {
+        const examples = {
+          sleep: "How has my sleep quality been this week? Do you see any patterns in my energy levels?",
+          exercise: "Analyze my exercise routine. Am I being consistent? What should I improve?",
+          nutrition: "How is my water intake and vegetable consumption? Any recommendations?",
+          mood: "What patterns do you see in my mood and stress levels? What's affecting them?"
+        };
+
+        if (examples[type]) {
+          queryInput.value = examples[type];
+        }
+      };
+
+      const healthWorkflow = {
+        id: "health-wellness-assistant",
+        name: "Health & Wellness Assistant",
+        systemPrompt: "You are a supportive health and wellness assistant. Analyze health data patterns and provide personalized, actionable recommendations. Be encouraging and focus on sustainable improvements. Always remind users to consult healthcare professionals for medical concerns.",
+        maxIterations: 10,
+        timeout: 120000,
+        steps: [
+          {
+            id: "parse-query",
+            description: "Parse the user's health question",
+            prompt: "Identify what type of health data the user is asking about (sleep, exercise, mood, nutrition, or general wellness). Extract the time period if mentioned.",
+            temperature: 0.1,
+            generationTask: "chat",
+            maxAttempts: 2,
+          },
+          {
+            id: "retrieve-data",
+            description: "Retrieve relevant health logs",
+            prompt: "Use the getHealthLogs tool to retrieve the relevant health data based on the user's query. Include all relevant data types mentioned in the query.",
+            temperature: 0.1,
+            generationTask: "tool_use",
+            toolChoice: ["getHealthLogs"],
+            maxAttempts: 2,
+          },
+          {
+            id: "analyze-patterns",
+            description: "Analyze patterns and trends",
+            prompt: "Use the analyzePatterns tool to identify trends, correlations, and insights from the health data. Look for connections between different health metrics (e.g., sleep quality vs energy, exercise vs mood).",
+            temperature: 0.1,
+            generationTask: "tool_use",
+            toolChoice: ["analyzePatterns"],
+            maxAttempts: 2,
+          },
+          {
+            id: "generate-recommendations",
+            description: "Generate personalized recommendations",
+            prompt: "Use the generateRecommendations tool to create actionable, personalized suggestions based on the patterns discovered. Focus on 2-3 specific, achievable improvements.",
+            temperature: 0.3,
+            generationTask: "tool_use",
+            toolChoice: ["generateRecommendations"],
+            maxAttempts: 2,
+          },
+          {
+            id: "compose-response",
+            description: "Compose final health insights",
+            prompt: "Create a friendly, supportive response that includes: 1) Summary of findings, 2) Key patterns observed, 3) Specific recommendations, 4) Encouragement. Include a reminder to consult healthcare professionals for medical concerns.",
+            temperature: 0.4,
+            generationTask: "chat",
+            maxAttempts: 2,
+          }
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "getHealthLogs",
+              description: "Retrieve health logs from local storage. Returns data for requested types (sleep, exercise, mood, nutrition).",
+              parameters: {
+                type: "object",
+                properties: {
+                  dataTypes: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      enum: ["sleep", "exercise", "mood", "nutrition"]
+                    },
+                    description: "Types of health data to retrieve"
+                  },
+                  daysBack: {
+                    type: "number",
+                    description: "Number of days to look back (default: 7)"
+                  }
+                },
+                required: ["dataTypes"]
+              },
+              implementation: async ({ dataTypes, daysBack = 7 }) => {
+                const result = {};
+
+                if (dataTypes.includes('sleep')) {
+                  result.sleep = healthData.sleepLogs.slice(-daysBack);
+                }
+                if (dataTypes.includes('exercise')) {
+                  result.exercise = healthData.exerciseLogs.slice(-daysBack);
+                }
+                if (dataTypes.includes('mood')) {
+                  result.mood = healthData.moodLogs.slice(-daysBack);
+                }
+                if (dataTypes.includes('nutrition')) {
+                  result.nutrition = healthData.nutritionLogs.slice(-daysBack);
+                }
+
+                return result;
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "analyzePatterns",
+              description: "Analyze health data for patterns, trends, and correlations. Returns insights object.",
+              parameters: {
+                type: "object",
+                properties: {
+                  healthLogs: {
+                    type: "object",
+                    description: "Health logs object from getHealthLogs"
+                  }
+                },
+                required: ["healthLogs"]
+              },
+              implementation: async ({ healthLogs }) => {
+                const insights = {
+                  patterns: [],
+                  correlations: [],
+                  averages: {}
+                };
+
+                // Analyze sleep patterns
+                if (healthLogs.sleep && healthLogs.sleep.length > 0) {
+                  const avgSleep = healthLogs.sleep.reduce((sum, log) => sum + log.hours, 0) / healthLogs.sleep.length;
+                  const poorNights = healthLogs.sleep.filter(log => log.quality === 'poor').length;
+
+                  insights.averages.sleepHours = avgSleep.toFixed(1);
+                  insights.patterns.push(`Average ${avgSleep.toFixed(1)} hours of sleep per night`);
+
+                  if (poorNights > 2) {
+                    insights.patterns.push(`${poorNights} nights of poor sleep quality this week`);
+                  }
+                }
+
+                // Analyze exercise patterns
+                if (healthLogs.exercise && healthLogs.exercise.length > 0) {
+                  const avgDuration = healthLogs.exercise.reduce((sum, log) => sum + log.durationMin, 0) / healthLogs.exercise.length;
+                  insights.averages.exerciseMinutes = avgDuration.toFixed(0);
+                  insights.patterns.push(`Exercise ${healthLogs.exercise.length} times this week, average ${avgDuration.toFixed(0)} minutes`);
+                }
+
+                // Analyze mood patterns
+                if (healthLogs.mood && healthLogs.mood.length > 0) {
+                  const avgEnergy = healthLogs.mood.reduce((sum, log) => sum + log.energy, 0) / healthLogs.mood.length;
+                  const avgStress = healthLogs.mood.reduce((sum, log) => sum + log.stress, 0) / healthLogs.mood.length;
+
+                  insights.averages.energy = avgEnergy.toFixed(1);
+                  insights.averages.stress = avgStress.toFixed(1);
+                  insights.patterns.push(`Average energy level: ${avgEnergy.toFixed(1)}/10`);
+                  insights.patterns.push(`Average stress level: ${avgStress.toFixed(1)}/10`);
+                }
+
+                // Find correlations
+                if (healthLogs.sleep && healthLogs.mood) {
+                  const goodSleepDays = healthLogs.sleep.filter(s => s.hours >= 7.5).map(s => s.date);
+                  const highEnergyDays = healthLogs.mood.filter(m => m.energy >= 7).map(m => m.date);
+                  const overlap = goodSleepDays.filter(date => highEnergyDays.includes(date)).length;
+
+                  if (overlap > 2) {
+                    insights.correlations.push("Good sleep (7.5+ hours) correlates with higher energy levels");
+                  }
+                }
+
+                return insights;
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "generateRecommendations",
+              description: "Generate personalized health recommendations based on analysis insights.",
+              parameters: {
+                type: "object",
+                properties: {
+                  insights: {
+                    type: "object",
+                    description: "Insights object from analyzePatterns"
+                  }
+                },
+                required: ["insights"]
+              },
+              implementation: async ({ insights }) => {
+                const recommendations = [];
+
+                // Sleep recommendations
+                if (insights.averages.sleepHours && parseFloat(insights.averages.sleepHours) < 7) {
+                  recommendations.push({
+                    category: "Sleep",
+                    priority: "high",
+                    suggestion: "Aim for 7-9 hours of sleep per night by setting a consistent bedtime routine",
+                    rationale: "You're averaging below recommended sleep duration"
+                  });
+                }
+
+                // Energy recommendations
+                if (insights.averages.energy && parseFloat(insights.averages.energy) < 6) {
+                  recommendations.push({
+                    category: "Energy",
+                    priority: "medium",
+                    suggestion: "Try morning sunlight exposure and regular meal times to stabilize energy",
+                    rationale: "Energy levels are below optimal range"
+                  });
+                }
+
+                // Stress recommendations
+                if (insights.averages.stress && parseFloat(insights.averages.stress) > 6) {
+                  recommendations.push({
+                    category: "Stress",
+                    priority: "high",
+                    suggestion: "Incorporate 10-15 minutes of daily meditation or breathing exercises",
+                    rationale: "Stress levels are elevated"
+                  });
+                }
+
+                // Exercise recommendations
+                if (insights.averages.exerciseMinutes && parseFloat(insights.averages.exerciseMinutes) < 30) {
+                  recommendations.push({
+                    category: "Exercise",
+                    priority: "medium",
+                    suggestion: "Gradually increase exercise duration to 30-45 minutes per session",
+                    rationale: "Current exercise duration is below optimal"
+                  });
+                }
+
+                // General wellness
+                recommendations.push({
+                  category: "General Wellness",
+                  priority: "low",
+                  suggestion: "Continue tracking your health metrics to identify long-term patterns",
+                  rationale: "Consistent tracking enables better insights"
+                });
+
+                return { recommendations: recommendations.slice(0, 3) };
+              }
+            }
+          }
+        ]
+      };
+
+      function updateStatus(text, className = '') {
+        status.textContent = text;
+        status.className = `status ${className}`;
+      }
+
+      function addStep(stepResult) {
+        const stepDiv = document.createElement('div');
+        const stepType = stepResult.error ? 'error' : stepResult.toolCall ? 'tool_call' : 'response';
+        stepDiv.className = `step ${stepType}`;
+
+        const header = document.createElement('div');
+        header.className = 'step-header';
+
+        const typeIcons = {
+          thinking: '🤔',
+          tool_call: '🔧',
+          response: '💬',
+          error: '❌'
+        };
+
+        if (stepResult.stepId) {
+          header.innerHTML = `${typeIcons[stepType] || '•'} <strong>${getStepDescription(stepResult.stepId)}</strong>`;
+        }
+
+        const content = document.createElement('div');
+        content.className = 'step-content';
+
+        if (stepResult.error) {
+          content.textContent = stepResult.error.message;
+        } else {
+          content.textContent = stepResult.content || '';
+        }
+
+        stepDiv.appendChild(header);
+        stepDiv.appendChild(content);
+
+        if (stepResult.toolCall) {
+          const toolInfo = document.createElement('div');
+          toolInfo.className = 'tool-info';
+          toolInfo.innerHTML = `<strong>🔧 ${stepResult.toolCall.name}</strong><br/>${JSON.stringify(stepResult.toolCall.args, null, 2)}`;
+          if (stepResult.toolCall.result) {
+            toolInfo.innerHTML += `<br/><br/><strong>Result:</strong><br/>${JSON.stringify(JSON.parse(stepResult.toolCall.result), null, 2)}`;
+          }
+          stepDiv.appendChild(toolInfo);
+        }
+
+        output.appendChild(stepDiv);
+        output.scrollTop = output.scrollHeight;
+      }
+
+      function getStepDescription(stepId) {
+        const descriptions = {
+          'parse-query': 'Understanding your question',
+          'retrieve-data': 'Retrieving health logs',
+          'analyze-patterns': 'Analyzing patterns and trends',
+          'generate-recommendations': 'Generating recommendations',
+          'compose-response': 'Composing health insights'
+        };
+        return descriptions[stepId] || 'Processing';
+      }
+
+      function clearOutput() {
+        output.innerHTML = `
+          <div class="empty-state">
+            <h3>Ready for your next health check!</h3>
+            <p>Ask another question to analyze your wellness data.</p>
+          </div>
+        `;
+        updateStatus('Ready');
+      }
+
+      async function runAgent() {
+        const query = queryInput.value.trim();
+        if (!query) {
+          alert('Please enter a question!');
+          return;
+        }
+
+        runBtn.disabled = true;
+        clearOutput();
+        updateStatus('Analyzing health data...', 'running');
+
+        try {
+          const agent = await createAgentSession();
+          updateStatus('Agent running...', 'running');
+
+          let stepCount = 0;
+          for await (const stepResult of agent.runWorkflow(query, healthWorkflow)) {
+            stepCount++;
+            console.log(stepResult);
+            addStep(stepResult);
+
+            if (stepResult.error) {
+              console.warn('Step error:', stepResult.error.message);
+            }
+          }
+
+          updateStatus(`Analysis completed! (${stepCount} steps)`, 'completed');
+          await agent.dispose();
+
+        } catch (error) {
+          console.error('Agent error:', error);
+          updateStatus('Analysis failed', 'error');
+
+          const errorDiv = document.createElement('div');
+          errorDiv.className = 'step error';
+          errorDiv.innerHTML = `
+            <div class="step-header">❌ <strong>Error</strong></div>
+            <div class="step-content">Failed to run health assistant: ${error.message}</div>
+          `;
+          output.appendChild(errorDiv);
+        } finally {
+          runBtn.disabled = false;
+        }
+      }
+
+      runBtn.addEventListener('click', runAgent);
+      clearBtn.addEventListener('click', clearOutput);
+
+      queryInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          runAgent();
+        }
+      });
+    </script>
+  </body>
+</html>
