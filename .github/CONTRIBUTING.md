@@ -52,6 +52,90 @@ Thank you for considering contributing to Agentary JS! This document provides gu
 
 5. Push to your fork and create a pull request.
 
+### Branch Naming Guidelines
+
+Use descriptive branch names that follow this pattern: `type/short-description`
+
+#### Branch Types
+
+- `feature/` - New features or enhancements
+  - Example: `feature/add-streaming-support`
+  - Example: `feature/improve-error-handling`
+
+- `fix/` or `bugfix/` - Bug fixes
+  - Example: `fix/memory-leak-in-worker`
+  - Example: `bugfix/null-pointer-exception`
+
+- `hotfix/` - Urgent fixes for production issues
+  - Example: `hotfix/critical-security-patch`
+  - Example: `hotfix/api-timeout`
+
+- `docs/` - Documentation updates
+  - Example: `docs/update-api-reference`
+  - Example: `docs/add-migration-guide`
+
+- `refactor/` - Code refactoring (no functionality change)
+  - Example: `refactor/simplify-session-manager`
+  - Example: `refactor/extract-utility-functions`
+
+- `test/` - Adding or updating tests
+  - Example: `test/add-integration-tests`
+  - Example: `test/improve-coverage`
+
+- `chore/` - Maintenance tasks, dependency updates
+  - Example: `chore/update-dependencies`
+  - Example: `chore/configure-linter`
+
+- `perf/` - Performance improvements
+  - Example: `perf/optimize-token-counting`
+  - Example: `perf/reduce-bundle-size`
+
+#### Naming Best Practices
+
+- **Use lowercase letters** and separate words with hyphens
+  - ✅ `feature/add-memory-management`
+  - ❌ `feature/AddMemoryManagement`
+
+- **Be descriptive but concise** (ideally 2-4 words)
+  - ✅ `fix/worker-initialization-error`
+  - ❌ `fix/bug`
+  - ❌ `fix/the-worker-fails-to-initialize-properly-when-options-are-null`
+
+- **Reference issue numbers** when applicable
+  - ✅ `fix/worker-crash-issue-123`
+  - ✅ `feature/streaming-45`
+
+- **Avoid special characters** (except hyphens and forward slashes)
+  - ✅ `feature/add-new-parser`
+  - ❌ `feature/add_new_parser`
+  - ❌ `feature/add.new.parser`
+
+- **Keep it focused** - one branch per feature/fix
+  - ✅ `feature/add-retry-logic`
+  - ❌ `feature/add-retry-logic-and-fix-timeout-and-update-docs`
+
+#### Examples
+
+```bash
+# Feature development
+git checkout -b feature/add-streaming-api
+
+# Bug fix
+git checkout -b fix/memory-leak-in-session
+
+# Documentation
+git checkout -b docs/update-quick-start-guide
+
+# Hotfix for production
+git checkout -b hotfix/security-vulnerability-cve-2024-1234
+
+# Refactoring
+git checkout -b refactor/simplify-workflow-executor
+
+# Performance improvement
+git checkout -b perf/optimize-embeddings-cache
+```
+
 ### Commit Message Guidelines
 
 We follow conventional commits:
