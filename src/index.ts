@@ -9,21 +9,34 @@ export type {
   SessionEvent,
   EventHandler,
   UnsubscribeFn,
+  // Worker events (legacy)
   WorkerInitStartEvent,
   WorkerInitProgressEvent,
   WorkerInitCompleteEvent,
   WorkerDisposedEvent,
+  // Provider events (new)
+  ProviderInitStartEvent,
+  ProviderInitProgressEvent,
+  ProviderInitCompleteEvent,
+  ProviderRequestStartEvent,
+  ProviderRequestCompleteEvent,
+  ProviderRateLimitEvent,
+  ProviderErrorEvent,
+  // Generation events
   GenerationStartEvent,
   GenerationTokenEvent,
   GenerationCompleteEvent,
   GenerationErrorEvent,
+  // Memory events
   MemoryCheckpointEvent,
   MemoryRollbackEvent,
   MemoryCompressedEvent,
   MemoryPrunedEvent,
+  // Tool events
   ToolCallStartEvent,
   ToolCallCompleteEvent,
   ToolCallErrorEvent,
+  // Workflow events
   WorkflowStartEvent,
   WorkflowStepStartEvent,
   WorkflowStepCompleteEvent,
@@ -31,6 +44,7 @@ export type {
   WorkflowCompleteEvent,
   WorkflowTimeoutEvent,
   WorkflowErrorEvent,
+  // Error events
   ErrorEvent
 } from './types/events';
 
@@ -67,7 +81,7 @@ export type {
   Session, 
   GenerationTask 
 } from './types/session';
-export type { 
+export type {
   EngineKind,
   WorkerInstance,
   InitArgs,
@@ -77,3 +91,23 @@ export type {
   Tool,
   GenerateArgs
 } from './types/worker';
+
+// Provider system exports (new in v1.5.0)
+export type {
+  ProviderType,
+  BaseProviderConfig,
+  LocalProviderConfig,
+  OpenAIProviderConfig,
+  AnthropicProviderConfig,
+  ProviderConfig,
+  TokenUsage,
+  GenerationMetadata,
+  ModelProvider,
+  ProviderSessionConfig,
+  IProviderFactory
+} from './types/provider';
+
+export { ProviderFactory, providerFactory } from './providers/provider-factory';
+export { BaseProvider } from './providers/base-provider';
+export { LocalProvider } from './providers/local-provider';
+export { ProviderManager } from './providers/provider-manager';

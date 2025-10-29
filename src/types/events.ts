@@ -2,7 +2,7 @@
  * Event types emitted by the SDK for lifecycle monitoring
  */
 
-// Worker lifecycle events
+// Worker lifecycle events (maintained for backward compatibility)
 export type WorkerInitStartEvent = {
   type: 'worker:init:start';
   modelName: string;
@@ -27,6 +27,67 @@ export type WorkerInitCompleteEvent = {
 export type WorkerDisposedEvent = {
   type: 'worker:disposed';
   modelName: string;
+  timestamp: number;
+};
+
+// Provider lifecycle events (new provider abstraction)
+export type ProviderInitStartEvent = {
+  type: 'provider:init:start';
+  provider: string;
+  model: string;
+  timestamp: number;
+};
+
+export type ProviderInitProgressEvent = {
+  type: 'provider:init:progress';
+  provider: string;
+  model: string;
+  progress: number; // 0-100
+  stage: string;
+  timestamp: number;
+};
+
+export type ProviderInitCompleteEvent = {
+  type: 'provider:init:complete';
+  provider: string;
+  model: string;
+  duration: number;
+  timestamp: number;
+};
+
+export type ProviderRequestStartEvent = {
+  type: 'provider:request:start';
+  provider: string;
+  model: string;
+  timestamp: number;
+};
+
+export type ProviderRequestCompleteEvent = {
+  type: 'provider:request:complete';
+  provider: string;
+  model: string;
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+  duration: number;
+  timestamp: number;
+};
+
+export type ProviderRateLimitEvent = {
+  type: 'provider:rate_limit';
+  provider: string;
+  model: string;
+  retryAfter?: number;
+  timestamp: number;
+};
+
+export type ProviderErrorEvent = {
+  type: 'provider:error';
+  provider: string;
+  model: string;
+  error: Error | string;
   timestamp: number;
 };
 
@@ -199,21 +260,34 @@ export type ErrorEvent = {
 
 // Union type of all events
 export type SessionEvent =
+  // Worker events (legacy)
   | WorkerInitStartEvent
   | WorkerInitProgressEvent
   | WorkerInitCompleteEvent
   | WorkerDisposedEvent
+  // Provider events (new)
+  | ProviderInitStartEvent
+  | ProviderInitProgressEvent
+  | ProviderInitCompleteEvent
+  | ProviderRequestStartEvent
+  | ProviderRequestCompleteEvent
+  | ProviderRateLimitEvent
+  | ProviderErrorEvent
+  // Generation events
   | GenerationStartEvent
   | GenerationTokenEvent
   | GenerationCompleteEvent
   | GenerationErrorEvent
+  // Memory events
   | MemoryCheckpointEvent
   | MemoryRollbackEvent
   | MemoryCompressedEvent
   | MemoryPrunedEvent
+  // Tool events
   | ToolCallStartEvent
   | ToolCallCompleteEvent
   | ToolCallErrorEvent
+  // Workflow events
   | WorkflowStartEvent
   | WorkflowStepStartEvent
   | WorkflowStepCompleteEvent
@@ -221,6 +295,7 @@ export type SessionEvent =
   | WorkflowCompleteEvent
   | WorkflowTimeoutEvent
   | WorkflowErrorEvent
+  // Error events
   | ErrorEvent;
 
 // Event handler type

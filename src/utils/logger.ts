@@ -306,10 +306,32 @@ class Logger {
   };
 
   performance = {
-    debug: (message: string, data?: unknown, context?: Record<string, unknown>) => 
+    debug: (message: string, data?: unknown, context?: Record<string, unknown>) =>
       this.debug('performance', message, data, context ? { context } : undefined),
-    info: (message: string, data?: unknown, context?: Record<string, unknown>) => 
+    info: (message: string, data?: unknown, context?: Record<string, unknown>) =>
       this.info('performance', message, data, context ? { context } : undefined),
+  };
+
+  localProvider = {
+    debug: (message: string, data?: unknown, requestId?: string) =>
+      this.debug('local-provider', message, data, requestId ? { requestId } : undefined),
+    info: (message: string, data?: unknown, requestId?: string) =>
+      this.info('local-provider', message, data, requestId ? { requestId } : undefined),
+    warn: (message: string, data?: unknown, requestId?: string) =>
+      this.warn('local-provider', message, data, requestId ? { requestId } : undefined),
+    error: (message: string, data?: unknown, requestId?: string) =>
+      this.error('local-provider', message, data, requestId ? { requestId } : undefined),
+  };
+
+  providerFactory = {
+    debug: (message: string, data?: unknown) =>
+      this.debug('provider-factory', message, data),
+    info: (message: string, data?: unknown) =>
+      this.info('provider-factory', message, data),
+    warn: (message: string, data?: unknown) =>
+      this.warn('provider-factory', message, data),
+    error: (message: string, data?: unknown) =>
+      this.error('provider-factory', message, data),
   };
 
   // Utility methods

@@ -1,5 +1,6 @@
 import { type CreateSessionArgs, type Session, type TokenStreamChunk, type GenerationTask } from '../types/session';
-import { GenerateArgs, WorkerInstance } from '../types/worker';
+import { GenerateArgs } from '../types/worker';
+import { ProviderManager } from '../providers/provider-manager';
 import { WorkerManager } from '../workers/manager';
 import { logger } from '../utils/logger';
 import { EventEmitter } from '../utils/event-emitter';
@@ -12,18 +13,18 @@ import { EventHandler, UnsubscribeFn } from '../types/events';
  */
 export async function createSession(args: CreateSessionArgs = {}): Promise<Session> {
   const eventEmitter = new EventEmitter();
-  const workerManager = new WorkerManager(args, eventEmitter);
-  let disposed = false;
+  const providerManager = new ProviderManager(args, eventEmitter);
 
-  function nextId(workerInstance: WorkerInstance): string { 
-    workerInstance.inflightId += 1; 
-    return String(workerInstance.inflightId); 
-  }
+  // Keep workerManager for backward compatibility
+  const workerManager = new WorkerManager(args, eventEmitter);
+
+  let disposed = false;
+  let requestCounter = 0;
 
   async function* createResponse(args: GenerateArgs, generationTask?: GenerationTask): AsyncIterable<TokenStreamChunk> {
     if (disposed) throw new Error('Session disposed');
 
-    // Remove implementation field from tools before passing to worker
+    // Remove implementation field from tools before passing to provider
     args = {
       ...args,
       ...(args.tools && args.tools.length > 0 ? {
@@ -42,107 +43,98 @@ export async function createSession(args: CreateSessionArgs = {}): Promise<Sessi
       generationTask = 'tool_use';
     }
 
-    // Retrieve worker for model generation
-    const workerInstance = await workerManager.getWorker(args, generationTask);
-    const requestId = nextId(workerInstance);
+    // Get provider for this generation task
+    const provider = await providerManager.getProvider(args, generationTask);
+    const requestId = String(++requestCounter);
 
-    const queue: TokenStreamChunk[] = [];
-    let done = false;
     const startTime = Date.now();
     let tokenCount = 0;
+    let modelName = 'unknown';
+
+    // Get model name from provider config
+    if (provider.config.type === 'local') {
+      modelName = provider.config.model.name;
+    } else {
+      modelName = provider.config.model || 'unknown';
+    }
 
     // Emit generation start event
     eventEmitter.emit({
       type: 'generation:start',
       requestId,
-      modelName: workerInstance.model.name,
+      modelName,
       messageCount: args.messages.length,
       timestamp: startTime
     });
 
-    const onMessage = (ev: MessageEvent<any>) => {
-      const msg = ev.data;
-      if (!msg || msg.requestId !== requestId) return;
+    logger.session.debug('Starting generation', {
+      requestId,
+      modelName,
+      generationTask,
+      messageCount: args.messages.length
+    });
 
-      if (msg.type === 'chunk') {
-        const { token, tokenId, isFirst, isLast, ttfbMs } = msg.args;
-        const chunk = { token, tokenId, isFirst, isLast, ...(ttfbMs !== undefined ? { ttfbMs } : {}) };
-        queue.push(chunk);
-
-        if (!isLast) {
+    try {
+      // Stream tokens from provider
+      for await (const chunk of provider.generate(args)) {
+        if (!chunk.isLast) {
           tokenCount++;
         }
 
         // Emit token event
-        eventEmitter.emit({
+        const tokenEvent: any = {
           type: 'generation:token',
           requestId,
-          token,
-          tokenId,
-          isFirst,
-          isLast,
-          ttfbMs,
+          token: chunk.token,
+          tokenId: chunk.tokenId,
+          isFirst: chunk.isFirst,
+          isLast: chunk.isLast,
           timestamp: Date.now()
-        });
-
-      } else if (msg.type === 'done') {
-        done = true;
-        queue.push({ token: '', tokenId: -1, isFirst: false, isLast: true });
-
-        // Emit completion event
-        const duration = Date.now() - startTime;
-        eventEmitter.emit({
-          type: 'generation:complete',
-          requestId,
-          totalTokens: tokenCount,
-          duration,
-          tokensPerSecond: tokenCount / (duration / 1000),
-          timestamp: Date.now()
-        });
-
-      } else if (msg.type === 'error') {
-        done = true;
-        queue.push({ token: '', tokenId: -1, isFirst: false, isLast: true });
-        logger.session.error('Generation error', msg.error, requestId);
-
-        // Emit error event
-        eventEmitter.emit({
-          type: 'generation:error',
-          requestId,
-          error: msg.error,
-          timestamp: Date.now()
-        });
-
-      } else if (msg.type === 'debug') {
-        // logger.session.debug('Worker debug message', msg.args, requestId);
-      }
-    };
-    workerInstance.worker.addEventListener('message', onMessage as any);
-
-    workerInstance.worker.postMessage({
-      type: 'generate',
-      requestId,
-      args,
-    });
-
-    try {
-      while (!done || queue.length) {
-        if (queue.length) {
-          const next = queue.shift()!;
-          yield next;
-        } else {
-          await new Promise((r) => setTimeout(r, 1));
+        };
+        if (chunk.ttfbMs !== undefined) {
+          tokenEvent.ttfbMs = chunk.ttfbMs;
         }
+        eventEmitter.emit(tokenEvent);
+
+        yield chunk;
       }
-    } finally {
-      workerInstance.worker.removeEventListener('message', onMessage as any);
+
+      // Emit completion event
+      const duration = Date.now() - startTime;
+      eventEmitter.emit({
+        type: 'generation:complete',
+        requestId,
+        totalTokens: tokenCount,
+        duration,
+        tokensPerSecond: tokenCount / (duration / 1000),
+        timestamp: Date.now()
+      });
+
+      logger.session.debug('Generation completed', {
+        requestId,
+        totalTokens: tokenCount,
+        duration
+      });
+
+    } catch (error: any) {
+      logger.session.error('Generation error', error.message, requestId);
+
+      // Emit error event
+      eventEmitter.emit({
+        type: 'generation:error',
+        requestId,
+        error: error.message,
+        timestamp: Date.now()
+      });
+
+      throw error;
     }
   }
 
   async function dispose(): Promise<void> {
     if (disposed) return;
     disposed = true;
-    await workerManager.disposeAll();
+    await providerManager.disposeAll();
     eventEmitter.removeAllListeners();
   }
 
