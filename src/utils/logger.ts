@@ -334,6 +334,28 @@ class Logger {
       this.error('provider-factory', message, data),
   };
 
+  openaiProvider = {
+    debug: (message: string, data?: unknown, requestId?: string) =>
+      this.debug('openai-provider', message, data, requestId ? { requestId } : undefined),
+    info: (message: string, data?: unknown, requestId?: string) =>
+      this.info('openai-provider', message, data, requestId ? { requestId } : undefined),
+    warn: (message: string, data?: unknown, requestId?: string) =>
+      this.warn('openai-provider', message, data, requestId ? { requestId } : undefined),
+    error: (message: string, data?: unknown, requestId?: string) =>
+      this.error('openai-provider', message, data, requestId ? { requestId } : undefined),
+  };
+
+  anthropicProvider = {
+    debug: (message: string, data?: unknown, requestId?: string) =>
+      this.debug('anthropic-provider', message, data, requestId ? { requestId } : undefined),
+    info: (message: string, data?: unknown, requestId?: string) =>
+      this.info('anthropic-provider', message, data, requestId ? { requestId } : undefined),
+    warn: (message: string, data?: unknown, requestId?: string) =>
+      this.warn('anthropic-provider', message, data, requestId ? { requestId } : undefined),
+    error: (message: string, data?: unknown, requestId?: string) =>
+      this.error('anthropic-provider', message, data, requestId ? { requestId } : undefined),
+  };
+
   // Utility methods
   setLevel(level: LogLevel): void {
     this.config.level = level;

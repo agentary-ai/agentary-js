@@ -8,6 +8,8 @@ import {
 } from "../types/provider";
 import { Model } from "../types/worker";
 import { LocalProvider } from "./local-provider";
+import { OpenAIProvider } from "./openai-provider";
+import { AnthropicProvider } from "./anthropic-provider";
 import { logger } from "../utils/logger";
 
 /**
@@ -75,20 +77,25 @@ export class ProviderFactory implements IProviderFactory {
 
   /**
    * Create an OpenAI API provider
-   * @throws Error - Not yet implemented
    */
   private createOpenAIProvider(config: OpenAIProviderConfig): ModelProvider {
-    logger.providerFactory.error('OpenAI provider not yet implemented', { config });
-    throw new Error('OpenAI provider not yet implemented. Coming in Phase 2.');
+    logger.providerFactory.info('Creating OpenAIProvider', {
+      model: config.model,
+      baseURL: config.baseURL
+    });
+
+    return new OpenAIProvider(config);
   }
 
   /**
    * Create an Anthropic API provider
-   * @throws Error - Not yet implemented
    */
   private createAnthropicProvider(config: AnthropicProviderConfig): ModelProvider {
-    logger.providerFactory.error('Anthropic provider not yet implemented', { config });
-    throw new Error('Anthropic provider not yet implemented. Coming in Phase 3.');
+    logger.providerFactory.info('Creating AnthropicProvider', {
+      model: config.model
+    });
+
+    return new AnthropicProvider(config);
   }
 
   /**

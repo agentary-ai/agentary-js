@@ -110,4 +110,6 @@ export type {
 export { ProviderFactory, providerFactory } from './providers/provider-factory';
 export { BaseProvider } from './providers/base-provider';
 export { LocalProvider } from './providers/local-provider';
+export { OpenAIProvider } from './providers/openai-provider';
+export { AnthropicProvider } from './providers/anthropic-provider';
 export { ProviderManager } from './providers/provider-manager';

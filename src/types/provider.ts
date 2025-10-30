@@ -138,6 +138,7 @@ export interface ProviderSessionConfig {
   provider?: ProviderConfig;
 
   // Multi-provider configuration (advanced usage)
+  // TODO: Support custom provider types/names?
   providers?: {
     chat?: ProviderConfig;
     tool_use?: ProviderConfig;

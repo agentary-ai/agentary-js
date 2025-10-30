@@ -15,7 +15,7 @@ export default defineConfig({
   target: 'es2022',
   platform: 'browser',
   outDir: 'dist',
-  external: [],
+  external: ['openai', '@anthropic-ai/sdk'],
   noExternal: ['@huggingface/transformers'],
   async onSuccess() {
     // Copy ONNX Runtime runtime assets used by the worker into dist/runtime
