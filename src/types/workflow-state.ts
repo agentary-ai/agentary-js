@@ -1,10 +1,9 @@
-import { AgentWorkflow } from "./agent-session";
+import { Workflow } from "./agent-session";
 import { Tool } from "./worker";
 import { Message } from "./worker";
 
   export interface StepState {
     id: string;
-    // description: string;
     result?: string;
     complete: boolean;
     attempts: number;
@@ -41,7 +40,7 @@ import { Message } from "./worker";
   }
   
   export interface WorkflowState {
-    workflow: AgentWorkflow;
+    workflow: Workflow;
     userPrompt: string;
     startTime: number;
     completedSteps: Set<string>;

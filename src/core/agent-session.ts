@@ -1,6 +1,6 @@
 import type { 
   AgentSession, 
-  AgentWorkflow,
+  Workflow,
   WorkflowIterationResponse, 
 } from '../types/agent-session';
 import type { Session, CreateSessionArgs, TokenStreamChunk } from '../types/session';
@@ -11,6 +11,8 @@ import { StepExecutor } from '../workflow/step-executor';
 import { WorkflowStateManager } from '../workflow/workflow-state';
 import { InferenceProviderConfig } from '../types/provider';
 import { MemoryConfig } from '../types/memory';
+import { EventEmitter } from '../utils/event-emitter';
+import { InferenceProviderManager } from '../providers/manager';
 
 /**
  * Implementation of the AgentSession interface that extends the base Session
@@ -63,17 +65,25 @@ export class AgentSessionImpl implements AgentSession {
   constructor(session: Session) {
     this.session = session;
     this.workflowStateManager = new WorkflowStateManager(session);
-    this.stepExecutor = new StepExecutor(session, this.workflowStateManager, session);
-    this.workflowExecutor = new WorkflowExecutor(this.stepExecutor, this.tools, this.workflowStateManager, session);
+    this.stepExecutor = new StepExecutor(
+      session, this.workflowStateManager
+    );
+    this.workflowExecutor = new WorkflowExecutor(
+      this.stepExecutor, 
+      this.tools, 
+      this.workflowStateManager, 
+      session
+    );
   }
   
   /**
-   * Generates a streaming response from the LLM for the given prompt and configuration.
+   * Generates a streaming response from the LLM for the given 
+   * prompt and configuration.
    * 
    * @param args - Generation arguments
    * @param args.model - Name of the model to use for generation (must be registered)
    * @param args.messages - Array of conversation messages
-   * @param args.tools - Optional array of tools available for function calling
+   * @param args.tools - Optional array of tools available forfunction calling
    * @param args.maxTokens - Optional maximum number of tokens to generate
    * @param args.temperature - Optional sampling temperature (0-1)
    * @param args.topP - Optional nucleus sampling parameter
@@ -93,9 +103,9 @@ export class AgentSessionImpl implements AgentSession {
    * ```
    */
   async* createResponse(
-    generateArgs: GenerateArgs, 
+    args: GenerateArgs
   ): AsyncIterable<TokenStreamChunk> {
-    yield* this.session.createResponse(generateArgs);
+    yield* this.session.createResponse(args);
   }
 
   /**
@@ -104,7 +114,9 @@ export class AgentSessionImpl implements AgentSession {
    * @param models - Record mapping model names to their provider configurations
    * @returns Promise that resolves when all models are registered and ready for use
    */
-  async registerModels(models: Record<string, InferenceProviderConfig>): Promise<void> {
+  async registerModels(
+    models: Record<string, InferenceProviderConfig>
+  ): Promise<void> {
     await this.session.registerModels(models);
   }
 
@@ -122,17 +134,14 @@ export class AgentSessionImpl implements AgentSession {
   }
 
   /**
-   * Registers a tool that the agent can call during workflow execution.
-   * Tools must conform to the Tool interface with name, description, and execute function.
+   * Registers multiple tools with the agent.
    * 
-   * @param tool - The tool to register with the agent
+   * @param tools - Array of tools to register with the agent
    * @throws Error if the session has been disposed
-   * 
-   * @example
    */
-  registerTool(tool: Tool): void {
+  registerTools(tools: Tool[]): void {
     if (this.disposed) throw new Error('Agent session disposed');
-    this.tools.push(tool);
+    this.tools.push(...tools);
   }
 
   /**
@@ -161,7 +170,9 @@ export class AgentSessionImpl implements AgentSession {
    * ```
    */
   async* runWorkflow(
-    prompt: string, workflow: AgentWorkflow, memoryConfig?: MemoryConfig
+    prompt: string,
+    workflow: Workflow,
+    memoryConfig?: MemoryConfig
   ): AsyncIterable<WorkflowIterationResponse> {
     if (this.disposed) throw new Error('Agent session disposed');
     yield* this.workflowExecutor.execute(prompt, workflow, memoryConfig);
@@ -187,6 +198,14 @@ export class AgentSessionImpl implements AgentSession {
   off(eventType: string | '*', handler: any) {
     this.session.off(eventType, handler);
   }
+  
+  get _eventEmitter(): EventEmitter {
+    return this.session._eventEmitter;
+  }
+  
+  get _providerManager(): InferenceProviderManager {
+    return this.session._providerManager;
+  }
 }
 
 /**
@@ -195,7 +214,9 @@ export class AgentSessionImpl implements AgentSession {
  * @param args - Optional configuration for session creation
  * @returns Promise resolving to a configured AgentSession instance
  */
-export async function createAgentSession(args: CreateSessionArgs = {}): Promise<AgentSession> {
+export async function createAgentSession(
+  args: CreateSessionArgs = {}
+): Promise<AgentSession> {
   const session = await createSession(args);
   return new AgentSessionImpl(session);
 }

@@ -1,55 +1,79 @@
 import type { 
-  AgentWorkflow, 
+  Workflow, 
   WorkflowStep, 
   WorkflowIterationResponse,
 } from '../types/agent-session';
 import type { Tool } from '../types/worker';
 import type { WorkflowState } from '../types/workflow-state';
+import type { MemoryConfig } from '../types/memory';
 
 import { logger } from '../utils/logger';
 import { StepExecutor } from './step-executor';
 import { WorkflowStateManager } from './workflow-state';
 import { WorkflowResultBuilder } from './result-builder';
+import { Session } from '../types/session';
+import { WorkflowErrorEvent } from '../types/events';
 
+/**
+ * Orchestrates the entire workflow execution, managing multiple steps
+ * and coordinating between the step executor and state management.
+ */
 export class WorkflowExecutor {
   private stepExecutor: StepExecutor;
   private tools: Tool[];
   private stateManager: WorkflowStateManager;
-  private eventSession: any;
+  private session: Session;
 
-  constructor(stepExecutor: StepExecutor, tools: Tool[], stateManager: WorkflowStateManager, eventSession: any) {
+  constructor(
+    stepExecutor: StepExecutor, 
+    tools: Tool[], 
+    stateManager: WorkflowStateManager, 
+    session: Session
+  ) {
     this.stepExecutor = stepExecutor;
     this.tools = tools;
     this.stateManager = stateManager;
-    this.eventSession = eventSession;
+    this.session = session;
   }
 
-  async* execute(userPrompt: string, agentWorkflow: AgentWorkflow): AsyncIterable<WorkflowIterationResponse> {
+  /**
+   * Executes the entire workflow, managing multiple steps and coordinating between the step executor and state management.
+   * 
+   * @param userPrompt - The user prompt to start the workflow
+   * @param workflow - The workflow to execute
+   * @param memoryConfig - The memory configuration to use for the workflow
+   * @returns An async iterable of workflow iteration responses
+   */
+  async* execute(
+    userPrompt: string,
+    workflow: Workflow,
+    memoryConfig?: MemoryConfig
+  ): AsyncIterable<WorkflowIterationResponse> {
     const startTime = Date.now();
     logger.agent.info('Starting workflow execution', {
-      workflowId: agentWorkflow.id,
-      workflowName: agentWorkflow.name,
+      workflowId: workflow.id,
       userPrompt,
-      stepCount: agentWorkflow.steps.length,
-      toolCount: agentWorkflow.tools.length
+      stepCount: workflow.steps.length,
+      toolCount: workflow.tools.length
     });
 
     // Emit workflow start event
-    const emitter = this.eventSession?._eventEmitter;
+    const emitter = this.session._eventEmitter;
     if (emitter) {
       emitter.emit({
         type: 'workflow:start',
-        workflowId: agentWorkflow.id,
-        workflowName: agentWorkflow.name,
-        stepCount: agentWorkflow.steps.length,
+        workflowId: workflow.id,
+        stepCount: workflow.steps.length,
         timestamp: startTime
       });
     }
 
+    // Initialize the workflow state
     await this.stateManager.initializeState(
       userPrompt,
-      agentWorkflow,
-      this.tools
+      workflow,
+      this.tools,
+      memoryConfig
     );
 
     let currentStep: WorkflowStep | undefined;
@@ -58,6 +82,7 @@ export class WorkflowExecutor {
     try {
       state = this.stateManager.getState();
       
+      // Execute the workflow steps
       yield* this.executeWorkflowSteps(state);
 
       // Handle completion
@@ -65,11 +90,12 @@ export class WorkflowExecutor {
       if (!currentStep) {
         logger.agent.warn('No steps remaining for execution', { 
           workflowId: state.workflow.id, 
-          availableSteps: state.workflow.steps.map(step => step.id)
+          availableSteps: state.workflow.steps.map((step: WorkflowStep) => step.id)
         });
         return;
       }
       
+      // Handle maximum iterations reached
       if (this.stateManager.isMaxIterationsReached()) {
         logger.agent.warn('Workflow exceeded maximum iterations', { 
           workflowId: state.workflow.id, 
@@ -79,7 +105,6 @@ export class WorkflowExecutor {
         yield WorkflowResultBuilder.createMaxIterationsResult(
           currentStep.id,
           state.startTime,
-          currentStep?.generationTask
         );
       } else {
         logger.agent.info('Workflow execution complete', {
@@ -104,13 +129,16 @@ export class WorkflowExecutor {
     } catch (error: any) {
       // Emit workflow error event
       if (emitter && state) {
-        emitter.emit({
+        const event: WorkflowErrorEvent = {
           type: 'workflow:error',
           workflowId: state.workflow.id,
-          stepId: currentStep?.id,
           error: error.message,
           timestamp: Date.now()
-        });
+        };
+        if (currentStep?.id) {
+          event.stepId = currentStep.id;
+        }
+        emitter.emit(event);
       }
       if (!state) {
         // Handle state initialization failure
@@ -125,6 +153,12 @@ export class WorkflowExecutor {
     }
   }
 
+  /**
+   * Executes the workflow steps, managing multiple steps and coordinating between the step executor and state management.
+   * 
+   * @param state - The workflow state to execute
+   * @returns An async iterable of workflow iteration responses
+   */
   private async* executeWorkflowSteps(
     state: WorkflowState
   ): AsyncIterable<WorkflowIterationResponse> {
@@ -134,11 +168,12 @@ export class WorkflowExecutor {
         iteration: state.iteration,
         maxIterations: state.maxIterations
       });
+      
       const currentStep = this.stateManager.findNextStep();
       if (!currentStep) {
         logger.agent.warn('No next available step found', { 
           workflowId: state.workflow.id, 
-          availableSteps: state.workflow.steps.map(step => step.id)
+          availableSteps: state.workflow.steps.map((step: WorkflowStep) => step.id)
         });
         break;
       }
@@ -161,7 +196,7 @@ export class WorkflowExecutor {
         });
 
         // Emit workflow timeout event
-        const emitter = this.eventSession?._eventEmitter;
+        const emitter = this.session._eventEmitter;
         if (emitter) {
           emitter.emit({
             type: 'workflow:timeout',
@@ -175,20 +210,19 @@ export class WorkflowExecutor {
         yield WorkflowResultBuilder.createTimeoutResult(
           currentStep.id,
           state.startTime,
-          currentStep.generationTask
         );
         break;
       }
 
       // Emit step start event
       const stepStartTime = Date.now();
-      const emitter = this.eventSession?._eventEmitter;
+      const emitter = this.session._eventEmitter;
       if (emitter) {
         emitter.emit({
           type: 'workflow:step:start',
           workflowId: state.workflow.id,
           stepId: currentStep.id,
-          stepDescription: currentStep.description,
+          stepPrompt: currentStep.prompt,
           iteration: state.iteration,
           timestamp: stepStartTime
         });
@@ -243,6 +277,14 @@ export class WorkflowExecutor {
     });
   }
 
+  /**
+   * Handles a workflow error, logging the error and yielding a result.
+   * 
+   * @param state - The workflow state to handle the error
+   * @param currentStep - The current step to handle the error
+   * @param error - The error to handle
+   * @returns An async iterable of workflow iteration responses
+   */
   private async* handleWorkflowError(
     state: WorkflowState,
     currentStep: WorkflowStep | undefined,
@@ -260,7 +302,6 @@ export class WorkflowExecutor {
     yield WorkflowResultBuilder.createErrorResult(
       error,
       state.startTime,
-      currentStep?.generationTask
     );
   }
 }

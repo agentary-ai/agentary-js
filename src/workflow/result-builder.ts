@@ -1,11 +1,12 @@
 import type { WorkflowIterationResponse } from '../types/agent-session';
-import type { GenerationTask } from '../types/session';
 
+/**
+ * Builds the result of a workflow iteration.
+ */
 export class WorkflowResultBuilder {
   static createTimeoutResult(
     stepId: string | null,
     startTime: number,
-    generationTask?: GenerationTask
   ): WorkflowIterationResponse {
     const response: WorkflowIterationResponse = {
       error: {
@@ -13,7 +14,6 @@ export class WorkflowResultBuilder {
       },
       metadata: {
           duration: Date.now() - startTime,
-          stepType: generationTask,
       }
     };
     if (stepId) {
@@ -25,7 +25,6 @@ export class WorkflowResultBuilder {
   static createMaxIterationsResult(
     stepId: string | null,
     startTime: number,
-    generationTask?: GenerationTask
   ): WorkflowIterationResponse {
     const response: WorkflowIterationResponse = {
       error: {
@@ -33,7 +32,6 @@ export class WorkflowResultBuilder {
       },
       metadata: {
         duration: Date.now() - startTime,
-        stepType: generationTask,
       }
     };
     if (stepId) {
@@ -45,7 +43,6 @@ export class WorkflowResultBuilder {
   static createErrorResult(
     error: Error,
     startTime: number,
-    generationTask?: GenerationTask
   ): WorkflowIterationResponse {
     return {
       error: {
@@ -53,7 +50,6 @@ export class WorkflowResultBuilder {
       },
       metadata: {
         duration: Date.now() - startTime,
-        stepType: generationTask,
       }
     };
   }

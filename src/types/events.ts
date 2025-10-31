@@ -125,7 +125,6 @@ export type ToolCallErrorEvent = {
 export type WorkflowStartEvent = {
   type: 'workflow:start';
   workflowId: string;
-  workflowName?: string;
   stepCount: number;
   timestamp: number;
 };
@@ -134,8 +133,8 @@ export type WorkflowStepStartEvent = {
   type: 'workflow:step:start';
   workflowId: string;
   stepId: string;
-  stepDescription?: string;
   iteration: number;
+  stepPrompt: string;
   timestamp: number;
 };
 

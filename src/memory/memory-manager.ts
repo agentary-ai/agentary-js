@@ -20,6 +20,7 @@ import { DefaultMemoryFormatter } from './formatters/default-formatter';
  */
 export class MemoryManager {
   private memory: Memory;
+  private model?: string;
   private formatter: MemoryFormatter;
   private memoryCompressor?: MemoryCompressor;
   private tokenCounter: TokenCounter;
@@ -58,6 +59,10 @@ export class MemoryManager {
   
   /**
    * Add messages to memory with optional compression check
+   * 
+   * @param messages - The messages to add to memory
+   * @param skipCompression - Whether to skip compression
+   * @returns A promise that resolves when the messages have been added to memory
    */
   async addMessages(messages: MemoryMessage[], skipCompression = false): Promise<void> {
     logger.agent.debug('Adding messages to memory', {
@@ -73,7 +78,6 @@ export class MemoryManager {
       }
     }));
     
-    // const memoryMessages = this.convertToMemoryMessages(messages);
     await this.memory.add(messages);
     
     if (!skipCompression) {
@@ -83,6 +87,8 @@ export class MemoryManager {
   
   /**
    * Retrieve messages from memory and format them for LLM consumption
+   * 
+   * @returns A promise that resolves with the formatted messages
    */
   async getMessages(): Promise<Message[]> {
     const memoryMessages = await this.memory.retrieve();
@@ -90,26 +96,9 @@ export class MemoryManager {
   }
   
   /**
-   * Rollback memory to a specific message count
-   */
-  async rollbackToCount(targetCount: number): Promise<void> {
-    const messages = await this.memory.retrieve();
-    const currentCount = messages.length;
-    
-    if (currentCount > targetCount) {
-      this.memory.clear();
-      await this.memory.add(messages.slice(0, targetCount));
-      
-      logger.agent.debug('Rolled back messages', {
-        from: currentCount,
-        to: targetCount,
-        removed: currentCount - targetCount
-      });
-    }
-  }
-  
-  /**
    * Get current memory metrics
+   * 
+   * @returns The current memory metrics
    */
   getMetrics(): MemoryMetrics {
     return this.memory.getMetrics();
@@ -125,6 +114,8 @@ export class MemoryManager {
   
   /**
    * Create a checkpoint for potential rollback
+   * 
+   * @param id - The ID of the checkpoint
    */
   createCheckpoint(id: string): void {
     if (this.memory.createCheckpoint) {
@@ -135,6 +126,8 @@ export class MemoryManager {
   
   /**
    * Rollback to a previously created checkpoint
+   * 
+   * @param id - The ID of the checkpoint
    */
   rollbackToCheckpoint(id: string): void {
     if (this.memory.rollback) {
@@ -145,6 +138,10 @@ export class MemoryManager {
   
   /**
    * Format a step instruction using the configured formatter
+   * 
+   * @param stepId - The ID of the step
+   * @param prompt - The prompt to format
+   * @returns The formatted step instruction
    */
   formatStepInstruction(stepId: string, prompt: string): string {
     return this.formatter.formatStepInstruction?.(stepId, prompt) 
@@ -153,6 +150,8 @@ export class MemoryManager {
   
   /**
    * Check if memory usage is near the configured limit
+   * 
+   * @returns True if memory usage is near the configured limit, false otherwise
    */
   isNearLimit(): boolean {
     const metrics = this.memory.getMetrics();
@@ -170,6 +169,8 @@ export class MemoryManager {
   
   /**
    * Get the message count
+   * 
+   * @returns The message count
    */
   getMessageCount(): number {
     return this.memory.getMetrics().messageCount;
@@ -177,6 +178,8 @@ export class MemoryManager {
   
   /**
    * Get current token count
+   * 
+   * @returns The current token count
    */
   getTokenCount(): number {
     return this.memory.getMetrics().estimatedTokens;
@@ -207,6 +210,7 @@ export class MemoryManager {
           const compressed = await this.memoryCompressor.compress(
             messages,
             targetTokens,
+            this.model,
             this.session
           );
           
@@ -241,6 +245,9 @@ export class MemoryManager {
   
   /**
    * Fall back to simple message pruning
+   * 
+   * @param targetTokens - The target token count
+   * @returns A promise that resolves when the messages have been compressed
    */
   private async compressMemory(targetTokens: number): Promise<void> {
     if (!this.memory.compress) {

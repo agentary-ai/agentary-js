@@ -1,8 +1,9 @@
 import { GenerateArgs } from "./worker";
 import { EventHandler, UnsubscribeFn } from "./events";
 import { InferenceProviderConfig } from "./provider";
-
-// export type GenerationTask = 'chat' | 'tool_use' | 'reasoning';
+import { EventEmitter } from "../utils/event-emitter";
+import { InferenceProviderManager } from "../providers/manager";
+import { Tool } from "./worker";
 
 export interface CreateSessionArgs {
   models?: Record<string, InferenceProviderConfig>;
@@ -18,6 +19,7 @@ export interface TokenStreamChunk {
 }
 
 export interface Session {
+  registerModels(models: Record<string, InferenceProviderConfig>): Promise<void>;
   createResponse(args: GenerateArgs): AsyncIterable<TokenStreamChunk>;
   dispose(): Promise<void>;
   /**
@@ -33,4 +35,6 @@ export interface Session {
    * @param handler - Event handler to remove
    */
   off(eventType: string | '*', handler: EventHandler): void;
+  _eventEmitter: EventEmitter;
+  _providerManager: InferenceProviderManager;
 }

@@ -89,6 +89,7 @@ export interface MemoryCompressor {
   compress(
     messages: MemoryMessage[], 
     targetTokens: number,
+    model?: string,
     session?: Session
   ): Promise<MemoryMessage[]>;
   
@@ -109,6 +110,7 @@ export interface MemoryConfig {
   preserveMessageTypes?: MemoryMessageType[];
   formatter?: MemoryFormatter;
   memoryCompressor?: MemoryCompressor;
+  model?: string;
   maxTokens?: number;
   compressionThreshold?: number; // 0-1, percentage of maxTokens
   autoCompress?: boolean;

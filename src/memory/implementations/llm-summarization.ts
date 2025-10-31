@@ -62,12 +62,11 @@ export class LLMSummarization implements MemoryCompressor {
   async compress(
     messages: MemoryMessage[], 
     targetTokens: number,
+    model: string,
     session?: Session
   ): Promise<MemoryMessage[]> {
-    if (!session) {
-      logger.agent.error('Session required for summarization compression');
-      throw new Error('Session required for summarization compression');
-    }
+    if (!session) throw new Error('Session required for summarization');
+    if (!model) throw new Error('Model is required for summarization');
     
     if (messages.length === 0) {
       return messages;
@@ -88,7 +87,7 @@ export class LLMSummarization implements MemoryCompressor {
 
     try {
       // 3. Generate summary message
-      const summaryMessage = await this.generateSummaryMessage(messages, toSummarize, targetTokens, session);
+      const summaryMessage = await this.generateSummaryMessage(model, messages, toSummarize, targetTokens, session);
       
       // 4. Return preserved messages and summary
       return [...preserved, summaryMessage];
@@ -131,71 +130,81 @@ export class LLMSummarization implements MemoryCompressor {
    * Generate a summary message using the LLM
    */
   private async generateSummaryMessage(
+    model: string,
     allMessages: MemoryMessage[],
     toSummarize: MemoryMessage[],
     targetTokens: number,
     session: Session
   ): Promise<MemoryMessage> {
-    // Group messages by workflow step for better summarization
-    const stepGroups = this.groupByStep(toSummarize);
-    logger.agent.debug('Step groups for summarization', {
-      stepGroups
-    });
-    
-    // Format for summarization
-    const userPrompt = allMessages.find(m => m.metadata?.type === 'user_prompt')?.content || '';
-    const stepSummaries = stepGroups.map(group => 
-      this.formatStepGroup(group)
-    ).join('\n\n');
-    
-    const summarizationPrompt = this.config.userPromptTemplate!
-      .replace('{userPrompt}', userPrompt)
-      .replace('{stepSummaries}', stepSummaries)
-      // .replace('{maxSummaryTokens}', String(targetTokens));
-    
-    // Generate summary
-    let summary = '';
-    for await (const chunk of session.createResponse({
-      messages: [
-        { role: 'system', content: this.config.systemPrompt! },
-        { role: 'user', content: summarizationPrompt }
-      ],
-      temperature: this.config.temperature!,
-      // max_new_tokens: targetTokens,
-      enable_thinking: this.config.enableThinking!
-    }, 'chat')) {
-      if (!chunk.isLast) {
-        summary += chunk.token;
+    try {
+      // Group messages by workflow step for better summarization
+      const stepGroups = this.groupByStep(toSummarize);
+      logger.agent.debug('Step groups for summarization', {
+        stepGroups
+      });
+      
+      // Format for summarization
+      const userPrompt = allMessages.find(m => m.metadata?.type === 'user_prompt')?.content || '';
+      const stepSummaries = stepGroups.map(group => 
+        this.formatStepGroup(group)
+      ).join('\n\n');
+      
+      const summarizationPrompt = this.config.userPromptTemplate!
+        .replace('{userPrompt}', userPrompt)
+        .replace('{stepSummaries}', stepSummaries)
+        // .replace('{maxSummaryTokens}', String(targetTokens));
+      
+      // Generate summary
+      let summary = '';
+      for await (const chunk of session.createResponse({
+        model,
+        messages: [
+          { role: 'system', content: this.config.systemPrompt! },
+          { role: 'user', content: summarizationPrompt }
+        ],
+        temperature: this.config.temperature!,
+        // max_new_tokens: targetTokens,
+        enable_thinking: this.config.enableThinking!
+      })) {
+        if (!chunk.isLast) {
+          summary += chunk.token;
+        }
       }
+      
+      const { cleanContent } = this.contentProcessor.removeThinkTags(summary);
+      
+      // Format summary as context provided to the assistant, not as an assistant response
+      const formattedSummary = `[Context from previous steps]\n${cleanContent}`;
+      
+      const summaryMessage: MemoryMessage = {
+        role: 'user',
+        content: formattedSummary,
+        metadata: {
+          type: 'summary',
+          timestamp: Date.now(),
+          tokenCount: this.tokenCounter.estimateTokens([{
+            role: 'user',
+            content: formattedSummary
+          }])
+        }
+      };
+      
+      logger.agent.info('Message history summarized', {
+        summary: cleanContent,
+        originalMessageCount: allMessages.length,
+        summarizedCount: toSummarize.length,
+        summaryLength: cleanContent.length,
+        summaryTokens: summaryMessage.metadata?.tokenCount
+      });
+      
+      return summaryMessage;
+    } catch (error: any) {
+      logger.agent.error('Failed to generate summary message', {
+        error: error.message,
+        messageCount: allMessages.length
+      });
+      throw error;
     }
-    
-    const { cleanContent } = this.contentProcessor.removeThinkTags(summary);
-    
-    // Format summary as context provided to the assistant, not as an assistant response
-    const formattedSummary = `[Context from previous steps]\n${cleanContent}`;
-    
-    const summaryMessage: MemoryMessage = {
-      role: 'user',
-      content: formattedSummary,
-      metadata: {
-        type: 'summary',
-        timestamp: Date.now(),
-        tokenCount: this.tokenCounter.estimateTokens([{
-          role: 'user',
-          content: formattedSummary
-        }])
-      }
-    };
-    
-    logger.agent.info('Message history summarized', {
-      summary: cleanContent,
-      originalMessageCount: allMessages.length,
-      summarizedCount: toSummarize.length,
-      summaryLength: cleanContent.length,
-      summaryTokens: summaryMessage.metadata?.tokenCount
-    });
-    
-    return summaryMessage;
   }
   
   // shouldCompress(metrics: MemoryMetrics, config: MemoryConfig): boolean {

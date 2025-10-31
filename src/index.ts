@@ -58,7 +58,7 @@ export type {
   WorkflowStep,
   WorkflowIterationResponse,
   WorkflowStepError,
-  AgentWorkflow,
+  Workflow,
   AgentSession
 } from './types/agent-session';
 export type {

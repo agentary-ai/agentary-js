@@ -10,25 +10,32 @@ import { ContentProcessor } from '../processing/content/processor';
 import { WorkflowStateManager } from './workflow-state';
 import { WorkflowIterationResponse } from '../types/agent-session';
 
+/**
+ * Executes individual workflow steps, handling tool calls and response generation.
+ */
 export class StepExecutor {
   private session: Session;
   private toolParser: ToolParser;
   private contentProcessor: ContentProcessor;
   private workflowStateManager: WorkflowStateManager;
-  private eventSession: Session;
 
   constructor(
     session: Session,
     workflowStateManager: WorkflowStateManager,
-    eventSession: Session
   ) {
     this.session = session;
     this.toolParser = new ToolParser();
     this.contentProcessor = new ContentProcessor();
     this.workflowStateManager = workflowStateManager;
-    this.eventSession = eventSession;
   }
 
+  /**
+   * Executes a workflow step, handling tool calls and response generation.
+   * 
+   * @param step - The workflow step to execute
+   * @param tools - The tools to use for the step
+   * @returns A promise that resolves with the workflow iteration response
+   */
   async execute(
     step: WorkflowStep, tools: Tool[]
   ): Promise<WorkflowIterationResponse> {
@@ -37,7 +44,7 @@ export class StepExecutor {
     
     logger.agent.debug('Executing step', { 
       stepId: step.id,
-      hasToolChoice: !!step.toolChoice,
+      toolChoice: step.toolChoice,
       attempt: stepState.attempts + 1,
       maxAttempts: stepState.maxAttempts
     });
@@ -57,7 +64,6 @@ export class StepExecutor {
       logger.agent.debug('Model response received', {
         stepId: step.id,
         stepResult,
-        generationTask: step.generationTask,
         currentTokenCount: this.workflowStateManager.getCurrentTokenCount(),
         messageCount: this.workflowStateManager.getMessageCount(),
       });
@@ -70,7 +76,7 @@ export class StepExecutor {
         thinkingContent,
       });
       
-      if (step.generationTask === 'tool_use') {
+      if (step.toolChoice && step.toolChoice.length > 0) {
         return await this.handleToolUse(
           step, 
           filteredTools, 
@@ -89,6 +95,13 @@ export class StepExecutor {
     }
   }
 
+  /**
+   * Prepares the generation arguments and filtered tools for a workflow step.
+   * 
+   * @param step - The workflow step to prepare the generation arguments and filtered tools for
+   * @param tools - The tools to use for the step
+   * @returns A promise that resolves with the generation arguments and filtered tools
+   */
   private async prepareGeneration(
     step: WorkflowStep, 
     tools: Tool[]
@@ -107,20 +120,10 @@ export class StepExecutor {
       }
     }], true);
 
-    if (step.generationTask) {
-    } else if (step.toolChoice && step.toolChoice.length > 0) {
-      // Add tool use prompt suffix by default if tool choice is provided
-      step.generationTask = 'tool_use';
-    }
-
     // Select tools based on generationTask and toolChoice
     let filteredTools: Tool[];
-    if (step.generationTask !== 'tool_use') {
-      // Include no tools if generation task is not tool_use
+    if (!step.toolChoice || step.toolChoice.length === 0) {
       filteredTools = [];
-    } else if (!step.toolChoice || step.toolChoice.length === 0) {
-      // Include all tools if toolChoice is empty for tool_use tasks
-      filteredTools = tools;
     } else {
       // Filter tools by toolChoice names for tool_use tasks
       filteredTools = tools.filter(tool => step.toolChoice!.includes(tool.function.name));
@@ -134,7 +137,7 @@ export class StepExecutor {
       messages: memoryMessages,
       temperature: step.temperature ?? 0.1,
       max_new_tokens: step.maxTokens ?? 1024,
-      enable_thinking: step.enableThinking ?? false,
+      model: step.model,
     };
     if (filteredTools.length > 0) {
       generateArgs.tools = filteredTools;
@@ -143,13 +146,20 @@ export class StepExecutor {
     return { generateArgs, filteredTools, isLastStep };
   }
 
+  /**
+   * Executes the generation for a workflow step.
+   * 
+   * @param step - The workflow step to execute the generation for
+   * @param generateArgs - The generation arguments to use for the step
+   * @returns A promise that resolves with the step result
+   */
   private async executeGeneration(
     step: WorkflowStep, 
     generateArgs: GenerateArgs
   ): Promise<string> {
     let stepResult = '';
     for await (const chunk of this.session.createResponse(
-      generateArgs, step.generationTask
+      generateArgs
     )) {
       if (!chunk.isLast) {
         stepResult += chunk.token;
@@ -158,13 +168,25 @@ export class StepExecutor {
     logger.agent.debug('Step result', {
       stepId: step.id,
       resultLength: stepResult.length,
-      generationTask: step.generationTask,
       currentTokenCount: this.workflowStateManager.getCurrentTokenCount(),
       messageCount: this.workflowStateManager.getMessageCount()
     });
     return stepResult;
   }
 
+  /**
+   * Handles the tool use for a workflow step.
+   * 
+   * @param step - The workflow step to handle the tool use for
+   * @param filteredTools - The filtered tools to use for the step
+   * @param cleanContent - The clean content of the step
+   * @param thinkingContent - The thinking content of the step
+   * @param stepResult - The step result
+   * @param isLastStep - Whether the step is the last step
+   * @param stepState - The state of the step
+   * @param stepStartTime - The start time of the step
+   * @returns A promise that resolves with the workflow iteration response
+   */
   private async handleToolUse(
     step: WorkflowStep,
     filteredTools: Tool[],
@@ -183,6 +205,7 @@ export class StepExecutor {
       hasArgs: !!toolCall?.args
     });
     
+    // If no tool call is found, return an error
     if (!toolCall) {
       logger.agent.error('Tool call parsing failed', {
         stepId: step.id,
@@ -205,7 +228,6 @@ export class StepExecutor {
           duration: Date.now() - stepStartTime,
           rawResult: stepResult,
           cleanContent, // Add clean content to help debug
-          stepType: step.generationTask,
           attempt: stepState.attempts,
           maxAttempts: stepState.maxAttempts,
           willRetry
@@ -216,6 +238,7 @@ export class StepExecutor {
     // Find tool in tools array
     const toolSelected = filteredTools.find(tool => tool.function.name === toolCall.name);
     if (!toolSelected) {
+      // If tool is not found, return an error
       logger.agent.error('Tool not found', {
         stepId: step.id,
         requestedTool: toolCall.name,
@@ -236,7 +259,6 @@ export class StepExecutor {
         metadata: {
           duration: Date.now() - stepStartTime,
           rawResult: stepResult,
-          stepType: step.generationTask,
           attempt: stepState.attempts,
           maxAttempts: stepState.maxAttempts,
           willRetry
@@ -247,7 +269,7 @@ export class StepExecutor {
     if (toolSelected.function.implementation) {
       // Emit tool call start event
       const toolStartTime = Date.now();
-      const emitter = (this.eventSession as any)._eventEmitter;
+      const emitter = this.session._eventEmitter;
       if (emitter) {
         emitter.emit({
           type: 'tool:call:start',
@@ -346,7 +368,6 @@ export class StepExecutor {
         metadata: {
           duration: Date.now() - stepStartTime,
           rawResult: stepResult,
-          stepType: step.generationTask,
         }
       };
     } else {
@@ -367,12 +388,21 @@ export class StepExecutor {
         metadata: {
           duration: Date.now() - stepStartTime,
           rawResult: stepResult,
-          stepType: step.generationTask,
         }
       };
     }
   }
 
+  /**
+   * Handles the content response for a workflow step.
+   * 
+   * @param step - The workflow step to handle the content response for
+   * @param cleanContent - The clean content of the step
+   * @param stepResult - The step result
+   * @param isLastStep - Whether the step is the last step
+   * @param stepStartTime - The start time of the step
+   * @returns A promise that resolves with the workflow iteration response
+   */
   private handleContentResponse(
     step: WorkflowStep,
     cleanContent: string,
@@ -388,6 +418,7 @@ export class StepExecutor {
       }
     }], isLastStep);
     
+    // Handle step completion
     this.workflowStateManager.handleStepCompletion(step.id, true, cleanContent);
     
     return {
@@ -396,11 +427,19 @@ export class StepExecutor {
       metadata: {
         duration: Date.now() - stepStartTime,
         rawResult: stepResult,
-        stepType: step.generationTask,
       }
     };
   }
 
+  /**
+   * Handles the error for a workflow step.
+   * 
+   * @param error - The error to handle
+   * @param step - The workflow step to handle the error for
+   * @param stepState - The state of the step
+   * @param stepStartTime - The start time of the step
+   * @returns A promise that resolves with the workflow iteration response
+   */
   private handleError(
     error: any,
     step: WorkflowStep,
@@ -430,7 +469,6 @@ export class StepExecutor {
       },
       metadata: {
         duration: Date.now() - stepStartTime,
-        stepType: step.generationTask,
         attempt: stepState.attempts,
         maxAttempts: stepState.maxAttempts,
         willRetry
