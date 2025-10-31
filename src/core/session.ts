@@ -8,7 +8,7 @@ import { InferenceProviderConfig } from '../types/provider';
 import { CreateSessionArgs } from '../types/session';
 
 /**
- * Creates a new session with the specified configuration.
+ * Creates a new session for model inference.
  * @param args - The configuration for the session.
  * @returns A new session.
  */
@@ -28,12 +28,8 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
 
   async function* createResponse(args: GenerateArgs): AsyncIterable<TokenStreamChunk> {
     if (disposed) throw new Error('Session disposed');
-    if (!args.model) {
-      throw new Error('Model is undefined');
-    }
-    if (!args.messages) {
-      throw new Error('Messages are undefined');
-    }
+    if (!args.model) throw new Error('Model is undefined');
+    if (!args.messages) throw new Error('Messages are undefined');
     
     // Remove implementation field from tools before passing to provider
     args = {
@@ -107,6 +103,9 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
     }
   }
 
+  /**
+   * Disposes the session and releases all resources.
+   */
   async function dispose(): Promise<void> {
     if (disposed) return;
     disposed = true;
@@ -114,10 +113,21 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
     eventEmitter.removeAllListeners();
   }
 
+  /**
+   * Subscribes to an event.
+   * @param eventType - The event type to subscribe to.
+   * @param handler - The event handler function.
+   * @returns A function to unsubscribe from the event.
+   */
   function on(eventType: string | '*', handler: EventHandler): UnsubscribeFn {
     return eventEmitter.on(eventType, handler);
   }
 
+  /**
+   * Unsubscribes from an event.
+   * @param eventType - The event type to unsubscribe from.
+   * @param handler - The event handler function to remove.
+   */
   function off(eventType: string | '*', handler: EventHandler): void {
     eventEmitter.off(eventType, handler);
   }
@@ -128,12 +138,10 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
     dispose,
     on,
     off,
-    // Internal access to event emitter and provider manager for workflow components
+    // Internal access to event emitter and provider manager for AgentSession
     _eventEmitter: eventEmitter,
     _providerManager: inferenceProviderManager
   } as Session & { _eventEmitter: EventEmitter; _providerManager: InferenceProviderManager };
 
   return session;
 }
-
-
