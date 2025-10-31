@@ -3,12 +3,6 @@ import { InboundMessage, OutboundMessage } from '../types/worker';
 import { logger } from '../utils/logger';
 import { InitArgs, GenerateArgs } from '../types/worker';
 
-// (hfEnv as any).backends = {
-//   onnx: {
-//     wasmPaths: 'https://unpkg.com/onnxruntime-web@1.22.0/dist/',
-//   },
-// };
-
 let generator: TextGenerationPipeline | null = null;
 let disposed = false;
 let isGenerating = false;
@@ -30,19 +24,19 @@ function postDebug(requestId: string, message: string, data?: unknown) {
 
 async function handleInit(msg: InboundMessage) {
   if (disposed) throw new Error('Worker disposed');
-  const { model, engine, hfToken } = msg.args as InitArgs;
+  const { config } = msg.args as InitArgs;
 
-  logger.worker.info('Initializing worker', { model:model.name, quantization:model.quantization, engine }, msg.requestId);
+  logger.worker.info('Initializing worker', { model:config.model, quantization:config.quantization }, msg.requestId);
 
-  if (hfToken) {
-    (hfEnv as any).HF_TOKEN = hfToken;
+  if (config.hfToken) {
+    (hfEnv as any).HF_TOKEN = config.hfToken;
   }
 
-  const device = engine && engine !== 'auto' ? engine : 'webgpu';
+  const device = config.engine && config.engine !== 'auto' ? config.engine : 'webgpu';
 
-  const pipelineResult = await pipeline('text-generation', model.name, {
+  const pipelineResult = await pipeline('text-generation', config.model, {
     device: device || "auto",
-    dtype: model.quantization || "auto",
+    dtype: config.quantization || "auto",
     progress_callback: (info: ProgressInfo) => {
       // Send progress updates back to main thread
       // ProgressInfo can be InitiateProgressInfo, DownloadProgressInfo, ProgressProgressInfo, DoneProgressInfo, or ReadyProgressInfo
@@ -93,7 +87,7 @@ async function handleInit(msg: InboundMessage) {
   });
   generator = pipelineResult as TextGenerationPipeline;
 
-  logger.worker.info('Worker initialized successfully', { model, device }, msg.requestId);
+  logger.worker.info('Worker initialized successfully', { model: config.model, device: config.engine }, msg.requestId);
   post({ type: 'ack', requestId: msg.requestId });
 }
 

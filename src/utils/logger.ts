@@ -272,6 +272,28 @@ class Logger {
       this.error('worker', message, data, requestId ? { requestId } : undefined),
   };
 
+  inferenceProviderManager = {
+    debug: (message: string, data?: unknown, context?: Record<string, unknown>) => 
+      this.debug('inference-provider-manager', message, data, context ? { context } : undefined),
+    info: (message: string, data?: unknown, context?: Record<string, unknown>) => 
+      this.info('inference-provider-manager', message, data, context ? { context } : undefined),
+    warn: (message: string, data?: unknown, context?: Record<string, unknown>) => 
+      this.warn('inference-provider-manager', message, data, context ? { context } : undefined),
+    error: (message: string, data?: unknown, context?: Record<string, unknown>) => 
+      this.error('inference-provider-manager', message, data, context ? { context } : undefined),
+  };
+
+  deviceProvider = {
+    debug: (message: string, data?: unknown, context?: Record<string, unknown>) => 
+      this.debug('device-provider', message, data, context ? { context } : undefined),
+    info: (message: string, data?: unknown, context?: Record<string, unknown>) => 
+      this.info('device-provider', message, data, context ? { context } : undefined),
+    warn: (message: string, data?: unknown, context?: Record<string, unknown>) => 
+      this.warn('device-provider', message, data, context ? { context } : undefined),
+    error: (message: string, data?: unknown, context?: Record<string, unknown>) => 
+      this.error('device-provider', message, data, context ? { context } : undefined),
+  };
+
   session = {
     debug: (message: string, data?: unknown, requestId?: string) => 
       this.debug('session', message, data, requestId ? { requestId } : undefined),

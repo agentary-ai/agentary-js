@@ -1,18 +1,18 @@
 import { DataType } from "@huggingface/transformers";
+import { InferenceProviderConfig } from "./provider";
+import { DeviceProviderConfig } from "./provider";
 export type EngineKind = 'auto' | 'webgpu' | 'wasm' | 'webnn';
 
 export interface WorkerInstance {
   worker: Worker;
-  model: Model;
+  model: DeviceProviderConfig;
   initialized: boolean;
   disposed: boolean;
   inflightId: number;
 }
 
 export interface InitArgs {
-  model: Model;
-  engine?: EngineKind;
-  hfToken?: string;
+  config: DeviceProviderConfig;
 }
 
 export interface MessageContent {
@@ -41,7 +41,7 @@ export interface Message {
 
 export interface Model {
   name: string;
-  quantization?: DataType;
+  config: InferenceProviderConfig;
 }
 
 export interface Tool {
@@ -59,7 +59,7 @@ export interface Tool {
 }
 
 export interface GenerateArgs {
-  model?: Model;
+  model: string;
   messages: Message[];
   max_new_tokens?: number;
   tools?: Tool[];

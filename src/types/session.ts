@@ -1,22 +1,11 @@
-import { DeviceType } from "@huggingface/transformers";
-import { WorkerManager } from "../workers/manager";
-import { GenerateArgs, Model } from "./worker";
+import { GenerateArgs } from "./worker";
 import { EventHandler, UnsubscribeFn } from "./events";
+import { InferenceProviderConfig } from "./provider";
 
-export type GenerationTask = 'chat' | 'tool_use' | 'reasoning';
+// export type GenerationTask = 'chat' | 'tool_use' | 'reasoning';
 
 export interface CreateSessionArgs {
-  models?: {
-    default?: Model;
-    tool_use?: Model;
-    chat?: Model;
-    reasoning?: Model;
-  }
-  ctx?: number;
-  engine?: DeviceType;
-  // Optional: Hugging Face access token for private models when using the
-  // `hf:` model scheme. Ignored otherwise.
-  hfToken?: string;
+  models?: Record<string, InferenceProviderConfig>;
 }
 
 export interface TokenStreamChunk {
@@ -29,8 +18,7 @@ export interface TokenStreamChunk {
 }
 
 export interface Session {
-  workerManager: WorkerManager;
-  createResponse(args: GenerateArgs, generationTask?: GenerationTask): AsyncIterable<TokenStreamChunk>;
+  createResponse(args: GenerateArgs): AsyncIterable<TokenStreamChunk>;
   dispose(): Promise<void>;
   /**
    * Subscribe to session events

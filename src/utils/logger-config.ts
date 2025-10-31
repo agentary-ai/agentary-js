@@ -44,6 +44,11 @@ export const LogConfigs = {
       'session': (entry) => `💬 [SESSION] ${entry.message} ${entry.data ? JSON.stringify(entry.data) : ''}`,
       'agent': (entry) => `🤖 [AGENT] ${entry.message} ${entry.data ? JSON.stringify(entry.data) : ''}`,
       'performance': (entry) => `⚡ [PERF] ${entry.message} ${entry.data ? JSON.stringify(entry.data) : ''}`,
+      'providerManager': (entry) => `🔌 [PROVIDER-MANAGER] ${entry.message} ${entry.data ? JSON.stringify(entry.data) : ''}`,
+      'webgpuProvider': (entry) => `🎮 [WEBGPU] ${entry.message} ${entry.data ? JSON.stringify(entry.data) : ''}`,
+      'cloudProvider': (entry) => `☁️  [CLOUD] ${entry.message} ${entry.data ? JSON.stringify(entry.data) : ''}`,
+      'anthropicProvider': (entry) => `🤖 [ANTHROPIC] ${entry.message} ${entry.data ? JSON.stringify(entry.data) : ''}`,
+      'openaiProvider': (entry) => `🔮 [OPENAI] ${entry.message} ${entry.data ? JSON.stringify(entry.data) : ''}`,
     }
   } as Partial<LoggerConfig>,
 };

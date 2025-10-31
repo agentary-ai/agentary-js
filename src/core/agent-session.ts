@@ -3,16 +3,14 @@ import type {
   AgentWorkflow,
   WorkflowIterationResponse, 
 } from '../types/agent-session';
-import type { Session, CreateSessionArgs, TokenStreamChunk, GenerationTask } from '../types/session';
+import type { Session, CreateSessionArgs, TokenStreamChunk } from '../types/session';
 import type { GenerateArgs, Tool } from '../types/worker';
 import { createSession } from './session';
 import { WorkflowExecutor } from '../workflow/executor';
 import { StepExecutor } from '../workflow/step-executor';
-import { WorkerManager } from '../workers/manager';
 import { WorkflowStateManager } from '../workflow/workflow-state';
 
 export class AgentSessionImpl implements AgentSession {
-  workerManager: WorkerManager;
   private session: Session;
   private tools: Tool[] = [];
   private disposed = false;
@@ -25,15 +23,13 @@ export class AgentSessionImpl implements AgentSession {
     this.workflowStateManager = new WorkflowStateManager(session);
     this.stepExecutor = new StepExecutor(session, this.workflowStateManager, session);
     this.workflowExecutor = new WorkflowExecutor(this.stepExecutor, this.tools, this.workflowStateManager, session);
-    this.workerManager = session.workerManager;
   }
 
   // Delegate basic session methods
   async* createResponse(
     generateArgs: GenerateArgs, 
-    generationTask?: GenerationTask
   ): AsyncIterable<TokenStreamChunk> {
-    yield* this.session.createResponse(generateArgs, generationTask);
+    yield* this.session.createResponse(generateArgs);
   }
 
   async dispose(): Promise<void> {

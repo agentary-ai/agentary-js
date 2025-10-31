@@ -61,13 +61,11 @@ export type {
   AgentWorkflow,
   AgentSession
 } from './types/agent-session';
-export type { 
-  CreateSessionArgs, 
-  TokenStreamChunk, 
-  Session, 
-  GenerationTask 
+export type {
+  TokenStreamChunk,
+  Session,
 } from './types/session';
-export type { 
+export type {
   EngineKind,
   WorkerInstance,
   InitArgs,
@@ -77,3 +75,16 @@ export type {
   Tool,
   GenerateArgs
 } from './types/worker';
+
+// Provider system exports
+export type {
+  InferenceProvider,
+  ProviderError,
+  ProviderNetworkError,
+  ProviderTimeoutError,
+  ProviderConfigurationError,
+  ProviderAPIError
+} from './types/provider';
+export type {
+  DeviceProviderConfig
+} from './types/provider';
