@@ -1,5 +1,6 @@
 import type { DeviceProviderConfig, InferenceProvider, InferenceProviderConfig } from '../types/provider';
 import { ProviderConfigurationError } from '../types/provider';
+import { ModelConfig } from '../types/session';
 import { EventEmitter } from '../utils/event-emitter';
 import { logger } from '../utils/logger';
 
@@ -14,10 +15,10 @@ export class InferenceProviderManager {
     this.eventEmitter = eventEmitter;
   }
 
-  async registerModels(models: Record<string, InferenceProviderConfig>): Promise<void> {
-    for (const [name, config] of Object.entries(models)) {
-      const inferenceProvider = await this.createProvider(name, config);
-      this.models.set(name, inferenceProvider);
+  async registerModels(models: ModelConfig[]): Promise<void> {
+    for (const { model, config } of models) {
+      const inferenceProvider = await this.createProvider(model, config);
+      this.models.set(model, inferenceProvider);
     }
   }
 

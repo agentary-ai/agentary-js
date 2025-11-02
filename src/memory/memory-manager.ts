@@ -20,7 +20,6 @@ import { DefaultMemoryFormatter } from './formatters/default-formatter';
  */
 export class MemoryManager {
   private memory: Memory;
-  private model?: string;
   private formatter: MemoryFormatter;
   private memoryCompressor?: MemoryCompressor;
   private tokenCounter: TokenCounter;
@@ -210,7 +209,6 @@ export class MemoryManager {
           const compressed = await this.memoryCompressor.compress(
             messages,
             targetTokens,
-            this.model,
             this.session
           );
           

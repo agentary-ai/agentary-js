@@ -26,8 +26,10 @@ export class LLMSummarization implements MemoryCompressor {
   private config: LLMSummarizationConfig;
   private contentProcessor: ContentProcessor;
   private tokenCounter: TokenCounter;
+  private model: string;
   
-  constructor(config: LLMSummarizationConfig = {}) {
+  constructor(model: string, config: LLMSummarizationConfig = {}) {
+    this.model = model;
     this.config = {
       systemPrompt: config.systemPrompt || 
         `You are summarizing a multi-step AI agent workflow conversation. ` +
@@ -62,12 +64,9 @@ export class LLMSummarization implements MemoryCompressor {
   async compress(
     messages: MemoryMessage[], 
     targetTokens: number,
-    model: string,
     session?: Session
   ): Promise<MemoryMessage[]> {
     if (!session) throw new Error('Session required for summarization');
-    if (!model) throw new Error('Model is required for summarization');
-    
     if (messages.length === 0) {
       return messages;
     }
@@ -87,7 +86,7 @@ export class LLMSummarization implements MemoryCompressor {
 
     try {
       // 3. Generate summary message
-      const summaryMessage = await this.generateSummaryMessage(model, messages, toSummarize, targetTokens, session);
+      const summaryMessage = await this.generateSummaryMessage(this.model, messages, toSummarize, targetTokens, session);
       
       // 4. Return preserved messages and summary
       return [...preserved, summaryMessage];

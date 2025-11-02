@@ -40,12 +40,11 @@ export class WorkflowStateManager {
     memoryConfig?: MemoryConfig
   ): Promise<void> {
     // Update memory manager if workflow provides config
-    if (memoryConfig) {
-      this.memoryManager = new MemoryManager(
-        this.session,
-        memoryConfig
-      );
-    }
+    this.memoryManager = new MemoryManager(
+      this.session,
+      memoryConfig
+    );
+    
     await this.addMessagesToMemory([
       { role: 'system', content: workflow.systemPrompt ?? WorkflowStateManager.DEFAULT_SYSTEM_PROMPT, metadata: { type: 'system_instruction' } },
       { role: 'user', content: userPrompt, metadata: { type: 'user_prompt' } }

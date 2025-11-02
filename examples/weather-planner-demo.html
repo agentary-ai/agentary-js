@@ -440,7 +440,6 @@
       // Weather Activity Workflow Definition
       const weatherActivityWorkflow = {
         id: "weather-activity-planner",
-        name: "Weather & Activity Planner",
         systemPrompt: "You are an agent that plans weather-appropriate activities with nearby places and a schedule that fits the user's time and budget. Be concise in your responses.",
         maxIterations: 15,
         timeout: 180000,
@@ -454,15 +453,14 @@
             description: "Extract key information from user's prompt",
             prompt: "From userMessage, extract city, date (YYYY-MM-DD or 'today'), budget ('free'|'cheap'|'any'), and an optional timeWindow { start:'HH:MM', end:'HH:MM' }.",
             temperature: 0.1,
-            generationTask: "chat",
+            model: "chat",
             maxAttempts: 2,
           },
           {
             id: "get-geocode-city",
-            description: "Resolve city into latitude, longitude, resolved name, and country",
             prompt: "Use the geocode tool to get coordinates for the city.",
             temperature: 0.1,
-            generationTask: "tool_use",
+            model: "tool_use",
             toolChoice: ["geocode"],
             maxAttempts: 2,
           },
@@ -910,7 +908,10 @@
         updateStatus('Starting weather planner...', 'running');
 
         try {
-          const agent = await createAgentSession();
+          const agent = await createAgentSession([
+            { name: "Qwen/Qwen2.5-0.5B-Instruct", quantization: "q4" }
+          ]);
+
           updateStatus('Agent running...', 'running');
 
           const userMessage = createUserMessage();
