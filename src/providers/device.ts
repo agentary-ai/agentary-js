@@ -350,7 +350,7 @@ export class DeviceProvider implements InferenceProvider {
 
     this.workerInstance.worker.addEventListener('message', onMessage as any);
     this.workerInstance.worker.addEventListener('error', onError as any);
-
+ 
     try {
       while (true) {
         if (error) {
