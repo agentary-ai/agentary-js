@@ -1,4 +1,4 @@
-import { ModelConfig, type Session, type TokenStreamChunk } from '../types/session';
+import { type Session, type TokenStreamChunk } from '../types/session';
 import { GenerateArgs } from '../types/worker';
 import { InferenceProviderManager } from '../providers/manager';
 import { logger } from '../utils/logger';
@@ -19,8 +19,11 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
   const eventEmitter = new EventEmitter();
   const inferenceProviderManager = new InferenceProviderManager(eventEmitter);
 
+
+  logger.session?.debug('Creating session', { args });
   // Register any models provided at initialization time
   if (args.models) {
+    logger.session?.debug('Registering models', { models: args.models });
     await inferenceProviderManager.registerModels(args.models);
   }
 
@@ -32,7 +35,7 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
    * @param models - Record mapping model names to their provider configurations
    * @returns Promise that resolves when all models are registered and ready for use
    */
-  async function registerModels(models: ModelConfig[]): Promise<void> {
+  async function registerModels(models: InferenceProviderConfig[]): Promise<void> {
     await inferenceProviderManager.registerModels(models);
   }
 
@@ -84,7 +87,6 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
     try {
       // Get provider for generation
       const provider = await inferenceProviderManager.getProvider(args.model);
-
       const startTime = Date.now();
       let tokenCount = 0;
 
@@ -102,16 +104,16 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
           tokenCount++;
         }
 
-      // Emit token event
-      eventEmitter.emit({
-        type: 'generation:token',
-        token: chunk.token,
-        tokenId: chunk.tokenId,
-        isFirst: chunk.isFirst,
-        isLast: chunk.isLast,
-        ...(chunk.ttfbMs !== undefined && { ttfbMs: chunk.ttfbMs }),
-        timestamp: Date.now()
-      });
+        // Emit token event
+        eventEmitter.emit({
+          type: 'generation:token',
+          token: chunk.token,
+          tokenId: chunk.tokenId,
+          isFirst: chunk.isFirst,
+          isLast: chunk.isLast,
+          ...(chunk.ttfbMs !== undefined && { ttfbMs: chunk.ttfbMs }),
+          timestamp: Date.now()
+        });
 
         yield chunk;
       }

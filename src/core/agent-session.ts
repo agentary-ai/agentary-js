@@ -3,7 +3,7 @@ import type {
   Workflow,
   WorkflowIterationResponse, 
 } from '../types/agent-session';
-import type { Session, CreateSessionArgs, TokenStreamChunk, ModelConfig } from '../types/session';
+import type { Session, CreateSessionArgs, TokenStreamChunk } from '../types/session';
 import type { GenerateArgs, Tool } from '../types/worker';
 import { createSession } from './session';
 import { WorkflowExecutor } from '../workflow/executor';
@@ -115,7 +115,7 @@ export class AgentSessionImpl implements AgentSession {
    * @returns Promise that resolves when all models are registered and ready for use
    */
   async registerModels(
-    models: ModelConfig[]
+    models: InferenceProviderConfig[]
   ): Promise<void> {
     await this.session.registerModels(models);
   }

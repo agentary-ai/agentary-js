@@ -28,10 +28,12 @@ export class DeviceProvider implements InferenceProvider {
     // Create worker instance if it doesn't exist
     if (!this.workerInstance) {
       logger.deviceProvider?.info('Creating Web Worker', { model: this.config.model });
+
       const worker = new Worker(
-        new URL('../workers/runtime/worker.js', import.meta.url),
+        new URL('./runtime/worker.js', import.meta.url),
         { type: 'module' }
       );
+
       this.workerInstance = {
         worker,
         model: this.config,
@@ -53,6 +55,8 @@ export class DeviceProvider implements InferenceProvider {
       });
 
       const initId = this.nextId();
+
+      console.log(this.config);
       this.workerInstance.worker.postMessage({
         type: 'init',
         requestId: initId,

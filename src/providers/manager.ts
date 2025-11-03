@@ -1,6 +1,5 @@
 import type { DeviceProviderConfig, InferenceProvider, InferenceProviderConfig } from '../types/provider';
 import { ProviderConfigurationError } from '../types/provider';
-import { ModelConfig } from '../types/session';
 import { EventEmitter } from '../utils/event-emitter';
 import { logger } from '../utils/logger';
 
@@ -15,10 +14,10 @@ export class InferenceProviderManager {
     this.eventEmitter = eventEmitter;
   }
 
-  async registerModels(models: ModelConfig[]): Promise<void> {
-    for (const { model, config } of models) {
-      const inferenceProvider = await this.createProvider(model, config);
-      this.models.set(model, inferenceProvider);
+  async registerModels(models: InferenceProviderConfig[]): Promise<void> {
+    for (const modelConfig of models) {
+      const inferenceProvider = await this.createProvider(modelConfig.model, modelConfig);
+      this.models.set(modelConfig.model, inferenceProvider);
     }
   }
 
@@ -26,12 +25,10 @@ export class InferenceProviderManager {
    * Get a provider for the given model
    */
   async getProvider(model: string): Promise<InferenceProvider> {
-    logger.inferenceProviderManager?.debug('Getting provider', {
-      model,
-    });
     let provider = this.models.get(model);
     if (!provider) {
-      throw new Error(`No model configuration found for: ${model}`);
+      const provider = this.getAllProviders();
+      throw new Error(`No model configuration found for: ${model}. Available models: ${Array.from(provider.keys()).join(', ')}`);
     }
     return provider;
   }

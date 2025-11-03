@@ -4,13 +4,13 @@ import { InferenceProviderConfig } from "./provider";
 import { EventEmitter } from "../utils/event-emitter";
 import { InferenceProviderManager } from "../providers/manager";
 
-export interface ModelConfig {
-  model: string,
-  config: InferenceProviderConfig;
-}
+// export interface ModelConfig {
+//   model: string,
+//   config: InferenceProviderConfig;
+// }
 
 export interface CreateSessionArgs {
-  models?: ModelConfig[];
+  models?: InferenceProviderConfig[];
 }
 
 export interface TokenStreamChunk {
@@ -23,7 +23,7 @@ export interface TokenStreamChunk {
 }
 
 export interface Session {
-  registerModels(models: ModelConfig[]): Promise<void>;
+  registerModels(models: InferenceProviderConfig[]): Promise<void>;
   createResponse(args: GenerateArgs): AsyncIterable<TokenStreamChunk>;
   dispose(): Promise<void>;
   /**
