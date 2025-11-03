@@ -100,6 +100,7 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
 
       // Stream tokens from provider
       for await (const chunk of provider.generate(args)) {
+        console.log('csccdc', chunk);
         if (!chunk.isLast) {
           tokenCount++;
         }

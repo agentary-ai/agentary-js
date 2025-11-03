@@ -131,7 +131,6 @@ async function handleGenerate(msg: InboundMessage) {
         ...(first ? { ttfbMs: performance.now() - ttfbStart } : {}),
       } as const;
       first = false;
-      logger.worker.debug('Token generated', { token: text }, msg.requestId);
       post({ type: 'chunk', requestId: msg.requestId, args });
     },
   });

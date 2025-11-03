@@ -153,6 +153,7 @@ export class DeviceProvider implements InferenceProvider {
           ttfbMs: msg.args.ttfbMs,
         };
         chunks.push(chunk);
+        console.log('chunk', chunk);
         return chunk;
       } else if (msg.type === 'done') {
         resolved = true;
@@ -366,7 +367,7 @@ export class DeviceProvider implements InferenceProvider {
         }
 
         // Wait for next message
-        await new Promise<IteratorResult<T>>((resolve) => {
+        const result = await new Promise<IteratorResult<T>>((resolve) => {
           resolveNext = resolve;
         });
 
@@ -374,8 +375,9 @@ export class DeviceProvider implements InferenceProvider {
           throw error;
         }
 
-        if (messageQueue.length > 0) {
-          yield messageQueue.shift()!;
+        // If we got a value from the promise resolution, yield it
+        if (!result.done && result.value !== undefined) {
+          yield result.value;
         }
 
         if (isDone) {
