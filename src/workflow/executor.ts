@@ -12,7 +12,7 @@ import { StepExecutor } from './step-executor';
 import { WorkflowStateManager } from './workflow-state';
 import { WorkflowResultBuilder } from './result-builder';
 import { Session } from '../types/session';
-import { WorkflowErrorEvent } from '../types/events';
+import { WorkflowErrorEvent, WorkflowCancelledEvent } from '../types/events';
 
 /**
  * Orchestrates the entire workflow execution, managing multiple steps
@@ -259,6 +259,35 @@ export class WorkflowExecutor {
             timestamp: Date.now()
           });
         }
+      }
+
+      // Cancel workflow if step failed and reached max retries
+      if (stepResult.error && stepResult.metadata?.willRetry === false) {
+        logger.agent.error('Step reached maximum retries, cancelling workflow', {
+          workflowId: state.workflow.id,
+          stepId: currentStep.id,
+          attempt: stepResult.metadata.attempt,
+          maxAttempts: stepResult.metadata.maxAttempts,
+          error: stepResult.error.message,
+          totalTimeMs: Date.now() - state.startTime
+        });
+
+        // Emit workflow cancelled event
+        if (emitter) {
+          emitter.emit({
+            type: 'workflow:cancelled',
+            workflowId: state.workflow.id,
+            stepId: currentStep.id,
+            reason: `Step ${currentStep.id} failed after ${stepResult.metadata.attempt} attempts: ${stepResult.error.message}`,
+            timestamp: Date.now()
+          });
+        }
+
+        yield WorkflowResultBuilder.createErrorResult(
+          new Error(`Workflow cancelled: Step ${currentStep.id} failed after ${stepResult.metadata.attempt} attempts - ${stepResult.error.message}`),
+          state.startTime
+        );
+        break;
       }
 
       logger.agent.debug('Step execution completed, continuing workflow', {

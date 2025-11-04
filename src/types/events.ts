@@ -176,6 +176,14 @@ export type WorkflowTimeoutEvent = {
   timestamp: number;
 };
 
+export type WorkflowCancelledEvent = {
+  type: 'workflow:cancelled';
+  workflowId: string;
+  stepId: string;
+  reason: string;
+  timestamp: number;
+};
+
 export type WorkflowErrorEvent = {
   type: 'workflow:error';
   workflowId: string;
@@ -215,6 +223,7 @@ export type SessionEvent =
   | WorkflowStepRetryEvent
   | WorkflowCompleteEvent
   | WorkflowTimeoutEvent
+  | WorkflowCancelledEvent
   | WorkflowErrorEvent
   | ErrorEvent;
 
