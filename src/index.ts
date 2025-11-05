@@ -72,6 +72,7 @@ export type {
   MessageContent,
   Message,
   Model,
+  ToolDefinition,
   Tool,
   GenerateArgs
 } from './types/worker';

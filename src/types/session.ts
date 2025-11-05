@@ -24,7 +24,7 @@ export interface TokenStreamChunk {
 
 export interface Session {
   registerModels(models: InferenceProviderConfig[]): Promise<void>;
-  createResponse(args: GenerateArgs): AsyncIterable<TokenStreamChunk>;
+  createResponse(model: string, args: GenerateArgs): AsyncIterable<TokenStreamChunk>;
   dispose(): Promise<void>;
   /**
    * Subscribe to session events

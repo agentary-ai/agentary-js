@@ -154,16 +154,14 @@ describe('Session Management', () => {
     it('should handle generation with tools', async () => {
       const session = await createSession()
       const tools = [{
-        type: 'function' as const,
-        function: {
-          name: 'test_tool',
-          description: 'A test tool',
-          parameters: {
-            type: 'object',
-            properties: {
-              input: { type: 'string' }
-            }
-          }
+        name: 'test_tool',
+        description: 'A test tool',
+        parameters: {
+          type: 'object' as const,
+          properties: {
+            input: { type: 'string' }
+          },
+          required: []
         }
       }]
 

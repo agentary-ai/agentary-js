@@ -284,14 +284,25 @@ class Logger {
   };
 
   deviceProvider = {
-    debug: (message: string, data?: unknown, context?: Record<string, unknown>) => 
+    debug: (message: string, data?: unknown, context?: Record<string, unknown>) =>
       this.debug('device-provider', message, data, context ? { context } : undefined),
-    info: (message: string, data?: unknown, context?: Record<string, unknown>) => 
+    info: (message: string, data?: unknown, context?: Record<string, unknown>) =>
       this.info('device-provider', message, data, context ? { context } : undefined),
-    warn: (message: string, data?: unknown, context?: Record<string, unknown>) => 
+    warn: (message: string, data?: unknown, context?: Record<string, unknown>) =>
       this.warn('device-provider', message, data, context ? { context } : undefined),
-    error: (message: string, data?: unknown, context?: Record<string, unknown>) => 
+    error: (message: string, data?: unknown, context?: Record<string, unknown>) =>
       this.error('device-provider', message, data, context ? { context } : undefined),
+  };
+
+  cloudProvider = {
+    debug: (message: string, data?: unknown, context?: Record<string, unknown>) =>
+      this.debug('cloud-provider', message, data, context ? { context } : undefined),
+    info: (message: string, data?: unknown, context?: Record<string, unknown>) =>
+      this.info('cloud-provider', message, data, context ? { context } : undefined),
+    warn: (message: string, data?: unknown, context?: Record<string, unknown>) =>
+      this.warn('cloud-provider', message, data, context ? { context } : undefined),
+    error: (message: string, data?: unknown, context?: Record<string, unknown>) =>
+      this.error('cloud-provider', message, data, context ? { context } : undefined),
   };
 
   session = {

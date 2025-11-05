@@ -103,9 +103,10 @@ export class AgentSessionImpl implements AgentSession {
    * ```
    */
   async* createResponse(
+    model: string,
     args: GenerateArgs
   ): AsyncIterable<TokenStreamChunk> {
-    yield* this.session.createResponse(args);
+    yield* this.session.createResponse(model, args);
   }
 
   /**

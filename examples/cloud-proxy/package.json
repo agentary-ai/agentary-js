@@ -1,0 +1,35 @@
+{
+  "name": "@agentary/cloud-proxy-examples",
+  "version": "1.0.0",
+  "description": "Example proxy servers for Agentary JS CloudProvider",
+  "type": "module",
+  "scripts": {
+    "start:anthropic": "node anthropic-proxy.js",
+    "start:openai": "node openai-proxy.js",
+    "dev:anthropic": "nodemon anthropic-proxy.js",
+    "dev:openai": "nodemon openai-proxy.js"
+  },
+  "keywords": [
+    "agentary",
+    "proxy",
+    "anthropic",
+    "openai",
+    "llm",
+    "cloud",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "openai": "^4.56.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -64,29 +64,14 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
    * }
    * ```
    */
-  async function* createResponse(args: GenerateArgs): AsyncIterable<TokenStreamChunk> {
+  async function* createResponse(model: string, args: GenerateArgs): AsyncIterable<TokenStreamChunk> {
     if (disposed) throw new Error('Session disposed');
-    if (!args.model) throw new Error('Model is undefined');
+    if (!model) throw new Error('Model is undefined');
     if (!args.messages) throw new Error('Messages are undefined');
-    
-    // Remove implementation field from tools before passing to provider
-    // Cloud providers don't need the actual implementation, only the schema
-    args = {
-      ...args,
-      ...(args.tools && args.tools.length > 0 ? {
-        tools: args.tools.map(tool => {
-          const { implementation, ...functionWithoutImpl } = tool.function;
-          return {
-            ...tool,
-            function: functionWithoutImpl
-          };
-        })
-      } : {})
-    };
 
     try {
       // Get provider for generation
-      const provider = await inferenceProviderManager.getProvider(args.model);
+      const provider = await inferenceProviderManager.getProvider(model);
       const startTime = Date.now();
       let tokenCount = 0;
 
@@ -100,7 +85,6 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
 
       // Stream tokens from provider
       for await (const chunk of provider.generate(args)) {
-        console.log('csccdc', chunk);
         if (!chunk.isLast) {
           tokenCount++;
         }

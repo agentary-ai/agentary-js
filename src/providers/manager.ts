@@ -1,4 +1,4 @@
-import type { DeviceProviderConfig, InferenceProvider, InferenceProviderConfig } from '../types/provider';
+import type { DeviceProviderConfig, CloudProviderConfig, InferenceProvider, InferenceProviderConfig } from '../types/provider';
 import { ProviderConfigurationError } from '../types/provider';
 import { EventEmitter } from '../utils/event-emitter';
 import { logger } from '../utils/logger';
@@ -57,15 +57,15 @@ export class InferenceProviderManager {
         provider = new DeviceProvider(config as DeviceProviderConfig, this.eventEmitter);
         break;
       }
-      // case 'cloud': {
-      //   const { CloudProvider } = await import('./cloud');
-      //   provider = new CloudProvider(config, this.eventEmitter);
-      //   break;
-      // }
+      case 'cloud': {
+        const { CloudProvider } = await import('./cloud');
+        provider = new CloudProvider(config as CloudProviderConfig, this.eventEmitter);
+        break;
+      }
 
       default:
         throw new ProviderConfigurationError(
-          `Unknown provider type: ${config.type}`
+          `Unknown provider type: ${(config as InferenceProviderConfig).type}`
         );
     }
 

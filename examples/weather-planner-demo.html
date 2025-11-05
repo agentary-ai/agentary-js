@@ -453,14 +453,14 @@
             description: "Extract key information from user's prompt",
             prompt: "From userMessage, extract city, date (YYYY-MM-DD or 'today'), budget ('free'|'cheap'|'any'), and an optional timeWindow { start:'HH:MM', end:'HH:MM' }.",
             temperature: 0.1,
-            model: "onnx-community/Qwen3-0.6B-ONNX",
+            model: "gpt-5-nano",
             maxAttempts: 2,
           },
           {
             id: "get-geocode-city",
             prompt: "Use the geocode tool to get coordinates for the city.",
             temperature: 0.1,
-            model: "onnx-community/Qwen3-0.6B-ONNX",
+            model: "gpt-5-nano",
             toolChoice: ["geocode"],
             maxAttempts: 2,
           },
@@ -469,7 +469,7 @@
             description: "Fetch the weather forecast for the given city and date",
             prompt: "Use the weather_forecast tool with: 1) lat and lon from the geocode result in the previous step, 2) date from the extract-user-input step result.",
             temperature: 0.1,
-            model: "onnx-community/Qwen3-0.6B-ONNX",
+            model: "gpt-5-nano",
             toolChoice: ["weather_forecast"],
             maxAttempts: 2,
           },
@@ -478,7 +478,7 @@
             description: "Determine whether to plan indoor or outdoor activities based on the weather forecast",
             prompt: "Use the determine_activity_type tool to analyze the weather forecast from the 'get-weather-forecast' step result. Pass the entire forecast object to the tool.",
             temperature: 0.1,
-            model: "onnx-community/Qwen3-0.6B-ONNX",
+            model: "gpt-5-nano",
             toolChoice: ["determine_activity_type"],
             maxAttempts: 2,
           },
@@ -489,7 +489,7 @@
               "For 'outdoor' type: use categories ['parks', 'hiking', 'beaches', 'outdoor recreation']. " +
               "For 'indoor' type: use categories ['museums', 'shopping', 'restaurants', 'entertainment'].",
             temperature: 0.1,
-            model: "onnx-community/Qwen3-0.6B-ONNX",
+            model: "gpt-5-nano",
             toolChoice: ["places_search"],
             maxAttempts: 2,
           },
@@ -498,7 +498,7 @@
             description: "Filter and rank the POIs by budget and distance practicality",
             prompt: "Use the budget_filter to filter and rank the POIs by budget and distance practicality.",
             temperature: 0.1,
-            model: "onnx-community/Qwen3-0.6B-ONNX",
+            model: "gpt-5-nano",
             toolChoice: ["budget_filter"],
             maxAttempts: 2,
           },
@@ -507,7 +507,7 @@
             description: "Generate an itinerary with start/end times",
             prompt: "Use the calendar_events tool to produce an itinerary. Use: 1) the filtered POIs from 'filter-pois-by-budget' step result, 2) time window from 'extract-user-input' step (if available).",
             temperature: 0.1,
-            model: "onnx-community/Qwen3-0.6B-ONNX",
+            model: "gpt-5-nano",
             toolChoice: ["calendar_events"],
             maxAttempts: 2,
           },
@@ -516,14 +516,13 @@
             description: "Compose a final plan with weather summary, rationale (indoor/outdoor), bullet itinerary with times/links, and 1-2 alternates",
             prompt: "Compose weather summary, rationale (indoor/outdoor), bullet itinerary with times/links, and 1-2 alternates.",
             temperature: 0.1,
-            model: "onnx-community/Qwen3-0.6B-ONNX",
+            model: "gpt-5-nano",
             maxAttempts: 2,
           },
         ],
         tools: [
           {
-            type: "function",
-            function: {
+            definition: {
               name: "geocode",
               description: "Geocode a city using server endpoint. Returns { lat, lon, resolvedName, country }.",
               parameters: {
@@ -536,29 +535,28 @@
                 },
                 required: ["city"]
               },
-              implementation: async ({ city }) => {
-                // Mock implementation for demo
-                const locations = {
-                  'san francisco': { lat: 37.7749, lon: -122.4194, resolvedName: 'San Francisco', country: 'USA' },
-                  'new york': { lat: 40.7128, lon: -74.0060, resolvedName: 'New York', country: 'USA' },
-                  'london': { lat: 51.5074, lon: -0.1278, resolvedName: 'London', country: 'UK' },
-                  'tokyo': { lat: 35.6762, lon: 139.6503, resolvedName: 'Tokyo', country: 'Japan' },
-                  'paris': { lat: 48.8566, lon: 2.3522, resolvedName: 'Paris', country: 'France' }
-                };
-                
-                const key = city.toLowerCase();
-                if (locations[key]) {
-                  return locations[key];
-                }
-                
-                // Default fallback
-                return { lat: 37.7749, lon: -122.4194, resolvedName: city, country: 'Unknown' };
+            },
+            implementation: async ({ city }) => {
+              // Mock implementation for demo
+              const locations = {
+                'san francisco': { lat: 37.7749, lon: -122.4194, resolvedName: 'San Francisco', country: 'USA' },
+                'new york': { lat: 40.7128, lon: -74.0060, resolvedName: 'New York', country: 'USA' },
+                'london': { lat: 51.5074, lon: -0.1278, resolvedName: 'London', country: 'UK' },
+                'tokyo': { lat: 35.6762, lon: 139.6503, resolvedName: 'Tokyo', country: 'Japan' },
+                'paris': { lat: 48.8566, lon: 2.3522, resolvedName: 'Paris', country: 'France' }
+              };
+              
+              const key = city.toLowerCase();
+              if (locations[key]) {
+                return locations[key];
               }
+              
+              // Default fallback
+              return { lat: 37.7749, lon: -122.4194, resolvedName: city, country: 'Unknown' };
             }
           },
           {
-            type: "function",
-            function: {
+            definition: {
               name: "weather_forecast",
               description: "Get normalized forecast for {lat, lon, date}. Returns { summary, tempC, precipitationMm, windKph, condition, comfort }.",
               parameters: {
@@ -579,29 +577,28 @@
                 },
                 required: ["lat", "lon", "date"]
               },
-              implementation: async ({ lat, lon, date }) => {
-                // Mock weather data based on location
-                const conditions = ['sunny', 'cloudy', 'mixed', 'rainy'];
-                const condition = conditions[Math.floor(Math.random() * conditions.length)];
-                const tempC = Math.round(15 + Math.random() * 15); // 15-30°C
-                const precipitationMm = condition === 'rainy' ? Math.round(Math.random() * 10) : Math.round(Math.random() * 2);
-                const windKph = Math.round(5 + Math.random() * 20);
-                const comfort = condition === 'sunny' ? 85 : condition === 'cloudy' ? 70 : condition === 'mixed' ? 60 : 40;
-                
-                return {
-                  summary: `${condition.charAt(0).toUpperCase() + condition.slice(1)} with ${tempC}°C`,
-                  tempC,
-                  precipitationMm,
-                  windKph,
-                  condition,
-                  comfort
-                };
-              }
+            },
+            implementation: async ({ lat, lon, date }) => {
+              // Mock weather data based on location
+              const conditions = ['sunny', 'cloudy', 'mixed', 'rainy'];
+              const condition = conditions[Math.floor(Math.random() * conditions.length)];
+              const tempC = Math.round(15 + Math.random() * 15); // 15-30°C
+              const precipitationMm = condition === 'rainy' ? Math.round(Math.random() * 10) : Math.round(Math.random() * 2);
+              const windKph = Math.round(5 + Math.random() * 20);
+              const comfort = condition === 'sunny' ? 85 : condition === 'cloudy' ? 70 : condition === 'mixed' ? 60 : 40;
+              
+              return {
+                summary: `${condition.charAt(0).toUpperCase() + condition.slice(1)} with ${tempC}°C`,
+                tempC,
+                precipitationMm,
+                windKph,
+                condition,
+                comfort
+              };
             }
           },
           {
-            type: "function",
-            function: {
+            definition: {
               name: "determine_activity_type",
               description: "Analyze weather forecast data to determine whether to plan indoor or outdoor activities. Returns { activityType, reasoning }.",
               parameters: {
@@ -622,23 +619,22 @@
                 },
                 required: ["precipitationMm", "condition", "comfort"]
               },
-              implementation: async ({ precipitationMm, condition, comfort }) => {
-                const isGoodWeather = precipitationMm <= 1 && 
-                                   ["sunny", "cloudy", "mixed"].includes(condition.toLowerCase()) && 
-                                   comfort >= 60;
-                
-                return {
-                  activityType: isGoodWeather ? "outdoor" : "indoor",
-                  reasoning: isGoodWeather 
-                    ? `Weather is suitable for outdoor activities (${condition}, ${precipitationMm}mm rain, comfort: ${comfort}/100)`
-                    : `Weather suggests indoor activities (${condition}, ${precipitationMm}mm rain, comfort: ${comfort}/100)`
-                };
-              }
+            },
+            implementation: async ({ precipitationMm, condition, comfort }) => {
+              const isGoodWeather = precipitationMm <= 1 && 
+                                  ["sunny", "cloudy", "mixed"].includes(condition.toLowerCase()) && 
+                                  comfort >= 60;
+              
+              return {
+                activityType: isGoodWeather ? "outdoor" : "indoor",
+                reasoning: isGoodWeather 
+                  ? `Weather is suitable for outdoor activities (${condition}, ${precipitationMm}mm rain, comfort: ${comfort}/100)`
+                  : `Weather suggests indoor activities (${condition}, ${precipitationMm}mm rain, comfort: ${comfort}/100)`
+              };
             }
           },
           {
-            type: "function",
-            function: {
+            definition: {
               name: "places_search",
               description: "Find nearby POIs. Returns array of POIs with priceTier and duration estimates.",
               parameters: {
@@ -663,31 +659,30 @@
                 },
                 required: ["lat", "lon", "categories"]
               },
-              implementation: async ({ lat, lon, categories }) => {
-                // Mock POI data
-                const outdoorPOIs = [
-                  { name: 'Golden Gate Park', category: 'parks', priceTier: 'free', distanceKm: 2.1, rating: 4.6, durationMin: 120 },
-                  { name: 'Crissy Field', category: 'outdoor recreation', priceTier: 'free', distanceKm: 3.2, rating: 4.4, durationMin: 90 },
-                  { name: 'Baker Beach', category: 'beaches', priceTier: 'free', distanceKm: 4.1, rating: 4.3, durationMin: 60 },
-                  { name: 'Lands End Hike', category: 'hiking', priceTier: 'free', distanceKm: 5.2, rating: 4.7, durationMin: 150 },
-                ];
-                
-                const indoorPOIs = [
-                  { name: 'SFMOMA', category: 'museums', priceTier: 'paid', distanceKm: 1.5, rating: 4.5, durationMin: 180 },
-                  { name: 'Exploratorium', category: 'museums', priceTier: 'paid', distanceKm: 2.8, rating: 4.7, durationMin: 120 },
-                  { name: 'Union Square Shopping', category: 'shopping', priceTier: 'cheap', distanceKm: 1.2, rating: 4.2, durationMin: 90 },
-                  { name: 'Ferry Building Marketplace', category: 'restaurants', priceTier: 'cheap', distanceKm: 2.1, rating: 4.4, durationMin: 60 },
-                  { name: 'Alcatraz Audio Tour', category: 'entertainment', priceTier: 'paid', distanceKm: 3.5, rating: 4.6, durationMin: 180 }
-                ];
-                
-                const isOutdoor = categories.some(cat => ['parks', 'hiking', 'beaches', 'outdoor recreation'].includes(cat));
-                return isOutdoor ? outdoorPOIs : indoorPOIs;
-              }
+            },
+            implementation: async ({ lat, lon, categories }) => {
+              // Mock POI data
+              const outdoorPOIs = [
+                { name: 'Golden Gate Park', category: 'parks', priceTier: 'free', distanceKm: 2.1, rating: 4.6, durationMin: 120 },
+                { name: 'Crissy Field', category: 'outdoor recreation', priceTier: 'free', distanceKm: 3.2, rating: 4.4, durationMin: 90 },
+                { name: 'Baker Beach', category: 'beaches', priceTier: 'free', distanceKm: 4.1, rating: 4.3, durationMin: 60 },
+                { name: 'Lands End Hike', category: 'hiking', priceTier: 'free', distanceKm: 5.2, rating: 4.7, durationMin: 150 },
+              ];
+              
+              const indoorPOIs = [
+                { name: 'SFMOMA', category: 'museums', priceTier: 'paid', distanceKm: 1.5, rating: 4.5, durationMin: 180 },
+                { name: 'Exploratorium', category: 'museums', priceTier: 'paid', distanceKm: 2.8, rating: 4.7, durationMin: 120 },
+                { name: 'Union Square Shopping', category: 'shopping', priceTier: 'cheap', distanceKm: 1.2, rating: 4.2, durationMin: 90 },
+                { name: 'Ferry Building Marketplace', category: 'restaurants', priceTier: 'cheap', distanceKm: 2.1, rating: 4.4, durationMin: 60 },
+                { name: 'Alcatraz Audio Tour', category: 'entertainment', priceTier: 'paid', distanceKm: 3.5, rating: 4.6, durationMin: 180 }
+              ];
+              
+              const isOutdoor = categories.some(cat => ['parks', 'hiking', 'beaches', 'outdoor recreation'].includes(cat));
+              return isOutdoor ? outdoorPOIs : indoorPOIs;
             }
           },
           {
-            type: "function",
-            function: {
+            definition: {
               name: "budget_filter",
               description: "Rank and filter POIs based on user budget ('free'|'cheap'|'any') and distance practicality. Returns shortlist array.",
               parameters: {
@@ -706,28 +701,27 @@
                 },
                 required: ["budget", "pois"]
               },
-              implementation: async ({ budget, pois }) => {
-                const preferFree = budget === "free";
-                const preferCheap = budget === "cheap";
-                const scored = (pois || []).map((p) => {
-                  let score = 0;
-                  score += p.distanceKm != null ? Math.max(0, 10 - Math.min(10, p.distanceKm)) : 0;
-                  score += (p.rating || 0) * 2;
-                  if (preferFree) score += p.priceTier === "free" ? 6 : p.priceTier === "cheap" ? 2 : -4;
-                  else if (preferCheap) score += p.priceTier !== "paid" ? 3 : -1;
-                  if (p.durationMin) {
-                    if (p.durationMin >= 45 && p.durationMin <= 120) score += 2;
-                  }
-                  return { ...p, _score: score };
-                });
-                scored.sort((a, b) => b._score - a._score);
-                return scored.slice(0, 4);
-              }
+            },
+            implementation: async ({ budget, pois }) => {
+              const preferFree = budget === "free";
+              const preferCheap = budget === "cheap";
+              const scored = (pois || []).map((p) => {
+                let score = 0;
+                score += p.distanceKm != null ? Math.max(0, 10 - Math.min(10, p.distanceKm)) : 0;
+                score += (p.rating || 0) * 2;
+                if (preferFree) score += p.priceTier === "free" ? 6 : p.priceTier === "cheap" ? 2 : -4;
+                else if (preferCheap) score += p.priceTier !== "paid" ? 3 : -1;
+                if (p.durationMin) {
+                  if (p.durationMin >= 45 && p.durationMin <= 120) score += 2;
+                }
+                return { ...p, _score: score };
+              });
+              scored.sort((a, b) => b._score - a._score);
+              return scored.slice(0, 4);
             }
           },
           {
-            type: "function",
-            function: {
+            definition: {
               name: "calendar_events",
               description: "Build a simple itinerary given a shortlist and optional timeWindow.",
               parameters: {
@@ -759,37 +753,37 @@
                 },
                 required: ["date", "shortlist"]
               },
-              implementation: async ({ date, timeWindow, shortlist }) => {
-                const startTime = timeWindow?.start || "09:00";
-                const endTime = timeWindow?.end || "17:00";
+            },
+            implementation: async ({ date, timeWindow, shortlist }) => {
+              const startTime = timeWindow?.start || "09:00";
+              const endTime = timeWindow?.end || "17:00";
+              
+              const events = [];
+              let currentTime = startTime;
+              
+              shortlist.forEach((poi, index) => {
+                const [hours, minutes] = currentTime.split(':').map(Number);
+                const startDate = new Date();
+                startDate.setHours(hours, minutes);
                 
-                const events = [];
-                let currentTime = startTime;
+                const endDate = new Date(startDate);
+                endDate.setMinutes(endDate.getMinutes() + poi.durationMin);
                 
-                shortlist.forEach((poi, index) => {
-                  const [hours, minutes] = currentTime.split(':').map(Number);
-                  const startDate = new Date();
-                  startDate.setHours(hours, minutes);
-                  
-                  const endDate = new Date(startDate);
-                  endDate.setMinutes(endDate.getMinutes() + poi.durationMin);
-                  
-                  events.push({
-                    title: poi.name,
-                    start: startDate.toTimeString().slice(0, 5),
-                    end: endDate.toTimeString().slice(0, 5),
-                    location: poi.name,
-                    category: poi.category,
-                    duration: poi.durationMin
-                  });
-                  
-                  // Add 30 min buffer between activities
-                  endDate.setMinutes(endDate.getMinutes() + 30);
-                  currentTime = endDate.toTimeString().slice(0, 5);
+                events.push({
+                  title: poi.name,
+                  start: startDate.toTimeString().slice(0, 5),
+                  end: endDate.toTimeString().slice(0, 5),
+                  location: poi.name,
+                  category: poi.category,
+                  duration: poi.durationMin
                 });
                 
-                return { events, totalDuration: events.reduce((sum, e) => sum + e.duration, 0) };
-              }
+                // Add 30 min buffer between activities
+                endDate.setMinutes(endDate.getMinutes() + 30);
+                currentTime = endDate.toTimeString().slice(0, 5);
+              });
+              
+              return { events, totalDuration: events.reduce((sum, e) => sum + e.duration, 0) };
             }
           }
         ]
@@ -910,7 +904,8 @@
         try {
           const agent = await createAgentSession({
             models: [
-              { model: "onnx-community/Qwen3-0.6B-ONNX", type: "device", quantization: "q4f16" }
+              // { type: "device", model: "onnx-community/Qwen3-0.6B-ONNX", quantization: "q4f16" },
+              { type: 'cloud',  model: 'gpt-5-nano', proxyUrl: 'http://localhost:3002/api/openai' }
             ]
           });
 

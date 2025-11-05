@@ -155,8 +155,7 @@ export class LLMSummarization implements MemoryCompressor {
       
       // Generate summary
       let summary = '';
-      for await (const chunk of session.createResponse({
-        model,
+      for await (const chunk of session.createResponse(model, {
         messages: [
           { role: 'system', content: this.config.systemPrompt! },
           { role: 'user', content: summarizationPrompt }

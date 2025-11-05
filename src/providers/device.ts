@@ -56,7 +56,6 @@ export class DeviceProvider implements InferenceProvider {
 
       const initId = this.nextId();
 
-      console.log(this.config);
       this.workerInstance.worker.postMessage({
         type: 'init',
         requestId: initId,
@@ -153,7 +152,6 @@ export class DeviceProvider implements InferenceProvider {
           ttfbMs: msg.args.ttfbMs,
         };
         chunks.push(chunk);
-        console.log('chunk', chunk);
         return chunk;
       } else if (msg.type === 'done') {
         resolved = true;

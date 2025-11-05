@@ -126,7 +126,7 @@ export class StepExecutor {
       filteredTools = [];
     } else {
       // Filter tools by toolChoice names for tool_use tasks
-      filteredTools = tools.filter(tool => step.toolChoice!.includes(tool.function.name));
+      filteredTools = tools.filter(tool => step.toolChoice!.includes(tool.definition.name));
     }
     
     // Get messages from memory (now async)
@@ -137,10 +137,12 @@ export class StepExecutor {
       messages: memoryMessages,
       temperature: step.temperature ?? 0.1,
       max_new_tokens: step.maxTokens ?? 1024,
-      model: step.model,
     };
     if (filteredTools.length > 0) {
-      generateArgs.tools = filteredTools;
+      // Extract just the tool definitions for the generate args
+      // Disable streaming for tool use steps
+      generateArgs.tools = filteredTools.map(tool => tool.definition);
+      generateArgs.stream = false;
     }
 
     return { generateArgs, filteredTools, isLastStep };
@@ -159,6 +161,7 @@ export class StepExecutor {
   ): Promise<string> {
     let stepResult = '';
     for await (const chunk of this.session.createResponse(
+      step.model,
       generateArgs
     )) {
       if (!chunk.isLast) {
@@ -236,13 +239,13 @@ export class StepExecutor {
     }
     
     // Find tool in tools array
-    const toolSelected = filteredTools.find(tool => tool.function.name === toolCall.name);
+    const toolSelected = filteredTools.find(tool => tool.definition.name === toolCall.name);
     if (!toolSelected) {
       // If tool is not found, return an error
       logger.agent.error('Tool not found', {
         stepId: step.id,
         requestedTool: toolCall.name,
-        availableTools: filteredTools.map(t => t.function.name),
+        availableTools: filteredTools.map(t => t.definition.name),
         parsedArgs: toolCall.args
       });
       // Rollback to checkpoint before this step
@@ -266,7 +269,7 @@ export class StepExecutor {
       };
     }
 
-    if (toolSelected.function.implementation) {
+    if (toolSelected.implementation) {
       // Emit tool call start event
       const toolStartTime = Date.now();
       const emitter = this.session._eventEmitter;
@@ -282,7 +285,7 @@ export class StepExecutor {
 
       let toolResult: any;
       try {
-        toolResult = await toolSelected.function.implementation(toolCall.args);
+        toolResult = await toolSelected.implementation(toolCall.args);
         logger.agent.debug('Tool execution result', {
           stepId: step.id,
           toolName: toolCall.name,
@@ -352,7 +355,7 @@ export class StepExecutor {
       
       this.workflowStateManager.addToolResult(step.id, {
         name: toolCall.name,
-        description: toolSelected.function.description,
+        description: toolSelected.definition.description,
         result: JSON.stringify(toolResult)
       });
       

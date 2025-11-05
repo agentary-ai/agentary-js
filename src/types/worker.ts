@@ -44,25 +44,26 @@ export interface Model {
   config: InferenceProviderConfig;
 }
 
-export interface Tool {
-  type: 'function';
-  function: {
-    name: string;
-    description: string;
-    parameters: {
-      type: 'object';
-      properties: Record<string, any>;
-      required: string[];
-    };
-    implementation?: (...args: any[]) => any;
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: {
+    type: 'object';
+    properties: Record<string, any>;
+    required: string[];
   };
 }
 
+export interface Tool {
+  definition: ToolDefinition;
+  implementation?: (...args: any[]) => any;
+}
+
 export interface GenerateArgs {
-  model: string;
   messages: Message[];
   max_new_tokens?: number;
-  tools?: Tool[];
+  tools?: ToolDefinition[];
+  stream?: boolean;
   stop?: string[];
   temperature?: number;
   enable_thinking?: boolean;
