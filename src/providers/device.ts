@@ -1,8 +1,9 @@
 import type { GenerateArgs, WorkerInstance } from '../types/worker';
 import type { TokenStreamChunk } from '../types/session';
-import { DeviceProviderConfig, ProviderError, InferenceProvider } from '../types/provider';
+import { DeviceProviderConfig, ProviderError, InferenceProvider, ProviderConfigurationError } from '../types/provider';
 import { EventEmitter } from '../utils/event-emitter';
 import { logger } from '../utils/logger';
+import { isSupportedModel, getSupportedModelIds } from '../config/model-registry';
 
 /**
  * WebGPU-based inference provider using Web Workers
@@ -16,6 +17,15 @@ export class DeviceProvider implements InferenceProvider {
     config: DeviceProviderConfig,
     eventEmitter: EventEmitter
   ) {
+    // Validate that the model is supported for device inference
+    if (!isSupportedModel(config.model)) {
+      const supportedModels = getSupportedModelIds().join(', ');
+      throw new ProviderConfigurationError(
+        `Model "${config.model}" is not supported for device inference. ` +
+        `Supported models: ${supportedModels}`
+      );
+    }
+
     this.config = config;
     this.eventEmitter = eventEmitter;
   }

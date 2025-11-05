@@ -2,10 +2,12 @@ import { pipeline, TextStreamer, env as hfEnv, DataType, TextGenerationPipeline,
 import { InboundMessage, OutboundMessage } from '../types/worker';
 import { logger } from '../utils/logger';
 import { InitArgs, GenerateArgs } from '../types/worker';
+import { MessageTransformer, getMessageTransformer } from '../config/model-registry';
 
 let generator: TextGenerationPipeline | null = null;
 let disposed = false;
 let isGenerating = false;
+let messageTransformer: MessageTransformer | null = null;
 
 function post(message: OutboundMessage) {
   // eslint-disable-next-line no-restricted-globals
@@ -27,6 +29,16 @@ async function handleInit(msg: InboundMessage) {
   const { config } = msg.args as InitArgs;
 
   logger.worker.info('Initializing worker', { model:config.model, quantization:config.quantization }, msg.requestId);
+
+  // Get the message transformer for this model
+  try {
+    messageTransformer = getMessageTransformer(config.model);
+    logger.worker.debug('Message transformer loaded', { model: config.model }, msg.requestId);
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Failed to load message transformer';
+    logger.worker.error('Message transformer initialization failed', { error: errorMessage }, msg.requestId);
+    throw new Error(`Failed to initialize message transformer: ${errorMessage}`);
+  }
 
   if (config.hfToken) {
     (hfEnv as any).HF_TOKEN = config.hfToken;
@@ -95,6 +107,7 @@ async function handleGenerate(msg: InboundMessage) {
   postDebug(msg.requestId, 'Generate request received', msg.args);
 
   if (!generator) throw new Error('Generator not initialized');
+  if (!messageTransformer) throw new Error('Message transformer not initialized');
   if (disposed) throw new Error('Worker disposed');
   if (isGenerating) throw new Error('A generation task is already running');
 
@@ -114,44 +127,8 @@ async function handleGenerate(msg: InboundMessage) {
     applyTemplateOptions.tools = tools;
   }
 
-  // Transform messages to supported tokenizer format
-  // TODO: Ensure this satisfies model specific requirements
-  const tokenizerMessages: Message[] = messages.flatMap(message => {
-    if (Array.isArray(message.content)) {
-      return message.content.map(content => {
-        switch (content.type) {
-          case 'text':
-            return {
-              role: message.role,
-              content: content.text,
-            } as Message;
-          case 'tool_use':
-            return {
-              role: message.role,
-              content: '',
-              tool_calls: [{
-                type: 'function',
-                function: {
-                  name: content.name,
-                  arguments: content.arguments,
-                },
-              }],
-            } as Message;
-          case 'tool_result':
-            return {
-              role: 'tool',
-              content: content.result,
-            } as Message;
-          default:
-            throw new Error(`Unsupported content type: ${(content as any).type}`);
-        }
-      });
-    }
-    return {
-      role: message.role,
-      content: message.content as string,
-    } as Message;
-  });
+  // Transform messages using model-specific transformer
+  const tokenizerMessages: Message[] = messageTransformer(messages);
   logger.worker.debug('Messages transformed to tokenizer format', tokenizerMessages, msg.requestId);
 
   const renderedPrompt: string = generator.tokenizer.apply_chat_template(tokenizerMessages, applyTemplateOptions) as string;
@@ -217,6 +194,7 @@ async function handleDispose(msg: InboundMessage) {
   }
   
   generator = null;
+  messageTransformer = null;
   post({ type: 'ack', requestId: msg.requestId });
   // eslint-disable-next-line no-restricted-globals
   (self as unknown as DedicatedWorkerGlobalScope).close();
