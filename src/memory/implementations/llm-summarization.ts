@@ -8,6 +8,7 @@ import type { Session } from '../../types/session';
 import { ContentProcessor } from '../../processing/content/processor';
 import { TokenCounter } from '../../utils/token-counter';
 import { logger } from '../../utils/logger';
+import { MessageContent } from '../../types/worker';
 
 export interface LLMSummarizationConfig {
   systemPrompt?: string;
@@ -149,7 +150,7 @@ export class LLMSummarization implements MemoryCompressor {
       ).join('\n\n');
       
       const summarizationPrompt = this.config.userPromptTemplate!
-        .replace('{userPrompt}', userPrompt)
+        .replace('{userPrompt}', userPrompt as string)
         .replace('{stepSummaries}', stepSummaries)
         // .replace('{maxSummaryTokens}', String(targetTokens));
       
@@ -274,7 +275,9 @@ export class LLMSummarization implements MemoryCompressor {
     }
     
     if (toolUse && toolResult) {
-      const toolName = toolUse.tool_calls?.[0]?.function?.name || 'unknown';
+      // const toolName = toolUse.tool_calls?.[0]?.function?.name || 'unknown';
+      const firstContent = (toolUse.content as MessageContent[])[0];
+      const toolName = firstContent?.type === 'tool_use' ? firstContent.name : 'unknown';
       formatted += `  Tool: ${toolName}\n`;
       formatted += `  Result: ${toolResult.content}\n`;
     }

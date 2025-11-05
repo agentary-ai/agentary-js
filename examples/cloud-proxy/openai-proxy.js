@@ -115,18 +115,18 @@ async function handleStreamingResponse(response, res) {
     }
 
     // Handle function/tool calls
-    if (chunk.type === 'response.output_item.done' && chunk.item.type === 'function_call') {
-      const toolCallChunk = {
-        token: JSON.stringify(chunk.item),
-        tokenId: tokenCount,
-        isFirst: tokenCount === 0,
-        isLast: false,
-        toolCall: true,
-      };
+    // if (chunk.type === 'response.output_item.done' && chunk.item.type === 'function_call') {
+    //   const toolCallChunk = {
+    //     token: JSON.stringify(chunk.item),
+    //     tokenId: tokenCount,
+    //     isFirst: tokenCount === 0,
+    //     isLast: false,
+    //     toolCall: true,
+    //   };
 
-      res.write(`data: ${JSON.stringify(toolCallChunk)}\n\n`);
-      tokenCount++;
-    }
+    //   res.write(`data: ${JSON.stringify(toolCallChunk)}\n\n`);
+    //   tokenCount++;
+    // }
 
     if (chunk.type === 'response.completed') {
       // Send final done signal
@@ -154,6 +154,15 @@ async function handleNonStreamingResponse(response, res) {
   const startTime = Date.now();
 
   console.log('non-streaming response', response);
+
+  // {
+  //   id: 'fc_0f2b23bc493dd84d00690b50897cdc819b8691d96e1ef30f6d',
+  //   type: 'function_call',
+  //   status: 'completed',
+  //   arguments: '{"city":"San Francisco"}',
+  //   call_id: 'call_eODuoWb6lyijlU8zVvgd36zD',
+  //   name: 'geocode'
+  // }
 
   // Collect all chunks
   for await (const chunk of response) {

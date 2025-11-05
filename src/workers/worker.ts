@@ -1,4 +1,4 @@
-import { pipeline, TextStreamer, env as hfEnv, DataType, TextGenerationPipeline, TextGenerationConfig, ProgressInfo } from '@huggingface/transformers';
+import { pipeline, TextStreamer, env as hfEnv, DataType, TextGenerationPipeline, TextGenerationConfig, ProgressInfo, Message } from '@huggingface/transformers';
 import { InboundMessage, OutboundMessage } from '../types/worker';
 import { logger } from '../utils/logger';
 import { InitArgs, GenerateArgs } from '../types/worker';
@@ -113,7 +113,48 @@ async function handleGenerate(msg: InboundMessage) {
   if (Array.isArray(tools) && tools.length) {
     applyTemplateOptions.tools = tools;
   }
-  const renderedPrompt: string = generator.tokenizer.apply_chat_template(messages, applyTemplateOptions) as string;
+
+  // Transform messages to supported tokenizer format
+  // TODO: Ensure this satisfies model specific requirements
+  const tokenizerMessages: Message[] = messages.flatMap(message => {
+    if (Array.isArray(message.content)) {
+      return message.content.map(content => {
+        switch (content.type) {
+          case 'text':
+            return {
+              role: message.role,
+              content: content.text,
+            } as Message;
+          case 'tool_use':
+            return {
+              role: message.role,
+              content: '',
+              tool_calls: [{
+                type: 'function',
+                function: {
+                  name: content.name,
+                  arguments: content.arguments,
+                },
+              }],
+            } as Message;
+          case 'tool_result':
+            return {
+              role: 'tool',
+              content: content.result,
+            } as Message;
+          default:
+            throw new Error(`Unsupported content type: ${(content as any).type}`);
+        }
+      });
+    }
+    return {
+      role: message.role,
+      content: message.content as string,
+    } as Message;
+  });
+  logger.worker.debug('Messages transformed to tokenizer format', tokenizerMessages, msg.requestId);
+
+  const renderedPrompt: string = generator.tokenizer.apply_chat_template(tokenizerMessages, applyTemplateOptions) as string;
   // TODO: Add warning if tools aren't supported in rendered prompt
   postDebug(msg.requestId, 'Rendered chat template', renderedPrompt);
 

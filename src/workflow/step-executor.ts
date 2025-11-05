@@ -200,7 +200,7 @@ export class StepExecutor {
     stepState: any,
     stepStartTime: number
   ): Promise<WorkflowIterationResponse> {
-    const toolCallId = (Math.random().toString(36).slice(2, 12));
+    const toolUseId = `tool_${(Math.random().toString(36).slice(2, 12))}`;
     const toolCall = this.toolParser.parse(cleanContent);
     logger.agent.debug('Tool call parsing result', { 
       stepId: step.id,
@@ -328,15 +328,12 @@ export class StepExecutor {
       await this.workflowStateManager.addMessagesToMemory([
         {
           role: 'assistant',
-          content: "",
-          tool_calls: [
+          content: [
             {
-              id: toolCallId,
-              type: 'function',
-              function: {
-                name: toolCall.name,
-                arguments: toolCall.args
-              }
+              type: 'tool_use',
+              id: toolUseId,
+              name: toolCall.name,
+              arguments: toolCall.args
             }
           ],
           metadata: {
@@ -344,9 +341,14 @@ export class StepExecutor {
           }
         },
         {
-          role: 'tool',
-          tool_call_id: toolCallId,
-          content: JSON.stringify(toolResult),
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: toolUseId,
+              result: JSON.stringify(toolResult)
+            }
+          ],
           metadata: {
             type: 'tool_result'
           }
