@@ -23,6 +23,9 @@ export class InferenceProviderManager {
 
   /**
    * Get a provider for the given model
+   * 
+   * @param model - The name of the model to get a provider for
+   * @returns A promise that resolves to the inference provider
    */
   async getProvider(model: string): Promise<InferenceProvider> {
     let provider = this.models.get(model);
@@ -57,11 +60,11 @@ export class InferenceProviderManager {
         provider = new DeviceProvider(config as DeviceProviderConfig, this.eventEmitter);
         break;
       }
-      case 'cloud': {
-        const { CloudProvider } = await import('./cloud');
-        provider = new CloudProvider(config as CloudProviderConfig, this.eventEmitter);
-        break;
-      }
+      // case 'cloud': {
+      //   const { CloudProvider } = await import('./cloud');
+      //   provider = new CloudProvider(config as CloudProviderConfig, this.eventEmitter);
+      //   break;
+      // }
 
       default:
         throw new ProviderConfigurationError(

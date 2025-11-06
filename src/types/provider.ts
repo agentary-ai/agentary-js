@@ -1,5 +1,5 @@
 import type { GenerateArgs } from './worker';
-import type { TokenStreamChunk } from './session';
+import type { ModelResponse } from './session';
 import { DataType, DeviceType } from '@huggingface/transformers';
 
 /**
@@ -17,7 +17,7 @@ export interface InferenceProvider {
    */
   generate(
     args: GenerateArgs,
-  ): AsyncIterable<TokenStreamChunk>;
+  ): Promise<ModelResponse>;
 
   /**
    * Clean up resources
@@ -67,6 +67,13 @@ export interface CloudProviderConfig {
    * Model name to use
    */
   model: string;
+
+  /**
+   * Optional model provider type to enable message format transformation
+   * - 'anthropic': Transform messages to Anthropic format
+   * - 'openai': Transform messages to OpenAI format
+   */
+  modelProvider?: 'anthropic' | 'openai';
 
   /**
    * Optional custom headers to send with requests

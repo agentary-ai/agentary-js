@@ -137,12 +137,13 @@ export class StepExecutor {
       messages: memoryMessages,
       temperature: step.temperature ?? 0.1,
       max_new_tokens: step.maxTokens ?? 1024,
+      stream: false, // OVERRIDE
     };
     if (filteredTools.length > 0) {
       // Extract just the tool definitions for the generate args
       // Disable streaming for tool use steps
       generateArgs.tools = filteredTools.map(tool => tool.definition);
-      generateArgs.stream = false;
+      // generateArgs.stream = false;
     }
 
     return { generateArgs, filteredTools, isLastStep };
@@ -160,13 +161,16 @@ export class StepExecutor {
     generateArgs: GenerateArgs
   ): Promise<string> {
     let stepResult = '';
-    for await (const chunk of this.session.createResponse(
-      step.model,
-      generateArgs
-    )) {
-      if (!chunk.isLast) {
-        stepResult += chunk.token;
+    const response = await this.session.createResponse(step.model, generateArgs);
+  
+    if (response.type === 'streaming') {
+      for await (const chunk of response.stream) {
+        if (!chunk.isLast) {
+          stepResult += chunk.token;
+        }
       }
+    } else {
+      stepResult = response.content;
     }
     logger.agent.debug('Step result', {
       stepId: step.id,

@@ -1,5 +1,5 @@
 import type { GenerateArgs, WorkerInstance } from '../types/worker';
-import type { TokenStreamChunk } from '../types/session';
+import type { ModelResponse } from '../types/session';
 import { DeviceProviderConfig, ProviderError, InferenceProvider, ProviderConfigurationError } from '../types/provider';
 import { EventEmitter } from '../utils/event-emitter';
 import { logger } from '../utils/logger';
@@ -30,6 +30,12 @@ export class DeviceProvider implements InferenceProvider {
     this.eventEmitter = eventEmitter;
   }
 
+  /**
+   * Initializes the provider. This method creates a new worker 
+   * instance to handle local model inference.
+   * 
+   * @returns A promise that resolves when the provider is initialized
+   */
   async initialize(): Promise<void> {
     if (this.workerInstance?.initialized) {
       return;
@@ -120,71 +126,114 @@ export class DeviceProvider implements InferenceProvider {
     }
   }
 
-  async *generate(
-    args: GenerateArgs,
-  ): AsyncIterable<TokenStreamChunk> {
+  /**
+   * Generates a response for the given arguments.
+   * 
+   * @param args - The generation arguments
+   * @returns A promise that resolves to the model response
+   */
+  async generate(args: GenerateArgs): Promise<ModelResponse> {
     if (!this.workerInstance || !this.workerInstance.initialized) {
       throw new ProviderError(
         'Provider not initialized. Call initialize() first.',
-        'webgpu',
+        'UNINITIALIZED',
         400
       );
     }
-
+  
     if (this.workerInstance.disposed) {
       throw new ProviderError(
         'Provider has been disposed',
-        'webgpu',
+        'DISPOSED',
         400
       );
     }
-
+  
     const requestId = this.nextId();
-
+  
     // Post generate message to worker
     this.workerInstance.worker.postMessage({
       type: 'generate',
       requestId,
       args,
     });
-
-    // Stream tokens back
-    let resolved = false;
-    const chunks: TokenStreamChunk[] = [];
-
-    yield* this.streamMessages(requestId, (msg) => {
+  
+    // Check if non-streaming is requested
+    if (args.stream === false) {
+      // Aggregate chunks into complete response
+      let fullContent = '';
+      let tokenCount = 0;
+  
+      const stream = this.streamMessages(requestId, (msg) => {
+        if (msg.type === 'chunk' && msg.args) {
+          return {
+            token: msg.args.token,
+            tokenId: msg.args.tokenId,
+            isFirst: msg.args.isFirst,
+            isLast: msg.args.isLast,
+            ttfbMs: msg.args.ttfbMs,
+          };
+        } else if (msg.type === 'done') {
+          return null;
+        } else if (msg.type === 'error') {
+          throw new ProviderError(
+            msg.args?.error || 'Unknown error from worker',
+            'WORKER_ERROR',
+            500
+          );
+        }
+        return undefined;
+      });
+  
+      for await (const chunk of stream) {
+        if (!chunk.isLast) {
+          fullContent += chunk.token;
+          tokenCount++;
+        }
+      }
+  
+      return {
+        type: 'complete',
+        content: fullContent,
+        usage: {
+          promptTokens: 0,
+          completionTokens: tokenCount,
+          totalTokens: tokenCount
+        }
+      };
+    }
+  
+    // Return streaming response (default)
+    const stream = this.streamMessages(requestId, (msg) => {
       if (msg.type === 'chunk' && msg.args) {
-        const chunk: TokenStreamChunk = {
+        return {
           token: msg.args.token,
           tokenId: msg.args.tokenId,
           isFirst: msg.args.isFirst,
           isLast: msg.args.isLast,
           ttfbMs: msg.args.ttfbMs,
         };
-        chunks.push(chunk);
-        return chunk;
       } else if (msg.type === 'done') {
-        resolved = true;
-        return null; // Signal end
+        return null;
       } else if (msg.type === 'error') {
         throw new ProviderError(
           msg.args?.error || 'Unknown error from worker',
-          'webgpu',
+          'WORKER_ERROR',
           500
         );
       }
       return undefined;
     });
-
-    if (!resolved) {
-      throw new ProviderError(
-        'Generation stream ended without completion',
-        'webgpu',
-        400
-      );
-    }
+  
+    return {
+      type: 'streaming',
+      stream
+    };
   }
 
+  /**
+   * Disposes the provider and cleans up resources.
+   */
   async dispose(): Promise<void> {
     if (!this.workerInstance || this.workerInstance.disposed) {
       return;
@@ -238,6 +287,11 @@ export class DeviceProvider implements InferenceProvider {
 
   /**
    * Wait for a single response from the worker
+   * 
+   * @param requestId - The request ID to wait for
+   * @param filter - A filter function to apply to the message
+   * @param onProgress - A callback function to handle progress messages
+   * @returns A promise that resolves to the message
    */
   private once<T = unknown>(
     requestId: string,

@@ -13,6 +13,25 @@ export interface CreateSessionArgs {
   models?: InferenceProviderConfig[];
 }
 
+export interface NonStreamingResponse {
+  type: 'complete';  // Add this discriminator
+  content: string;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  toolCalls?: Array<{
+    id: string;
+    type: 'function';
+    function: {
+      name: string;
+      arguments: string;
+    };
+  }>;
+  finishReason?: 'stop' | 'length' | 'tool_calls' | 'content_filter';
+}
+
 export interface TokenStreamChunk {
   token: string;
   tokenId: number;
@@ -22,9 +41,16 @@ export interface TokenStreamChunk {
   tokensPerSecond?: number;
 }
 
+export interface StreamingResponse {
+  type: 'streaming';  // Add this discriminator
+  stream: AsyncIterable<TokenStreamChunk>;
+}
+
+export type ModelResponse = NonStreamingResponse | StreamingResponse;
+
 export interface Session {
   registerModels(models: InferenceProviderConfig[]): Promise<void>;
-  createResponse(model: string, args: GenerateArgs): AsyncIterable<TokenStreamChunk>;
+  createResponse(model: string, args: GenerateArgs): Promise<ModelResponse>;
   dispose(): Promise<void>;
   /**
    * Subscribe to session events

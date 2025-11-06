@@ -1,4 +1,4 @@
-import { type Session, type TokenStreamChunk } from '../types/session';
+import { ModelResponse, NonStreamingResponse, type Session, type TokenStreamChunk } from '../types/session';
 import { GenerateArgs } from '../types/worker';
 import { InferenceProviderManager } from '../providers/manager';
 import { logger } from '../utils/logger';
@@ -64,31 +64,76 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
    * }
    * ```
    */
-  async function* createResponse(model: string, args: GenerateArgs): AsyncIterable<TokenStreamChunk> {
+  async function createResponse(model: string, args: GenerateArgs): Promise<ModelResponse> {
     if (disposed) throw new Error('Session disposed');
     if (!model) throw new Error('Model is undefined');
     if (!args.messages) throw new Error('Messages are undefined');
 
+    const startTime = Date.now();
+  
     try {
       // Get provider for generation
       const provider = await inferenceProviderManager.getProvider(model);
-      const startTime = Date.now();
-      let tokenCount = 0;
+      
+      const generateResponse =await provider.generate(args);
+      
+      if (generateResponse.type === 'streaming') {
+        return {
+          type: 'streaming',
+          stream: wrapStreamWithEvents(
+            generateResponse.stream, 
+            provider.getModelName(), 
+            startTime,
+            args.messages.length
+          )
+        }
+      } else {
+        console.log('Complete response', generateResponse);
+        return generateResponse;
+      }
+    } catch (error: any) {
+      logger.session?.error('Generation error', { error: error.message });
+  
+      // Emit error event
+      eventEmitter.emit({
+        type: 'generation:error',
+        error: error.message,
+        timestamp: Date.now()
+      });
+  
+      throw error;
+    }
+  }
 
-      // Emit generation start event
+  /**
+   * Wraps a stream with event emission for streaming responses.
+   * 
+   * @param stream - The stream to wrap
+   * @param modelName - The name of the model
+   * @param startTime - The start time of the generation
+   * @returns An async iterable yielding token chunks with event emission
+   */
+  async function* wrapStreamWithEvents(
+    stream: AsyncIterable<TokenStreamChunk>,
+    modelName: string,
+    startTime: number,
+    messageCount: number
+  ): AsyncIterable<TokenStreamChunk> {
+    let tokenCount = 0;
+    
+    try {
       eventEmitter.emit({
         type: 'generation:start',
-        modelName: provider.getModelName(),
-        messageCount: args.messages.length,
+        modelName,
+        messageCount,
         timestamp: startTime
       });
-
-      // Stream tokens from provider
-      for await (const chunk of provider.generate(args)) {
+      
+      for await (const chunk of stream) {
         if (!chunk.isLast) {
           tokenCount++;
         }
-
+        
         // Emit token event
         eventEmitter.emit({
           type: 'generation:token',
@@ -99,29 +144,27 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
           ...(chunk.ttfbMs !== undefined && { ttfbMs: chunk.ttfbMs }),
           timestamp: Date.now()
         });
-
+        
         yield chunk;
+        
+        // If this is the last chunk, emit complete event
+        if (chunk.isLast) {
+          const duration = Date.now() - startTime;
+          eventEmitter.emit({
+            type: 'generation:complete',
+            totalTokens: tokenCount,
+            duration,
+            tokensPerSecond: tokenCount / (duration / 1000),
+            timestamp: Date.now()
+          });
+        }
       }
-
-      // Emit completion event
-      const duration = Date.now() - startTime;
-      eventEmitter.emit({
-        type: 'generation:complete',
-        totalTokens: tokenCount,
-        duration,
-        tokensPerSecond: tokenCount / (duration / 1000),
-        timestamp: Date.now()
-      });
     } catch (error: any) {
-      logger.session?.error('Generation error', { error: error.message });
-
-      // Emit error event
       eventEmitter.emit({
         type: 'generation:error',
         error: error.message,
         timestamp: Date.now()
       });
-
       throw error;
     }
   }
@@ -167,17 +210,13 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
   }
 
   // Assemble the session object with all public methods
-  // Note: _eventEmitter and _providerManager are internal APIs used by AgentSession
-  // and should not be used directly by external consumers
   const session: Session = {
     registerModels,
     createResponse,
     dispose,
     on,
     off,
-    _eventEmitter: eventEmitter,
-    _providerManager: inferenceProviderManager
-  } as Session & { _eventEmitter: EventEmitter; _providerManager: InferenceProviderManager };
+  } as Session;
 
   return session;
 }

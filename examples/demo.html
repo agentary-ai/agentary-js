@@ -1,0 +1,607 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agentary JS Demo</title>
+    <style>
+      body { 
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+        margin: 0;
+        background: #f8fafc;
+        color: #334155;
+      }
+      .container { 
+        max-width: 1200px; 
+        margin: 0 auto; 
+        padding: 40px;
+      }
+      h1 { 
+        color: #1e293b; 
+        text-align: center; 
+        margin-bottom: 8px;
+      }
+      .subtitle {
+        text-align: center;
+        color: #64748b;
+        margin-bottom: 32px;
+        font-size: 16px;
+      }
+      .demo-tabs {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 24px;
+        border-radius: 8px;
+        background: #e2e8f0;
+        padding: 4px;
+      }
+      .tab-button {
+        flex: 1;
+        padding: 12px 24px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        font-weight: 500;
+        border-radius: 6px;
+        transition: all 0.2s;
+        color: #64748b;
+      }
+      .tab-button.active {
+        background: white;
+        color: #1e293b;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+      .demo-panel {
+        display: none;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        padding: 32px;
+      }
+      .demo-panel.active {
+        display: block;
+      }
+      
+      /* Chat Demo Styles */
+      .chat-section {
+        margin-bottom: 24px;
+        padding: 20px;
+        background: #f1f5f9;
+        border-radius: 8px;
+      }
+      .input-group {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+      .input-group.column {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      label {
+        min-width: 100px;
+        font-weight: 500;
+        color: #475569;
+      }
+      input, textarea {
+        flex: 1;
+        padding: 8px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 14px;
+        font-family: inherit;
+      }
+      input:focus, textarea:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      }
+      button {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: background 0.2s;
+      }
+      button:hover:not(:disabled) {
+        background: #2563eb;
+      }
+      button:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+      }
+      .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .checkbox-group input[type="checkbox"] {
+        width: auto;
+        margin: 0;
+      }
+      
+      /* Output Styles */
+      .output-section {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        min-height: 300px;
+        overflow: hidden;
+      }
+      .output-header {
+        background: #1e293b;
+        color: white;
+        padding: 12px 16px;
+        font-weight: 500;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .status {
+        font-size: 12px;
+        padding: 2px 8px;
+        border-radius: 12px;
+        background: #374151;
+      }
+      .status.running {
+        background: #059669;
+        animation: pulse 2s infinite;
+      }
+      .status.completed {
+        background: #059669;
+      }
+      .status.error {
+        background: #dc2626;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+      .output-content {
+        padding: 16px;
+        max-height: 400px;
+        overflow-y: auto;
+        background: white;
+      }
+      
+      /* Agent Demo Styles */
+      .step {
+        margin-bottom: 16px;
+        padding: 12px;
+        border-radius: 6px;
+        border-left: 4px solid #e2e8f0;
+      }
+      .step.thinking {
+        background: #eff6ff;
+        border-left-color: #3b82f6;
+      }
+      .step.tool_call {
+        background: #fff7ed;
+        border-left-color: #f59e0b;
+      }
+      .step.response {
+        background: #ecfdf5;
+        border-left-color: #10b981;
+      }
+      .step.error {
+        background: #fef2f2;
+        border-left-color: #ef4444;
+      }
+      .step-header {
+        font-weight: 600;
+        margin-bottom: 4px;
+        font-size: 14px;
+      }
+      .step-content {
+        color: #4b5563;
+        line-height: 1.5;
+      }
+      .tool-info {
+        background: rgba(0, 0, 0, 0.05);
+        padding: 8px;
+        border-radius: 4px;
+        margin-top: 8px;
+        font-family: monospace;
+        font-size: 12px;
+      }
+      
+      /* Chat Demo Styles */
+      .chat-output {
+        background: #111;
+        color: #0f0;
+        padding: 12px;
+        border-radius: 6px;
+        min-height: 120px;
+        white-space: pre-wrap;
+        font-family: monospace;
+        margin: 0;
+      }
+      
+      .empty-state {
+        text-align: center;
+        color: #9ca3af;
+        padding: 60px 20px;
+      }
+      
+      .tools-section {
+        margin-top: 16px;
+      }
+      .tools-section textarea {
+        width: 100%;
+        height: 120px;
+        font-family: monospace;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🤖 Agentary JS Demo</h1>
+      <p class="subtitle">Agent workflows and direct chat capabilities</p>
+      <div class="demo-tabs">
+        <button class="tab-button active" onclick="showTab('agent')">🔧 Agent Workflow</button>
+        <button class="tab-button" onclick="showTab('chat')">💬 Direct Chat</button>
+      </div>
+
+      <!-- Agent Demo Panel -->
+      <div id="agent-panel" class="demo-panel active">
+        <div class="chat-section">
+          <div class="input-group">
+            <label for="agent-task">Task:</label>
+            <input 
+              id="agent-task" 
+              type="text" 
+              placeholder="Enter a math problem"
+              value="Ashley bought a big bag of candy to share with her friends. In total, there were 296 candies. She gave 105 candies to Marissa. She also gave 86 candies to Kayla. How many candies were left?"
+            />
+          </div>
+          <div class="input-group">
+            <button id="agent-run-btn">🚀 Run Math Agent</button>
+            <button id="agent-clear-btn">🗑️ Clear</button>
+          </div>
+        </div>
+
+        <div class="output-section">
+          <div class="output-header">
+            <span>Agent Output</span>
+            <span id="agent-status" class="status">Ready</span>
+          </div>
+          <div class="output-content" id="agent-output">
+            <div class="empty-state">
+              <p>Enter a task above and click "Run Agent" to see the AI work step-by-step!</p>
+              <p style="font-size: 14px; margin-top: 16px;">
+                Try: "Calculate 25 * 4 + 10", "What's 50% of 200?", or "Add 15 + 27 + 33"
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Demo Panel -->
+      <div id="chat-panel" class="demo-panel">
+        <div class="chat-section">
+          <div class="input-group">
+            <label for="chat-prompt">Prompt:</label>
+            <input id="chat-prompt" type="text" value="Hello world" placeholder="Enter your message" />
+            <button id="chat-run-btn">🚀 Send</button>
+          </div>
+          
+          <div class="checkbox-group">
+            <input type="checkbox" id="use-tools" />
+            <label for="use-tools">Enable Tools</label>
+          </div>
+          
+          <div class="tools-section" id="tools-section" style="display: none;">
+            <div class="input-group column">
+              <label for="tools-json">Tools JSON:</label>
+              <textarea id="tools-json">
+                [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_weather",
+                      "description": "Get current weather for a city.",
+                      "parameters": {
+                        "type": "object",
+                        "properties": {
+                          "city": { "type": "string", "description": "City name" }
+                        },
+                        "required": ["city"]
+                      }
+                    }
+                  }
+                ]
+              </textarea>
+            </div>
+          </div>
+          
+          <div class="input-group">
+            <label for="hf-token">HF Token:</label>
+            <input id="hf-token" type="text" placeholder="Optional (for private models)" />
+          </div>
+        </div>
+
+        <div class="output-section">
+          <div class="output-header">
+            <span>Chat Output</span>
+            <span id="chat-status" class="status">Ready</span>
+          </div>
+          <div class="output-content">
+            <pre id="chat-output" class="chat-output">Press Send to start chatting...</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { createSession, createAgentSession, enableDebuggingMode } from '../dist/index.js';
+      
+      // Enable debugging mode
+      enableDebuggingMode();
+
+      // Tab functionality
+      window.showTab = function(tabName) {
+        // Update buttons
+        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+        
+        // Update panels
+        document.querySelectorAll('.demo-panel').forEach(panel => panel.classList.remove('active'));
+        document.getElementById(`${tabName}-panel`).classList.add('active');
+      };
+
+      // Chat demo functionality
+      const chatPromptEl = document.getElementById('chat-prompt');
+      const chatRunBtn = document.getElementById('chat-run-btn');
+      const chatOutput = document.getElementById('chat-output');
+      const chatStatus = document.getElementById('chat-status');
+      const useToolsEl = document.getElementById('use-tools');
+      const toolsSection = document.getElementById('tools-section');
+      const toolsJsonEl = document.getElementById('tools-json');
+      const hfTokenEl = document.getElementById('hf-token');
+
+      // Agent demo functionality
+      const agentTaskInput = document.getElementById('agent-task');
+      const agentRunBtn = document.getElementById('agent-run-btn');
+      const agentClearBtn = document.getElementById('agent-clear-btn');
+      const agentOutput = document.getElementById('agent-output');
+      const agentStatus = document.getElementById('agent-status');
+
+      // Chat demo setup
+      useToolsEl.addEventListener('change', () => {
+        toolsSection.style.display = useToolsEl.checked ? 'block' : 'none';
+      });
+
+      function updateChatStatus(text, className = '') {
+        chatStatus.textContent = text;
+        chatStatus.className = `status ${className}`;
+      }
+
+      chatRunBtn.addEventListener('click', async () => {
+        chatOutput.textContent = '';
+        chatRunBtn.disabled = true;
+        updateChatStatus('Running...', 'running');
+        
+        try {
+          const session = await createSession();
+          const started = performance.now();
+          let tools;
+          
+          if (useToolsEl.checked) {
+            try {
+              tools = JSON.parse(toolsJsonEl.value);
+            } catch (e) {
+              chatOutput.textContent = 'Invalid tools JSON: ' + (e?.message ?? String(e));
+              updateChatStatus('Error', 'error');
+              chatRunBtn.disabled = false;
+              return;
+            }
+          }
+          
+          for await (const chunk of session.createResponse({
+            messages: [{ role: 'user', content: chatPromptEl.value }],
+            tools
+          })) {
+            if (chunk.isFirst && chunk.ttfbMs) {
+              chatOutput.textContent += `TTFB: ${chunk.ttfbMs.toFixed(1)}ms\n`;
+            }
+            if (!chunk.isLast) {
+              chatOutput.textContent += chunk.token;
+            }
+          }
+          
+          const total = performance.now() - started;
+          chatOutput.textContent += `\n\nDone in ${total.toFixed(1)}ms`;
+          updateChatStatus('Completed', 'completed');
+          await session.dispose();
+        } catch (err) {
+          chatOutput.textContent = 'Error: ' + (err?.message ?? String(err));
+          updateChatStatus('Error', 'error');
+        } finally {
+          chatRunBtn.disabled = false;
+        }
+      });
+
+      chatPromptEl.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          chatRunBtn.click();
+        }
+      });
+
+      // Agent demo setup
+      const calculatorTool = {
+        type: 'function',
+        function: {
+          name: 'calculate',
+          description: 'Perform mathematical calculations',
+          parameters: {
+            type: 'object',
+            properties: {
+              expression: {
+                type: 'string',
+                description: 'Mathematical expression to evaluate (e.g., "15 * 23 + 47")'
+              }
+            },
+            required: ['expression']
+          },
+          implementation: ({ expression }) => {
+            try {
+              console.debug('--------------------------------');
+              console.debug('Calculating', expression);
+              const sanitized = expression.replace(/[^0-9+\-*/(). ]/g, '');
+              console.debug('Sanitized expression:', sanitized);
+              const result = eval(sanitized);
+              console.debug('Result:', result);
+              console.debug('--------------------------------');
+              return `${expression} = ${result}`;
+            } catch (error) {
+              return `Error: Could not calculate "${expression}"`;
+            }
+          }
+        }
+      };
+
+      const mathWorkflow = {
+        id: 'math-problem-solver',
+        name: 'Math Problem Solver',
+        systemPrompt: 'You are a math problem solver. You will be given a math problem and you will need to solve it step by step. ' +
+          'Break down each problem into clear steps, showing your work. ' +
+          'You MUST use the calculator tool to perform ALL mathematical calculations. ' +
+          'Do not attempt to calculate numbers yourself - always use the calculate function.',
+        maxIterations: 4,
+        timeout: 50000,
+        steps: [
+          {
+            id: 'read-problem',
+            description: 'Read the math problem.',
+            generationTask: 'reasoning',
+            maxTokens: 2048,
+            prompt: 'Analyze the math problem and identify what calculations need to be performed. List each calculation that will be needed.',
+          },
+          {
+            id: 'calculate',
+            description: 'Calculate the answer to the math problem.',
+            generationTask: 'tool_use',
+            maxTokens: 2048,
+            prompt: 'Now perform the calculations identified in the previous step. Use the calculate function for each mathematical operation. For example, if you need to compute 15 * 23 + 47, call calculate("15 * 23 + 47").',
+            toolChoice: ['calculate'],
+            temperature: 0.1,
+          },
+          {
+            id: 'read-solution',
+            description: 'Read the solution and explain the method.',
+            prompt: 'Based on the calculation results from the previous step, provide the final answer and explain the method used to solve the problem.',
+            generationTask: 'chat',
+          }
+        ],
+        tools: [calculatorTool]
+      };
+
+      function updateAgentStatus(text, className = '') {
+        agentStatus.textContent = text;
+        agentStatus.className = `status ${className}`;
+      }
+
+      function addStep(stepResult) {
+        const stepDiv = document.createElement('div');
+        stepDiv.className = `step ${stepResult.type}`;
+        
+        const header = document.createElement('div');
+        header.className = 'step-header';
+        
+        const typeIcons = {
+          thinking: '🤔',
+          tool_call: '🔧',
+          response: '💬',
+          error: '❌'
+        };
+        
+        header.textContent = `${typeIcons[stepResult.type] || '•'} Step: ${stepResult.stepId}`;
+        
+        const content = document.createElement('div');
+        content.className = 'step-content';
+        content.textContent = stepResult.content;
+        
+        stepDiv.appendChild(header);
+        stepDiv.appendChild(content);
+        
+        if (stepResult.toolCall) {
+          const toolInfo = document.createElement('div');
+          toolInfo.className = 'tool-info';
+          toolInfo.textContent = `🔧 ${stepResult.toolCall.name}("${stepResult.toolCall.args.expression || ''}")`;
+          if (stepResult.toolCall.result) {
+            toolInfo.textContent += ` → ${stepResult.toolCall.result}`;
+          }
+          stepDiv.appendChild(toolInfo);
+        }
+        
+        agentOutput.appendChild(stepDiv);
+        agentOutput.scrollTop = agentOutput.scrollHeight;
+      }
+
+      function clearAgentOutput() {
+        agentOutput.innerHTML = '<div class="empty-state"><p>Output cleared. Ready for next task!</p></div>';
+        updateAgentStatus('Ready');
+      }
+
+      async function runAgent() {
+        const task = agentTaskInput.value.trim();
+        if (!task) {
+          alert('Please enter a task!');
+          return;
+        }
+
+        agentRunBtn.disabled = true;
+        clearAgentOutput();
+        updateAgentStatus('Starting agent...', 'running');
+
+        try {
+          const agent = await createAgentSession();
+          updateAgentStatus('Agent running...', 'running');
+
+          let stepCount = 0;
+          for await (const stepResult of agent.runWorkflow(task, mathWorkflow)) {
+            stepCount++;
+            console.log(stepResult);
+            addStep(stepResult);
+            
+            if (stepResult.error) {
+              updateAgentStatus('Error occurred', 'error');
+              break;
+            }
+          }
+
+          updateAgentStatus(`Completed (${stepCount} steps)`, 'completed');
+          await agent.dispose();
+
+        } catch (error) {
+          console.error('Agent error:', error);
+          updateAgentStatus('Failed', 'error');
+          
+          const errorDiv = document.createElement('div');
+          errorDiv.className = 'step error';
+          errorDiv.innerHTML = `
+            <div class="step-header">❌ Error</div>
+            <div class="step-content">Failed to run agent: ${error.message}</div>
+          `;
+          agentOutput.appendChild(errorDiv);
+        } finally {
+          agentRunBtn.disabled = false;
+        }
+      }
+
+      agentRunBtn.addEventListener('click', runAgent);
+      agentClearBtn.addEventListener('click', clearAgentOutput);
+      
+      agentTaskInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          runAgent();
+        }
+      });
+    </script>
+  </body>
+</html>

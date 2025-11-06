@@ -41,14 +41,14 @@ app.use((req, res, next) => {
 /**
  * Transform messages to OpenAI format (system -> developer role)
  */
-function transformMessages(messages) {
-  return messages.map(msg => {
-    if (msg.role === 'system') {
-      return { ...msg, role: 'developer' };
-    }
-    return msg;
-  });
-}
+// function transformMessages(messages) {
+//   return messages.map(msg => {
+//     if (msg.role === 'system') {
+//       return { ...msg, role: 'developer' };
+//     }
+//     return msg;
+//   });
+// }
 
 /**
  * Transform tools to OpenAI format
@@ -65,13 +65,13 @@ function transformTools(tools) {
 /**
  * Build OpenAI API request object
  */
-function buildOpenAIRequest({ model, messages, max_tokens, temperature, top_p, tools, tool_choice, stream }) {
-  const transformedMessages = transformMessages(messages);
+function buildOpenAIRequest({ model, messages, max_tokens, temperature, top_p, tools, tool_choice, stream = true }) {
+  // const transformedMessages = transformMessages(messages);
   const transformedTools = transformTools(tools);
 
   return {
     model,
-    input: transformedMessages,
+    input: messages,
     stream,
     ...(max_tokens && { max_tokens }),
     // ...(temperature !== undefined && { temperature }),
@@ -146,54 +146,6 @@ async function handleStreamingResponse(response, res) {
 }
 
 /**
- * Handle non-streaming response from OpenAI
- */
-async function handleNonStreamingResponse(response, res) {
-  let fullText = '';
-  let toolCalls = [];
-  const startTime = Date.now();
-
-  console.log('non-streaming response', response);
-
-  // {
-  //   id: 'fc_0f2b23bc493dd84d00690b50897cdc819b8691d96e1ef30f6d',
-  //   type: 'function_call',
-  //   status: 'completed',
-  //   arguments: '{"city":"San Francisco"}',
-  //   call_id: 'call_eODuoWb6lyijlU8zVvgd36zD',
-  //   name: 'geocode'
-  // }
-
-  // Collect all chunks
-  for await (const chunk of response) {
-    console.log('chunk', chunk);
-
-    if (chunk.type === 'response.output_text.delta') {
-      fullText += chunk.delta;
-    }
-
-    // Handle function/tool calls
-    if (chunk.type === 'response.output_item.done' && chunk.item.type === 'function_call') {
-      toolCalls.push(chunk.item);
-    }
-
-    if (chunk.type === 'response.completed') {
-      break;
-    }
-  }
-
-  // Send complete response as JSON
-  const responseData = {
-    content: fullText,
-    ...(toolCalls.length > 0 && { toolCalls }),
-    ttfbMs: Date.now() - startTime,
-  };
-
-  res.json(responseData);
-  console.log(`[${new Date().toISOString()}] Non-streaming request completed. Length: ${fullText.length}`);
-}
-
-/**
  * Handle errors for the proxy endpoint
  */
 function handleProxyError(error, res) {
@@ -246,7 +198,12 @@ app.post('/api/openai', async (req, res) => {
     if (stream) {
       await handleStreamingResponse(response, res);
     } else {
-      await handleNonStreamingResponse(response, res);
+      // res.json({
+      //   messages: response.output.filter(
+      //     message => message.type === 'message' || message.type === 'function_call'
+      //   ),
+      // })
+      res.json(response);
     }
 
   } catch (error) {

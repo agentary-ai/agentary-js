@@ -156,18 +156,23 @@ export class LLMSummarization implements MemoryCompressor {
       
       // Generate summary
       let summary = '';
-      for await (const chunk of session.createResponse(model, {
+      const response = await session.createResponse(model, {
         messages: [
           { role: 'system', content: this.config.systemPrompt! },
           { role: 'user', content: summarizationPrompt }
         ],
         temperature: this.config.temperature!,
-        // max_new_tokens: targetTokens,
         enable_thinking: this.config.enableThinking!
-      })) {
-        if (!chunk.isLast) {
-          summary += chunk.token;
+      });
+      
+      if (response.type === 'streaming') {
+        for await (const chunk of response.stream) {
+          if (!chunk.isLast) {
+            summary += chunk.token;
+          }
         }
+      } else {
+        summary = response.content;
       }
       
       const { cleanContent } = this.contentProcessor.removeThinkTags(summary);

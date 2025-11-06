@@ -484,4 +484,328 @@ describe('CloudProvider', () => {
       expect(provider.getModelName()).toBe('test-model');
     });
   });
+
+  describe('Message Transformation', () => {
+    it('should not transform messages when modelProvider is not set', async () => {
+      const providerWithoutModelProvider = new CloudProvider(
+        mockConfig,
+        eventEmitter
+      );
+
+      await providerWithoutModelProvider.initialize();
+
+      const messagesWithToolUse: GenerateArgs = {
+        messages: [
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool_use',
+                id: 'tool_123',
+                name: 'get_weather',
+                arguments: { city: 'San Francisco' },
+              },
+            ],
+          },
+        ],
+      };
+
+      const mockBody = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode('data: {"token":"Result","tokenId":0,"isLast":true}\n\n')
+          );
+          controller.close();
+        },
+      });
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        body: mockBody,
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of providerWithoutModelProvider.generate(messagesWithToolUse)) {
+        chunks.push(chunk);
+      }
+
+      // Check that the original message format was sent
+      const fetchCall = (global.fetch as any).mock.calls[0];
+      const requestBody = JSON.parse(fetchCall[1].body);
+      
+      expect(requestBody.messages[0].content[0].type).toBe('tool_use');
+      expect(requestBody.messages[0].content[0].id).toBe('tool_123');
+    });
+
+    it('should not transform messages when modelProvider is anthropic', async () => {
+      const providerWithAnthropic = new CloudProvider(
+        {
+          ...mockConfig,
+          modelProvider: 'anthropic',
+        },
+        eventEmitter
+      );
+
+      await providerWithAnthropic.initialize();
+
+      const messagesWithToolUse: GenerateArgs = {
+        messages: [
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool_use',
+                id: 'tool_456',
+                name: 'search',
+                arguments: { query: 'AI' },
+              },
+            ],
+          },
+        ],
+      };
+
+      const mockBody = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode('data: {"token":"Result","tokenId":0,"isLast":true}\n\n')
+          );
+          controller.close();
+        },
+      });
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        body: mockBody,
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of providerWithAnthropic.generate(messagesWithToolUse)) {
+        chunks.push(chunk);
+      }
+
+      const fetchCall = (global.fetch as any).mock.calls[0];
+      const requestBody = JSON.parse(fetchCall[1].body);
+      
+      expect(requestBody.messages[0].content[0].type).toBe('tool_use');
+      expect(requestBody.messages[0].content[0].id).toBe('tool_456');
+    });
+
+    it('should transform tool_use to function_call when modelProvider is openai', async () => {
+      const providerWithOpenAI = new CloudProvider(
+        {
+          ...mockConfig,
+          modelProvider: 'openai',
+        },
+        eventEmitter
+      );
+
+      await providerWithOpenAI.initialize();
+
+      const messagesWithToolUse: GenerateArgs = {
+        messages: [
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool_use',
+                id: 'tool_789',
+                name: 'calculate',
+                arguments: { x: 5, y: 10 },
+              },
+            ],
+          },
+        ],
+      };
+
+      const mockBody = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode('data: {"token":"15","tokenId":0,"isLast":true}\n\n')
+          );
+          controller.close();
+        },
+      });
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        body: mockBody,
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of providerWithOpenAI.generate(messagesWithToolUse)) {
+        chunks.push(chunk);
+      }
+
+      const fetchCall = (global.fetch as any).mock.calls[0];
+      const requestBody = JSON.parse(fetchCall[1].body);
+      
+      // Check transformation to OpenAI format
+      expect(requestBody.messages[0].content[0].type).toBe('function_call');
+      expect(requestBody.messages[0].content[0].call_id).toBe('tool_789');
+      expect(requestBody.messages[0].content[0].name).toBe('calculate');
+      expect(requestBody.messages[0].content[0].arguments).toEqual({ x: 5, y: 10 });
+    });
+
+    it('should transform tool_result to tool type when modelProvider is openai', async () => {
+      const providerWithOpenAI = new CloudProvider(
+        {
+          ...mockConfig,
+          modelProvider: 'openai',
+        },
+        eventEmitter
+      );
+
+      await providerWithOpenAI.initialize();
+
+      const messagesWithToolResult: GenerateArgs = {
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'tool_123',
+                result: 'Sunny, 72°F',
+              },
+            ],
+          },
+        ],
+      };
+
+      const mockBody = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode('data: {"token":"Great!","tokenId":0,"isLast":true}\n\n')
+          );
+          controller.close();
+        },
+      });
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        body: mockBody,
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of providerWithOpenAI.generate(messagesWithToolResult)) {
+        chunks.push(chunk);
+      }
+
+      const fetchCall = (global.fetch as any).mock.calls[0];
+      const requestBody = JSON.parse(fetchCall[1].body);
+      
+      // Check transformation to OpenAI format
+      expect(requestBody.messages[0].content[0].type).toBe('tool');
+      expect(requestBody.messages[0].content[0].tool_call_id).toBe('tool_123');
+      expect(requestBody.messages[0].content[0].content).toBe('Sunny, 72°F');
+    });
+
+    it('should handle mixed content with text and tool_use for openai', async () => {
+      const providerWithOpenAI = new CloudProvider(
+        {
+          ...mockConfig,
+          modelProvider: 'openai',
+        },
+        eventEmitter
+      );
+
+      await providerWithOpenAI.initialize();
+
+      const messagesWithMixedContent: GenerateArgs = {
+        messages: [
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'text',
+                text: 'Let me check that for you.',
+              },
+              {
+                type: 'tool_use',
+                id: 'tool_001',
+                name: 'get_data',
+                arguments: { id: 123 },
+              },
+            ],
+          },
+        ],
+      };
+
+      const mockBody = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode('data: {"token":"Done","tokenId":0,"isLast":true}\n\n')
+          );
+          controller.close();
+        },
+      });
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        body: mockBody,
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of providerWithOpenAI.generate(messagesWithMixedContent)) {
+        chunks.push(chunk);
+      }
+
+      const fetchCall = (global.fetch as any).mock.calls[0];
+      const requestBody = JSON.parse(fetchCall[1].body);
+      
+      // Check that text content is preserved
+      expect(requestBody.messages[0].content[0].type).toBe('text');
+      expect(requestBody.messages[0].content[0].text).toBe('Let me check that for you.');
+      
+      // Check that tool_use is transformed
+      expect(requestBody.messages[0].content[1].type).toBe('function_call');
+      expect(requestBody.messages[0].content[1].call_id).toBe('tool_001');
+    });
+
+    it('should handle string content without transformation for openai', async () => {
+      const providerWithOpenAI = new CloudProvider(
+        {
+          ...mockConfig,
+          modelProvider: 'openai',
+        },
+        eventEmitter
+      );
+
+      await providerWithOpenAI.initialize();
+
+      const messagesWithStringContent: GenerateArgs = {
+        messages: [
+          {
+            role: 'user',
+            content: 'What is the weather like?',
+          },
+        ],
+      };
+
+      const mockBody = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode('data: {"token":"Sunny","tokenId":0,"isLast":true}\n\n')
+          );
+          controller.close();
+        },
+      });
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        body: mockBody,
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of providerWithOpenAI.generate(messagesWithStringContent)) {
+        chunks.push(chunk);
+      }
+
+      const fetchCall = (global.fetch as any).mock.calls[0];
+      const requestBody = JSON.parse(fetchCall[1].body);
+      
+      // String content should remain unchanged
+      expect(requestBody.messages[0].content).toBe('What is the weather like?');
+    });
+  });
 });

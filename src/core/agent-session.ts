@@ -3,7 +3,7 @@ import type {
   Workflow,
   WorkflowIterationResponse, 
 } from '../types/agent-session';
-import type { Session, CreateSessionArgs, TokenStreamChunk } from '../types/session';
+import type { Session, CreateSessionArgs, TokenStreamChunk, ModelResponse } from '../types/session';
 import type { GenerateArgs, Tool } from '../types/worker';
 import { createSession } from './session';
 import { WorkflowExecutor } from '../workflow/executor';
@@ -102,11 +102,11 @@ export class AgentSessionImpl implements AgentSession {
    * }
    * ```
    */
-  async* createResponse(
+  async createResponse(
     model: string,
     args: GenerateArgs
-  ): AsyncIterable<TokenStreamChunk> {
-    yield* this.session.createResponse(model, args);
+  ): Promise<ModelResponse> {
+    return await this.session.createResponse(model, args);
   }
 
   /**

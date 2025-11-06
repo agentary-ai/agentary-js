@@ -85,7 +85,7 @@ export class MemoryManager {
   }
   
   /**
-   * Retrieve messages from memory and format them for LLM consumption
+   * Retrieve messages from memory and format them for model consumption
    * 
    * @returns A promise that resolves with the formatted messages
    */
