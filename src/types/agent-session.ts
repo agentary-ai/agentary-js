@@ -24,6 +24,7 @@ export interface WorkflowStep {
   maxTokens?: number;
   temperature?: number;
   model: string;
+  enableThinking?: boolean;
 //   dependentSteps?: number[]; // TODO: Step IDs that must complete before this step
 //   nextSteps?: number[];    // TODO: Possible next step IDs after this step
   toolChoice?: string[];

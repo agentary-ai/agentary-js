@@ -89,15 +89,3 @@ export type {
 export type {
   DeviceProviderConfig
 } from './types/provider';
-
-// Model configuration exports
-export {
-  isSupportedModel,
-  getModelConfig,
-  getSupportedModelIds,
-  SUPPORTED_MODELS
-} from './config';
-export type {
-  ModelConfig,
-  MessageTransformer
-} from './config';

@@ -1,9 +1,9 @@
 import type { GenerateArgs, WorkerInstance } from '../types/worker';
-import type { ModelResponse } from '../types/session';
+import type { ModelResponse, NonStreamingResponse } from '../types/session';
 import { DeviceProviderConfig, ProviderError, InferenceProvider, ProviderConfigurationError } from '../types/provider';
 import { EventEmitter } from '../utils/event-emitter';
 import { logger } from '../utils/logger';
-import { isSupportedModel, getSupportedModelIds } from '../config/model-registry';
+import { isSupportedModel, getSupportedModelIds, getResponseParser } from './device-model-config';
 
 /**
  * WebGPU-based inference provider using Web Workers
@@ -192,14 +192,32 @@ export class DeviceProvider implements InferenceProvider {
         }
       }
   
+      // Parse tool calls and reasoning if model has a response parser
+      const responseParser = getResponseParser(this.config.model);
+      let parsedContent = fullContent;
+      let toolCalls: NonStreamingResponse['toolCalls'] | undefined;
+      let finishReason: NonStreamingResponse['finishReason'] | undefined;
+      let reasoning: string | undefined;
+  
+      if (responseParser) {
+        const parsed = responseParser(fullContent);
+        parsedContent = parsed.content;
+        toolCalls = parsed.toolCalls;
+        finishReason = parsed.finishReason;
+        reasoning = parsed.reasoning;
+      }
+  
       return {
         type: 'complete',
-        content: fullContent,
+        content: parsedContent,
         usage: {
           promptTokens: 0,
           completionTokens: tokenCount,
           totalTokens: tokenCount
-        }
+        },
+        ...(toolCalls && { toolCalls }),
+        ...(finishReason && { finishReason }),
+        ...(reasoning && { reasoning })
       };
     }
   

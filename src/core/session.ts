@@ -74,8 +74,13 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
     try {
       // Get provider for generation
       const provider = await inferenceProviderManager.getProvider(model);
-      
+
+      // Disable streaming for tool use
+      if (args.tools) args.stream = false;
+          
       const generateResponse =await provider.generate(args);
+
+      // TODO: Throw error if tool calling not supported by model
       
       if (generateResponse.type === 'streaming') {
         return {
@@ -89,6 +94,37 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
         }
       } else {
         console.log('Complete response', generateResponse);
+        if (args.tools && !generateResponse.toolCalls) {
+            const errorMessage = 'Tool calls not found in response';
+            logger.session?.error(errorMessage, {
+              model,
+              args,
+              generateResponse,
+              timestamp: Date.now()
+            });
+            throw new Error(errorMessage);
+          }
+          
+        // Validate that all tools in response were in the original request
+        if (args.tools && generateResponse.toolCalls) {
+          const requestedToolNames = new Set(args.tools.map(tool => tool.name));
+          const invalidTools = generateResponse.toolCalls.filter(
+            toolCall => !requestedToolNames.has(toolCall.function.name)
+          );
+          
+          if (invalidTools.length > 0) {
+            const invalidToolNames = invalidTools.map(t => t.function.name).join(', ');
+            const errorMessage = `Response contains tool(s) not in request: ${invalidToolNames}`;
+            logger.session?.error(errorMessage, {
+              model,
+              requestedTools: Array.from(requestedToolNames),
+              invalidTools: invalidTools.map(t => t.function.name),
+              timestamp: Date.now()
+            });
+            throw new Error(errorMessage);
+          }
+        }
+        
         return generateResponse;
       }
     } catch (error: any) {

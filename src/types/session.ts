@@ -30,6 +30,7 @@ export interface NonStreamingResponse {
     };
   }>;
   finishReason?: 'stop' | 'length' | 'tool_calls' | 'content_filter';
+  reasoning?: string;
 }
 
 export interface TokenStreamChunk {

@@ -2,7 +2,7 @@ import { pipeline, TextStreamer, env as hfEnv, DataType, TextGenerationPipeline,
 import { InboundMessage, OutboundMessage } from '../types/worker';
 import { logger } from '../utils/logger';
 import { InitArgs, GenerateArgs } from '../types/worker';
-import { MessageTransformer, getMessageTransformer } from '../config/model-registry';
+import { MessageTransformer, getMessageTransformer } from '../providers/device-model-config';
 
 let generator: TextGenerationPipeline | null = null;
 let disposed = false;
