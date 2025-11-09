@@ -1,5 +1,5 @@
 import type { GenerateArgs } from '../types/worker';
-import type { ModelResponse, TokenStreamChunk } from '../types/session';
+import type { ModelResponse, TokenStreamChunk, NonStreamingResponse } from '../types/session';
 import {
   CloudProviderConfig,
   InferenceProvider,
@@ -11,7 +11,7 @@ import {
 } from '../types/provider';
 import { EventEmitter } from '../utils/event-emitter';
 import { logger } from '../utils/logger';
-import { transformMessagesToProvider } from './message-transformer';
+import { transformMessagesToProvider, transformResponse } from './transformation';
 
 /**
  * Cloud-based inference provider using HTTP proxy
@@ -206,15 +206,19 @@ export class CloudProvider implements InferenceProvider {
       const contentType = response.headers.get('Content-Type') || '';
       const isStreaming = contentType.includes('text/event-stream');
 
+      // Handle non-streaming responses directly
+      if (!isStreaming) {
+        return await this.handleNonStreamingResponse(response, startTime);
+      }
+
+      // Handle streaming responses
+      const stream = this.handleStreamingResponse(response, startTime);
+
       // Check if non-streaming is requested
       if (args.stream === false) {
         // Aggregate chunks into complete response
         let fullContent = '';
         let tokenCount = 0;
-
-        const stream = isStreaming
-          ? this.handleStreamingResponse(response, startTime)
-          : this.handleNonStreamingResponse(response, startTime);
 
         for await (const chunk of stream) {
           if (!chunk.isLast) {
@@ -235,10 +239,6 @@ export class CloudProvider implements InferenceProvider {
       }
 
       // Return streaming response (default)
-      const stream = isStreaming
-        ? this.handleStreamingResponse(response, startTime)
-        : this.handleNonStreamingResponse(response, startTime);
-
       return {
         type: 'streaming',
         stream
@@ -367,36 +367,101 @@ export class CloudProvider implements InferenceProvider {
   /**
    * Handle non-streaming JSON responses
    */
-  private async *handleNonStreamingResponse(
+  private async handleNonStreamingResponse(
     response: Response,
     startTime: number
-  ): AsyncIterable<TokenStreamChunk> {
+  ): Promise<NonStreamingResponse> {
     const data = await response.json();
     const firstTokenTime = Date.now();
 
     logger.cloudProvider?.debug('Received non-streaming response', {
       model: this.config.model,
+      hasOutput: !!data.output,
       hasChoices: !!data.choices,
       hasContent: !!(data.choices?.[0]?.message?.content)
     });
 
     // Handle different provider response formats
     let content = '';
+    let usage = undefined;
+    let toolCalls = undefined;
+    let finishReason = undefined;
     
-    switch (this.config.modelProvider) {
-      case 'openai':
-        content = data.choices?.[0]?.message?.content || '';
-        break;
-      case 'anthropic':
-        content = data.content?.[0]?.text || '';
-        break;
-      default:
-        // Generic format fallback
-        content = data.content || data.message || data.text || '';
-        break;
+    // Check if this is OpenAI Response API format (has 'output' field)
+    if (this.config.modelProvider === 'openai' && data.output) {
+      logger.cloudProvider?.debug('Using OpenAI Response API format transformation', {
+        model: this.config.model,
+        outputItems: data.output.length
+      });
+
+      // Use transformResponse to extract messages from Response API format
+      const messages = transformResponse(data, this.config.modelProvider);
+      
+      // Extract content from transformed messages
+      if (messages.length > 0) {
+        const message = messages[0];
+        if (message && typeof message.content === 'string') {
+          content = message.content;
+        } else if (message && Array.isArray(message.content)) {
+          // Concatenate text content
+          content = message.content
+            .filter(c => c.type === 'text')
+            .map(c => (c as any).text)
+            .join('');
+          
+          // Extract tool calls if present
+          const toolUseItems = message.content.filter(c => c.type === 'tool_use');
+          if (toolUseItems.length > 0) {
+            toolCalls = toolUseItems.map(item => ({
+              id: (item as any).id,
+              type: 'function' as const,
+              function: {
+                name: (item as any).name,
+                arguments: JSON.stringify((item as any).arguments)
+              }
+            }));
+          }
+        }
+      }
+
+      // Extract usage from Response API format
+      if (data.usage) {
+        usage = {
+          promptTokens: data.usage.input_tokens || 0,
+          completionTokens: data.usage.output_tokens || 0,
+          totalTokens: data.usage.total_tokens || 0
+        };
+      }
+
+      // Extract finish reason if available
+      if (data.output?.[0]?.status) {
+        finishReason = data.output[0].status === 'completed' ? 'stop' : data.output[0].status;
+      }
+    }
+    // Handle Chat Completions API format (has 'choices' field)
+    else if (this.config.modelProvider === 'openai' && data.choices) {
+      logger.cloudProvider?.debug('Using OpenAI Chat Completions format', {
+        model: this.config.model
+      });
+
+      content = data.choices?.[0]?.message?.content || '';
+      usage = data.usage ? {
+        promptTokens: data.usage.prompt_tokens || 0,
+        completionTokens: data.usage.completion_tokens || 0,
+        totalTokens: data.usage.total_tokens || 0
+      } : undefined;
+      toolCalls = data.choices?.[0]?.message?.tool_calls;
+      finishReason = data.choices?.[0]?.finish_reason;
+    }
+    // Generic format fallback
+    else {
+      content = data.content || data.message || data.text || '';
+      usage = data.usage;
+      toolCalls = data.tool_calls;
+      finishReason = data.finish_reason;
     }
 
-    if (!content) {
+    if (!content && !toolCalls) {
       logger.cloudProvider?.error('Unexpected response format', {
         model: this.config.model,
         responseKeys: Object.keys(data)
@@ -404,13 +469,12 @@ export class CloudProvider implements InferenceProvider {
       throw new ProviderError('Unexpected non-streaming response format', 'INVALID_RESPONSE_FORMAT', 500);
     }
 
-    // Yield the complete content as a single chunk
-    yield {
-      token: content,
-      tokenId: 0,
-      isFirst: true,
-      isLast: true,
-      ttfbMs: firstTokenTime - startTime
+    return {
+      type: 'complete',
+      content,
+      ...(usage && { usage }),
+      ...(toolCalls && { toolCalls }),
+      ...(finishReason && { finishReason })
     };
   }
 

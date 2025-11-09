@@ -453,8 +453,8 @@
             description: "Extract key information from user's prompt",
             prompt: "From userMessage, extract city, date (YYYY-MM-DD or 'today'), budget ('free'|'cheap'|'any'), and an optional timeWindow { start:'HH:MM', end:'HH:MM' }.",
             temperature: 0.1,
-            // model: "gpt-5-nano",
-            model: "onnx-community/Qwen3-0.6B-ONNX",
+            model: "gpt-5-nano",
+            // model: "onnx-community/Qwen3-0.6B-ONNX",
             maxAttempts: 2,
           },
           {
@@ -471,8 +471,8 @@
             description: "Fetch the weather forecast for the given city and date",
             prompt: "Use the weather_forecast tool with: 1) lat and lon from the geocode result in the previous step, 2) date from the extract-user-input step result.",
             temperature: 0.1,
-            // model: "gpt-5-nano",
-            model: "onnx-community/Qwen3-0.6B-ONNX",
+            model: "gpt-5-nano",
+            // model: "onnx-community/Qwen3-0.6B-ONNX",
             toolChoice: ["weather_forecast"],
             maxAttempts: 2,
           },
@@ -535,7 +535,7 @@
               description: "Geocode a city using server endpoint. Returns { lat, lon, resolvedName, country }.",
               parameters: {
                 type: "object",
-                properties: { 
+                properties: {
                   city: { 
                     type: "string",
                     description: "The name of the city to geocode (e.g., 'San Francisco', 'New York', 'London')"
@@ -913,7 +913,7 @@
           const agent = await createAgentSession({
             models: [
               { type: "device", model: "onnx-community/Qwen3-0.6B-ONNX", quantization: "q4f16" },
-              // { type: 'cloud',  model: 'gpt-5-nano', proxyUrl: 'http://localhost:3002/api/openai', modelProvider: 'openai' }
+              { type: 'cloud',  model: 'gpt-5-nano', proxyUrl: 'http://localhost:3002/api/openai', modelProvider: 'openai' }
             ]
           });
 

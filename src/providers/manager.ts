@@ -60,11 +60,11 @@ export class InferenceProviderManager {
         provider = new DeviceProvider(config as DeviceProviderConfig, this.eventEmitter);
         break;
       }
-      // case 'cloud': {
-      //   const { CloudProvider } = await import('./cloud');
-      //   provider = new CloudProvider(config as CloudProviderConfig, this.eventEmitter);
-      //   break;
-      // }
+      case 'cloud': {
+        const { CloudProvider } = await import('./cloud');
+        provider = new CloudProvider(config as CloudProviderConfig, this.eventEmitter);
+        break;
+      }
 
       default:
         throw new ProviderConfigurationError(
