@@ -120,7 +120,7 @@ export class StepExecutor {
       messages: memoryMessages,
       enable_thinking: step.enableThinking ?? false,
       temperature: step.temperature ?? 0.1,
-      max_new_tokens: step.maxTokens ?? 1024,
+      max_new_tokens: step.maxTokens ?? 2048,
       stream: false,
     };
     if (toolsAvailable.length > 0) {

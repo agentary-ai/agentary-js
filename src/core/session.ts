@@ -77,7 +77,8 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
 
       // Disable streaming for tool use
       if (args.tools) args.stream = false;
-          
+      
+      logger.session?.debug('Generating response', { args });
       const generateResponse =await provider.generate(args);
 
       // TODO: Throw error if tool calling not supported by model
@@ -95,15 +96,15 @@ export async function createSession(args: CreateSessionArgs): Promise<Session> {
       } else {
         console.log('Complete response', generateResponse);
         if (args.tools && !generateResponse.toolCalls) {
-            const errorMessage = 'Tool calls not found in response';
-            logger.session?.error(errorMessage, {
-              model,
-              args,
-              generateResponse,
-              timestamp: Date.now()
-            });
-            throw new Error(errorMessage);
-          }
+          const errorMessage = 'Tool calls not found in response';
+          logger.session?.error(errorMessage, {
+            model,
+            args,
+            generateResponse,
+            timestamp: Date.now()
+          });
+          throw new Error(errorMessage);
+        }
           
         // Validate that all tools in response were in the original request
         if (args.tools && generateResponse.toolCalls) {

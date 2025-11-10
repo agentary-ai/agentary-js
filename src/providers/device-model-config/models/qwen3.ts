@@ -2,6 +2,7 @@ import { Message as HFMessage } from '@huggingface/transformers';
 import { Message } from '../../../types/worker';
 import { NonStreamingResponse } from '../../../types/session';
 import { ModelConfig } from '../types';
+import { logger } from '../../../utils/logger';
 
 /**
  * Qwen3 0.6B Model Configuration
@@ -53,7 +54,7 @@ export const qwen3_06b: ModelConfig = {
   },
 
   responseParser: (content: string) => {
-    const toolCallRegex = /<tool_call>\s*\n([\s\S]*?)\n<\/tool_call>/g;
+    const toolCallRegex = /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g;
     const thinkRegex = /<think>([\s\S]*?)<\/think>/g;
     const toolCalls: NonStreamingResponse['toolCalls'] = [];
     let cleanContent = content;
@@ -91,6 +92,42 @@ export const qwen3_06b: ModelConfig = {
         cleanContent = cleanContent.replace(match[0], '').trim();
       } catch (e) {
         // Invalid JSON, keep in content
+      }
+    }
+    
+    // Check for incomplete tool calls (opening tag without closing tag)
+    // This can happen when max_new_tokens is reached before completion
+    const incompleteRegex = /<tool_call>\s*([\s\S]+?)$/;
+    const incompleteMatch = incompleteRegex.exec(cleanContent);
+    if (incompleteMatch) {
+      try {
+        const jsonStr = incompleteMatch[1].trim();
+        const toolCallJson = JSON.parse(jsonStr);
+        
+        // JSON is valid! This is likely a truncated response
+        logger.agent?.warn('Detected truncated tool call - closing tag missing', {
+          toolName: toolCallJson.name,
+          hint: 'Consider increasing maxTokens for this workflow step'
+        });
+        
+        toolCalls.push({
+          id: `call_${Date.now()}_${toolCalls.length}`,
+          type: 'function',
+          function: {
+            name: toolCallJson.name,
+            arguments: typeof toolCallJson.arguments === 'string' 
+              ? toolCallJson.arguments 
+              : JSON.stringify(toolCallJson.arguments)
+          }
+        });
+        
+        // Remove incomplete tool call from content
+        cleanContent = cleanContent.replace(incompleteMatch[0], '').trim();
+      } catch (e) {
+        // JSON is invalid, likely truly incomplete - leave in content
+        logger.agent?.warn('Found incomplete tool call that cannot be parsed', {
+          error: (e as Error).message
+        });
       }
     }
     
