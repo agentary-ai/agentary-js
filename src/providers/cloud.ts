@@ -11,7 +11,7 @@ import {
 } from '../types/provider';
 import { EventEmitter } from '../utils/event-emitter';
 import { logger } from '../utils/logger';
-import { transformMessagesToProvider, transformResponse } from './transformation';
+import { transformArgs, transformResponse } from './transformation';
 
 /**
  * Cloud-based inference provider using HTTP proxy
@@ -177,18 +177,17 @@ export class CloudProvider implements InferenceProvider {
         modelProvider: this.config.modelProvider
       });
 
-      // Transform messages based on model provider
-      const messagesToSend = this.config.modelProvider
-        ? transformMessagesToProvider(args.messages, this.config.modelProvider)
-        : args.messages;
+      // Transform request for model provider (OpenAI uses Response API format)
+      const requestPayload = this.config.modelProvider === 'openai'
+        ? transformArgs(args, this.config.modelProvider)
+        : { ...args };
 
       const response = await fetch(this.config.proxyUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify({
           model: this.config.model,
-          ...args,
-          messages: messagesToSend,
+          ...requestPayload,
         }),
         signal: this.abortController.signal
       });

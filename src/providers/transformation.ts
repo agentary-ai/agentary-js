@@ -177,11 +177,18 @@ export function transformArgs(
         }
       }
       
+      // Transform tools to include type field for OpenAI
+      const tools = generateArgs.tools?.map(tool => ({
+        type: 'function' as const,
+        ...tool
+      }));
+
       // Return full OpenAI request payload
       return {
         ...generateArgs,
         input: inputItems,
-        messages: undefined // Remove native messages field
+        messages: undefined, // Remove native messages field
+        tools // Override with transformed tools (or undefined if no tools)
       };
     }
     

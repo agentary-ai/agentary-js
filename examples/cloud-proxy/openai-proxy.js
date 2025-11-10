@@ -65,13 +65,13 @@ function transformTools(tools) {
 /**
  * Build OpenAI API request object
  */
-function buildOpenAIRequest({ model, messages, max_tokens, temperature, top_p, tools, tool_choice, stream = true }) {
+function buildOpenAIRequest({ model, input, max_tokens, temperature, top_p, tools, tool_choice, stream = true }) {
   // const transformedMessages = transformMessages(messages);
   const transformedTools = transformTools(tools);
 
   return {
     model,
-    input: messages,
+    input,
     stream,
     ...(max_tokens && { max_tokens }),
     // ...(temperature !== undefined && { temperature }),
@@ -176,14 +176,14 @@ function handleProxyError(error, res) {
  */
 app.post('/api/openai', async (req, res) => {
   try {
-    const { model, messages, stream = true } = req.body;
+    const { model, input, stream = true } = req.body;
 
     console.log(`[${new Date().toISOString()}] Request for model: ${model} (streaming: ${stream})`);
 
     // Validate required fields
-    if (!model || !messages) {
+    if (!model || !input) {
       return res.status(400).json({
-        error: 'Missing required fields: model and messages are required'
+        error: 'Missing required fields: model and input are required'
       });
     }
 

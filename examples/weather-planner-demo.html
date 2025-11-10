@@ -462,7 +462,7 @@
             id: "get-geocode-city",
             prompt: "Use the geocode tool to get coordinates for the city.",
             temperature: 0.1,
-            // model: "gpt-5-nano",
+            // model: "gpt-5-mini",
             model: "onnx-community/Qwen3-0.6B-ONNX",
             toolChoice: ["geocode"],
             maxAttempts: 2,
@@ -472,7 +472,7 @@
             description: "Fetch the weather forecast for the given city and date",
             prompt: "Use the weather_forecast tool with: 1) lat and lon from the geocode result in the previous step, 2) date from the extract-user-input step result.",
             temperature: 0.1,
-            // model: "gpt-5-nano",
+            // model: "gpt-5-mini",
             model: "onnx-community/Qwen3-0.6B-ONNX",
             toolChoice: ["weather_forecast"],
             maxAttempts: 2,
@@ -482,7 +482,7 @@
             description: "Determine whether to plan indoor or outdoor activities based on the weather forecast",
             prompt: "Use the determine_activity_type tool to analyze the weather forecast from the 'get-weather-forecast' step result. Pass the entire forecast object to the tool.",
             temperature: 0.1,
-            // model: "gpt-5-nano",
+            // model: "gpt-5-mini",
             model: "onnx-community/Qwen3-0.6B-ONNX",
             toolChoice: ["determine_activity_type"],
             maxAttempts: 2,
@@ -490,9 +490,15 @@
           {
             id: 'poi-search',
             description: "Find nearby POIs based on the weather forecast and activity type",
-            prompt: "Use the places_search tool to find nearby POIs. Use: 1) lat and lon from the 'get-geocode-city' step result, 2) activity type from 'determine-activity-type' result to choose categories. " +
-              "For 'outdoor' type: use categories ['parks', 'hiking', 'beaches', 'outdoor recreation']. " +
-              "For 'indoor' type: use categories ['museums', 'shopping', 'restaurants', 'entertainment'].",
+            prompt: "Use the places_search tool to find nearby POIs.\n\n" +
+              "REQUIRED PARAMETERS:\n" +
+              "1. lat: Extract the numeric 'lat' value from the 'get-geocode-city' function_call_output (e.g., if result is {\"lat\":37.7749,...}, use lat: 37.7749)\n" +
+              "2. lon: Extract the numeric 'lon' value from the 'get-geocode-city' function_call_output (e.g., if result is {\"lon\":-122.4194,...}, use lon: -122.4194)\n" +
+              "3. categories: Look at the 'activityType' from 'determine-activity-type' function_call_output.\n" +
+              "   - If activityType is 'outdoor', use: [\"parks\", \"hiking\", \"beaches\", \"outdoor recreation\"]\n" +
+              "   - If activityType is 'indoor', use: [\"museums\", \"shopping\", \"restaurants\", \"entertainment\"]\n\n" +
+              "Example: If geocode returned {\"lat\":37.7749,\"lon\":-122.4194} and activityType is \"outdoor\", call:\n" +
+              "places_search({\"lat\": 37.7749, \"lon\": -122.4194, \"categories\": [\"parks\", \"hiking\", \"beaches\", \"outdoor recreation\"]})",
             temperature: 0.1,
             model: "gpt-5-nano",
             // model: "onnx-community/Qwen3-0.6B-ONNX",
@@ -502,17 +508,30 @@
           {
             id: 'filter-pois-by-budget',
             description: "Filter and rank the POIs by budget and distance practicality",
-            prompt: "Use the budget_filter to filter and rank the POIs by budget and distance practicality.",
+            prompt: "Use the budget_filter tool to filter and rank POIs.\n\n" +
+              "REQUIRED PARAMETERS:\n" +
+              "1. budget: Extract the 'budget' value from 'extract-user-input' step (will be 'free', 'cheap', or 'any')\n" +
+              "2. pois: Copy the COMPLETE JSON array from 'poi-search' function_call_output. This should be an array of objects.\n\n" +
+              "CRITICAL: The 'pois' parameter must be the ENTIRE array returned by places_search, not just one item.\n\n" +
+              "Example: If places_search returned [{\"name\":\"Park A\",...},{\"name\":\"Park B\",...}] and budget is \"any\", call:\n" +
+              "budget_filter({\"budget\": \"any\", \"pois\": [{\"name\":\"Park A\",...},{\"name\":\"Park B\",...}]})",
             temperature: 0.1,
-            model: "gpt-5-nano",
-            // model: "onnx-community/Qwen3-0.6B-ONNX",
+            // model: "gpt-5-nano",
+            model: "onnx-community/Qwen3-0.6B-ONNX",
             toolChoice: ["budget_filter"],
             maxAttempts: 2,
           },
           {
             id: 'generate-itinerary',
             description: "Generate an itinerary with start/end times",
-            prompt: "Use the calendar_events tool to produce an itinerary. Use: 1) the filtered POIs from 'filter-pois-by-budget' step result, 2) time window from 'extract-user-input' step (if available).",
+            prompt: "Use the calendar_events tool to create a scheduled itinerary.\n\n" +
+              "REQUIRED PARAMETERS:\n" +
+              "1. date: Extract the 'date' value from 'extract-user-input' step (format: YYYY-MM-DD)\n" +
+              "2. shortlist: Copy the COMPLETE JSON array from 'filter-pois-by-budget' function_call_output. This is an array of POI objects.\n" +
+              "3. timeWindow: Extract the 'timeWindow' object from 'extract-user-input' step if present (has 'start' and 'end' properties)\n\n" +
+              "CRITICAL: The 'shortlist' parameter must be the ENTIRE array from filter-pois-by-budget, not empty or partial.\n\n" +
+              "Example: If filter-pois-by-budget returned [{\"name\":\"Golden Gate Park\",\"durationMin\":120,...}], date is \"2025-11-10\", and timeWindow is {\"start\":\"09:00\",\"end\":\"17:00\"}, call:\n" +
+              "calendar_events({\"date\": \"2025-11-10\", \"timeWindow\": {\"start\": \"09:00\", \"end\": \"17:00\"}, \"shortlist\": [{\"name\":\"Golden Gate Park\",\"durationMin\":120,...}]})",
             temperature: 0.1,
             model: "gpt-5-nano",
             // model: "onnx-community/Qwen3-0.6B-ONNX",
