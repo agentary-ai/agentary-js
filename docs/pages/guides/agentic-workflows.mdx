@@ -17,47 +17,50 @@ Agentic workflows enable your AI to:
 import { createAgentSession } from 'agentary-js';
 
 const agent = await createAgentSession({
-  models: {
-    chat: {
-      name: 'onnx-community/gemma-3-270m-it-ONNX',
-      quantization: 'q4'
+  models: [
+    {
+      type: 'device',
+      model: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4',
+      engine: 'webgpu'
     },
-    tool_use: {
-      name: 'onnx-community/Qwen2.5-0.5B-Instruct',
-      quantization: 'q4'
+    {
+      type: 'device',
+      model: 'onnx-community/Qwen2.5-0.5B-Instruct',
+      quantization: 'q4',
+      engine: 'webgpu'
     }
-  }
+  ]
 });
 
 const workflow = {
   id: 'research-assistant',
-  name: 'Research Assistant',
   systemPrompt: 'You are a helpful research assistant.',
   maxIterations: 5,
   steps: [
     {
       id: 'understand',
       prompt: 'Break down the research topic into key questions',
+      model: 'onnx-community/Qwen2.5-0.5B-Instruct',
       maxTokens: 200,
-      generationTask: 'reasoning'
+      enableThinking: true,
     },
     {
       id: 'research',
       prompt: 'Search for information about each question',
+      model: 'onnx-community/Qwen2.5-0.5B-Instruct',
       toolChoice: ['web_search'],
-      generationTask: 'tool_use'
     },
     {
       id: 'synthesize',
       prompt: 'Analyze findings and create a summary',
+      model: 'onnx-community/gemma-3-270m-it-ONNX',
       maxTokens: 400,
-      generationTask: 'chat'
     }
   ],
   tools: [
     {
-      type: 'function',
-      function: {
+      definition: {
         name: 'web_search',
         description: 'Search the web for information',
         parameters: {
@@ -67,10 +70,10 @@ const workflow = {
           },
           required: ['query']
         },
-        implementation: async ({ query }) => {
-          // Your search implementation
-          return `Results for: ${query}`;
-        }
+      },
+      implementation: async ({ query }) => {
+        // Your search implementation
+        return `Results for: ${query}`;
       }
     }
   ]
@@ -99,21 +102,15 @@ await agent.dispose();
 ```javascript
 const workflow = {
   id: 'unique-workflow-id',
-  name: 'Human Readable Name',
-  description: 'Optional workflow description',
   systemPrompt: 'System instructions for the workflow',
-  maxIterations: 10,        // Maximum iterations before stopping
-  timeout: 30000,           // Timeout in milliseconds
+  steps: [ /* ... */ ],
   context: {                // Initial context data
     userId: '123',
     preferences: {}
   },
-  memoryConfig: {           // Memory management
-    maxTokens: 2048,
-    compressionThreshold: 0.8
-  },
-  steps: [ /* ... */ ],
-  tools: [ /* ... */ ]
+  tools: [ /* ... */ ],
+  timeout: 30000,           // Timeout in milliseconds
+  maxIterations: 10,        // Maximum iterations before stopping
 };
 ```
 
@@ -124,11 +121,11 @@ Each step defines a discrete action:
 ```javascript
 {
   id: 'analyze',
-  description: 'Analyze the user input',
   prompt: 'Examine the input and identify key topics',
   maxTokens: 300,
   temperature: 0.7,
-  generationTask: 'reasoning',
+  model: 'onnx-community/Qwen2.5-0.5B-Instruct',
+  enableThinking: true,
   toolChoice: ['search', 'calculate'],
   maxAttempts: 3
 }
@@ -139,54 +136,13 @@ Each step defines a discrete action:
 | Property | Type | Description |
 |----------|------|-------------|
 | `id` | string | Unique step identifier |
-| `description` | string | Short description for memory |
 | `prompt` | string | Instructions for this step |
 | `maxTokens` | number | Token limit for generation |
 | `temperature` | number | Sampling temperature |
-| `generationTask` | string | Task type (chat, tool_use, reasoning) |
+| `model` | string | Registered model to handle generation |
+| `enableThinking` | string | Enable thinking mode where supported |
 | `toolChoice` | string[] | Available tools for this step |
 | `maxAttempts` | number | Retry attempts on failure |
-
-## Step Types
-
-### 1. Reasoning Steps
-
-For analysis and planning:
-
-```javascript
-{
-  id: 'plan',
-  prompt: 'Create a step-by-step plan to solve this problem',
-  generationTask: 'reasoning',
-  maxTokens: 300
-}
-```
-
-### 2. Tool Use Steps
-
-For actions and data gathering:
-
-```javascript
-{
-  id: 'fetch-data',
-  prompt: 'Gather the necessary information',
-  generationTask: 'tool_use',
-  toolChoice: ['web_search', 'database_query']
-}
-```
-
-### 3. Chat Steps
-
-For final responses:
-
-```javascript
-{
-  id: 'respond',
-  prompt: 'Provide a comprehensive answer based on the findings',
-  generationTask: 'chat',
-  maxTokens: 500
-}
-```
 
 ## Memory Management
 
@@ -195,7 +151,7 @@ Workflows automatically manage conversation history:
 ```javascript
 const workflow = {
   memoryConfig: {
-    maxTokens: 2048,              // Maximum context size
+    maxTokens: 2048,              // Maximum overall context size
     compressionThreshold: 0.8,    // Compress at 80% capacity
     memory: new SlidingWindowMemory(),
     memoryCompressor: new LLMSummarization({
@@ -316,10 +272,20 @@ agent.on('workflow:complete', (event) => {
 import { createAgentSession } from 'agentary-js';
 
 const agent = await createAgentSession({
-  models: {
-    chat: { name: 'onnx-community/gemma-3-270m-it-ONNX', quantization: 'q4' },
-    tool_use: { name: 'onnx-community/Qwen2.5-0.5B-Instruct', quantization: 'q4' }
-  }
+  models: [
+    {
+      type: 'device',
+      model: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4',
+      engine: 'webgpu'
+    },
+    {
+      type: 'device',
+      model: 'onnx-community/Qwen2.5-0.5B-Instruct',
+      quantization: 'q4',
+      engine: 'webgpu'
+    }
+  ]
 });
 
 const mathWorkflow = {

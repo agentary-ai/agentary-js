@@ -2,7 +2,8 @@ import type {
   MemoryCompressor, 
   MemoryMessage, 
   MemoryMetrics, 
-  MemoryConfig 
+  MemoryConfig,
+  MemoryMessageType
 } from '../../types/memory';
 import type { Session } from '../../types/session';
 import { ContentProcessor } from '../../processing/content/processor';
@@ -10,28 +11,31 @@ import { TokenCounter } from '../../utils/token-counter';
 import { logger } from '../../utils/logger';
 import { MessageContent } from '../../types/worker';
 
-export interface LLMSummarizationConfig {
+export interface SummarizationConfig {
+  name: 'summarization';
+  model: string;
   systemPrompt?: string;
   userPromptTemplate?: string;
   temperature?: number;
   enableThinking?: boolean;
+  preserveTypes?: MemoryMessageType[];
 }
 
 /**
  * Compression strategy that uses LLM summarization to condense message history.
  * Generates concise summaries of conversation history to reduce token usage.
  */
-export class LLMSummarization implements MemoryCompressor {
-  name = 'llm-summarization';
-  
-  private config: LLMSummarizationConfig;
+export class Summarization implements MemoryCompressor {  
+  private config: SummarizationConfig;
   private contentProcessor: ContentProcessor;
   private tokenCounter: TokenCounter;
   private model: string;
   
-  constructor(model: string, config: LLMSummarizationConfig = {}) {
-    this.model = model;
+  constructor(config: SummarizationConfig) {
+    this.model = config.model;
     this.config = {
+      name: 'summarization',
+      model: config.model,
       systemPrompt: config.systemPrompt || 
         `You are summarizing a multi-step AI agent workflow conversation. ` +
         `Your task is to create a concise, data-focused summary that preserves: ` +
@@ -65,6 +69,7 @@ export class LLMSummarization implements MemoryCompressor {
   async compress(
     messages: MemoryMessage[], 
     targetTokens: number,
+    preserveTypes?: string[],
     session?: Session
   ): Promise<MemoryMessage[]> {
     if (!session) throw new Error('Session required for summarization');
@@ -113,7 +118,7 @@ export class LLMSummarization implements MemoryCompressor {
     const toSummarize: MemoryMessage[] = [];
     
     // Always preserve these message types
-    const alwaysPreserveTypes = ['system_instruction', 'user_prompt', 'summary'];
+    const alwaysPreserveTypes = this.config.preserveTypes || ['system_instruction', 'user_prompt', 'summary'];
     
     messages.forEach((msg) => {
       if (msg.metadata?.type && alwaysPreserveTypes.includes(msg.metadata.type)) {

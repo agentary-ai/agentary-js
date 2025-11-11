@@ -43,15 +43,13 @@ export {
 } from './memory';
 export type {
   MemoryMessage,
-  RetrievalOptions,
-  CompressionOptions,
   MemoryMetrics,
-  Memory,
   MemoryFormatter,
   MemoryCompressor,
   ToolResult,
   MemoryConfig,
-  LLMSummarizationConfig,
+  SummarizationConfig,
+  SlidingWindowConfig,
 } from './memory';
 
 export type { 

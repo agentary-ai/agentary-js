@@ -16,16 +16,20 @@ function createAgentSession(args?: CreateSessionArgs): Promise<AgentSession>
 import { createAgentSession } from 'agentary-js';
 
 const agent = await createAgentSession({
-  models: {
-    chat: {
-      name: 'onnx-community/gemma-3-270m-it-ONNX',
-      quantization: 'q4'
+  models: [
+    {
+      type: 'device',
+      model: 'onnx-community/gemma-3-270m-it-ONNX',
+      quantization: 'q4',
+      engine: 'webgpu'
     },
-    tool_use: {
-      name: 'onnx-community/Qwen2.5-0.5B-Instruct',
-      quantization: 'q4'
+    {
+      type: 'device',
+      model: 'onnx-community/Qwen2.5-0.5B-Instruct',
+      quantization: 'q4',
+      engine: 'webgpu'
     }
-  }
+  ]
 });
 ```
 

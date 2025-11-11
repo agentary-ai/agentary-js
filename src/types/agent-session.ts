@@ -33,14 +33,12 @@ export interface WorkflowStep {
 
 export interface Workflow {
   id: string
-  // name?: string;
-  // description?: string;
   systemPrompt?: string;
-  steps: WorkflowStep[];
   context?: Record<string, any>;
-  tools: Tool[];
   timeout?: number;
   maxIterations?: number;
+  steps: WorkflowStep[];
+  tools: Tool[];
 }
 
 export interface AgentSession extends Session {

@@ -1,10 +1,10 @@
 # Session API
 
-The Session is the main interface for text generation with language models.
+The Session is the main interface for text generation with language models. It supports both on-device (WebGPU/WASM) and cloud-based (OpenAI, Anthropic) inference providers.
 
 ## createSession
 
-Creates a new inference session.
+Creates a new inference session with one or more providers.
 
 ```typescript
 function createSession(args?: CreateSessionArgs): Promise<Session>
@@ -13,37 +13,98 @@ function createSession(args?: CreateSessionArgs): Promise<Session>
 ### Parameters
 
 ```typescript
+import { DataType, DeviceType } from '@huggingface/transformers';
+
 interface CreateSessionArgs {
-  models?: {
-    default?: Model;
-    tool_use?: Model;
-    chat?: Model;
-    reasoning?: Model;
-  };
-  engine?: 'auto' | 'webgpu' | 'wasm' | 'webnn';
-  hfToken?: string;
-  ctx?: number;
+  models?: InferenceProviderConfig[];
 }
 
-interface Model {
-  name: string;
-  quantization: 'q4' | 'q8' | 'fp16' | 'fp32';
+type InferenceProviderConfig = DeviceProviderConfig | CloudProviderConfig;
+
+interface DeviceProviderConfig {
+  type: 'device';
+  model: string;
+  quantization: DataType;  // 'q4' | 'q8' | 'fp16' | 'fp32' | 'int8' | 'uint8' | 'bnb4' | 'q4f16'
+  engine?: DeviceType;     // 'webgpu' | 'wasm' | 'auto'
+  hfToken?: string;        // Optional: for private Hugging Face models
+}
+
+interface CloudProviderConfig {
+  type: 'cloud';
+  model: string;
+  proxyUrl: string;
+  modelProvider?: 'anthropic' | 'openai';  // Optional: enables message format transformation
+  timeout?: number;                         // Default: 60000 (60 seconds)
+  maxRetries?: number;                      // Default: 3
+  headers?: Record<string, string>;
 }
 ```
 
-### Example
+### Examples
+
+#### Device Provider (On-Device Inference)
 
 ```javascript
 import { createSession } from 'agentary-js';
 
 const session = await createSession({
-  models: {
-    chat: {
-      name: 'onnx-community/gemma-3-270m-it-ONNX',
-      quantization: 'q4'
+  models: [{
+    type: 'device',
+    model: 'onnx-community/Qwen3-0.6B-ONNX',
+    quantization: 'q4',  // DataType value
+    engine: 'webgpu'     // DeviceType value
+  }]
+});
+```
+
+#### Cloud Provider (Anthropic Claude)
+
+```javascript
+const session = await createSession({
+  models: [{
+    type: 'cloud',
+    model: 'claude-3-5-sonnet-20241022',
+    proxyUrl: 'https://your-backend.com/api/anthropic',
+    modelProvider: 'anthropic',
+    timeout: 30000,
+    maxRetries: 3
+  }]
+});
+```
+
+#### Cloud Provider (OpenAI)
+
+```javascript
+const session = await createSession({
+  models: [{
+    type: 'cloud',
+    model: 'gpt-4o',
+    proxyUrl: 'https://your-backend.com/api/openai',
+    modelProvider: 'openai'
+  }]
+});
+```
+
+#### Multi-Provider Setup
+
+```javascript
+const session = await createSession({
+  models: [
+    // On-device model
+    {
+      type: 'device',
+      model: 'onnx-community/Qwen3-0.6B-ONNX',
+      quantization: 'q4',
+      engine: 'webgpu'
+    },
+    // Cloud model
+    {
+      type: 'cloud',
+      model: 'claude-3-5-sonnet-20241022',
+      proxyUrl: 'https://your-backend.com/api/anthropic',
+      modelProvider: 'anthropic'
     }
-  },
-  engine: 'webgpu'
+  ]
 });
 ```
 
@@ -51,13 +112,13 @@ const session = await createSession({
 
 ### createResponse
 
-Generate text with streaming output.
+Generate text with the specified model.
 
 ```typescript
 createResponse(
-  args: GenerateArgs,
-  generationTask?: GenerationTask
-): AsyncIterable<TokenStreamChunk>
+  modelId: string,
+  args: GenerateArgs
+): Promise<ModelResponse>
 ```
 
 #### Parameters
@@ -65,7 +126,6 @@ createResponse(
 ```typescript
 interface GenerateArgs {
   messages: Message[];
-  model?: Model;
   max_new_tokens?: number;
   tools?: Tool[];
   temperature?: number;
@@ -76,13 +136,18 @@ interface GenerateArgs {
   seed?: number;
   deterministic?: boolean;
 }
-
-type GenerationTask = 'chat' | 'tool_use' | 'reasoning';
 ```
 
 #### Returns
 
 ```typescript
+type ModelResponse = StreamingResponse | NonStreamingResponse;
+
+interface StreamingResponse {
+  type: 'streaming';
+  stream: AsyncIterable<TokenStreamChunk>;
+}
+
 interface TokenStreamChunk {
   token: string;
   tokenId: number;
@@ -91,25 +156,100 @@ interface TokenStreamChunk {
   ttfbMs?: number;
   tokensPerSecond?: number;
 }
+
+interface NonStreamingResponse {
+  type: 'complete';
+  content: string;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  toolCalls?: Array<{
+    id: string;
+    type: 'function';
+    function: {
+      name: string;
+      arguments: string;
+    };
+  }>;
+  finishReason?: 'stop' | 'length' | 'tool_calls' | 'content_filter';
+  reasoning?: string;
+}
 ```
 
-#### Example
+#### Examples
+
+##### Streaming Response (Device Provider)
 
 ```javascript
-for await (const chunk of session.createResponse({
+const response = await session.createResponse('onnx-community/Qwen3-0.6B-ONNX', {
   messages: [
     { role: 'user', content: 'Hello!' }
   ],
   temperature: 0.7,
   max_new_tokens: 200
-})) {
-  console.log(chunk.token);
+});
+
+if (response.type === 'streaming') {
+  for await (const chunk of response.stream) {
+    console.log(chunk.token);
+  }
 }
+```
+
+##### Non-Streaming Response (Cloud Provider)
+
+```javascript
+const response = await session.createResponse('claude-3-5-sonnet-20241022', {
+  messages: [
+    { role: 'user', content: 'Explain quantum computing' }
+  ]
+});
+
+if (response.type === 'complete') {
+  console.log(response.content);
+  console.log('Tokens used:', response.usage?.totalTokens);
+}
+```
+
+##### Handling Both Response Types
+
+```javascript
+const response = await session.createResponse(modelId, { messages });
+
+if (response.type === 'streaming') {
+  for await (const chunk of response.stream) {
+    process.stdout.write(chunk.token);
+  }
+} else {
+  console.log(response.content);
+}
+```
+
+### registerModels
+
+Register additional providers after session creation.
+
+```typescript
+registerModels(models: InferenceProviderConfig[]): Promise<void>
+```
+
+#### Example
+
+```javascript
+// Add a cloud provider to an existing session
+await session.registerModels([{
+  type: 'cloud',
+  model: 'gpt-4o',
+  proxyUrl: 'https://your-backend.com/api/openai',
+  modelProvider: 'openai'
+}]);
 ```
 
 ### dispose
 
-Clean up session resources.
+Clean up session resources and terminate all providers.
 
 ```typescript
 dispose(): Promise<void>
@@ -154,7 +294,17 @@ off(eventType: string | '*', handler: EventHandler): void
 ```typescript
 interface Message {
   role: 'user' | 'assistant' | 'system';
-  content: string;
+  content: string | MessageContent[];
+}
+
+interface MessageContent {
+  type: 'text' | 'tool_use' | 'tool_result';
+  text?: string;
+  id?: string;
+  name?: string;
+  arguments?: Record<string, any>;
+  tool_use_id?: string;
+  result?: any;
 }
 ```
 
@@ -176,17 +326,50 @@ interface Tool {
 }
 ```
 
-### Model
+### Provider Errors
 
 ```typescript
-interface Model {
-  name: string;
-  quantization: 'q4' | 'q8' | 'fp16' | 'fp32';
+class ProviderError extends Error {
+  code: string;
+  statusCode?: number;
+}
+
+class ProviderConfigurationError extends ProviderError {}
+class ProviderNetworkError extends ProviderError {}
+class ProviderTimeoutError extends ProviderError {}
+class ProviderAPIError extends ProviderError {
+  statusCode: number;
+}
+```
+
+#### Example: Error Handling
+
+```javascript
+import { 
+  ProviderConfigurationError,
+  ProviderTimeoutError,
+  ProviderNetworkError,
+  ProviderAPIError
+} from 'agentary-js';
+
+try {
+  const response = await session.createResponse(modelId, args);
+} catch (error) {
+  if (error instanceof ProviderConfigurationError) {
+    console.error('Invalid configuration:', error.message);
+  } else if (error instanceof ProviderTimeoutError) {
+    console.error('Request timeout');
+  } else if (error instanceof ProviderNetworkError) {
+    console.error('Network error:', error.message);
+  } else if (error instanceof ProviderAPIError) {
+    console.error('API error:', error.statusCode);
+  }
 }
 ```
 
 ## See Also
 
-- [Agent Session API](/api/agent-session)
-- [Type Definitions](/api/types)
+- [Cloud Provider Guide](/guides/cloud-provider)
+- [Model Support](/MODEL-SUPPORT)
+- [Agent Session API](/api-reference/agent-session)
 - [Quick Start Guide](/getting-started/quick-start)

@@ -28,28 +28,31 @@ export class TokenCounter {
       totalChars += 4; 
       
       // Account for message content
-      totalChars += message.content.length;
-      
-      // Account for tool_calls if present
-      if (message.tool_calls && message.tool_calls.length > 0) {
-        for (const toolCall of message.tool_calls) {
-          // Tool call id
-          totalChars += toolCall.id.length;
-          // Tool call type
-          totalChars += toolCall.type.length;
-          // Function name
-          totalChars += toolCall.function.name.length;
-          // Function arguments (serialize to JSON for length estimate)
-          totalChars += JSON.stringify(toolCall.function.arguments).length;
-          // Overhead for tool call structure
-          totalChars += 20;
+      if (typeof message.content === 'string') {
+        totalChars += message.content.length;
+      } else {
+        // Handle array of MessageContent
+        for (const content of message.content) {
+          if (content.type === 'text') {
+            totalChars += content.text.length;
+          } else if (content.type === 'tool_use') {
+            // Tool use id
+            totalChars += content.id.length;
+            // Tool name
+            totalChars += content.name.length;
+            // Tool arguments (serialize to JSON for length estimate)
+            totalChars += JSON.stringify(content.arguments).length;
+            // Overhead for tool use structure
+            totalChars += 20;
+          } else if (content.type === 'tool_result') {
+            // Tool use id
+            totalChars += content.tool_use_id.length;
+            // Result content
+            totalChars += content.result.length;
+            // Overhead for tool result structure
+            totalChars += 15;
+          }
         }
-      }
-      
-      // Account for tool_call_id if present
-      if (message.tool_call_id) {
-        totalChars += message.tool_call_id.length;
-        totalChars += 10; // Overhead for field name and formatting
       }
       
       // Account for message separators/formatting
@@ -70,23 +73,24 @@ export class TokenCounter {
     totalChars += 4;
     
     // Account for content
-    totalChars += message.content.length;
-    
-    // Account for tool_calls if present
-    if (message.tool_calls && message.tool_calls.length > 0) {
-      for (const toolCall of message.tool_calls) {
-        totalChars += toolCall.id.length;
-        totalChars += toolCall.type.length;
-        totalChars += toolCall.function.name.length;
-        totalChars += JSON.stringify(toolCall.function.arguments).length;
-        totalChars += 20; // Overhead for tool call structure
+    if (typeof message.content === 'string') {
+      totalChars += message.content.length;
+    } else {
+      // Handle array of MessageContent
+      for (const content of message.content) {
+        if (content.type === 'text') {
+          totalChars += content.text.length;
+        } else if (content.type === 'tool_use') {
+          totalChars += content.id.length;
+          totalChars += content.name.length;
+          totalChars += JSON.stringify(content.arguments).length;
+          totalChars += 20; // Overhead for tool use structure
+        } else if (content.type === 'tool_result') {
+          totalChars += content.tool_use_id.length;
+          totalChars += content.result.length;
+          totalChars += 15; // Overhead for tool result structure
+        }
       }
-    }
-    
-    // Account for tool_call_id if present
-    if (message.tool_call_id) {
-      totalChars += message.tool_call_id.length;
-      totalChars += 10; // Overhead for field name and formatting
     }
     
     // Account for formatting

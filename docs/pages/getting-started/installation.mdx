@@ -8,10 +8,12 @@ npm install agentary-js
 
 ## Requirements
 
+### For Device Provider (On-Device Inference)
+
 - Node.js 18 or higher
 - Modern browser with WebGPU or WebAssembly support
 
-## Browser Support
+#### Browser Support
 
 | Browser | WebGPU | WebAssembly |
 |---------|--------|-------------|
@@ -20,22 +22,71 @@ npm install agentary-js
 | Firefox (with flag) | ⚠️ | ✅ |
 | Safari | Coming soon | ✅ |
 
-## Minimum Hardware Requirements
+#### Minimum Hardware
 
 - **RAM**: 4GB recommended for small models (270M-500M parameters)
 - **GPU**: Optional but recommended for WebGPU acceleration
 - **Storage**: Varies by model (typically 100MB-500MB per quantized model)
 
+### For Cloud Provider (Cloud Inference)
+
+- A backend server to proxy API requests
+- API keys from cloud providers:
+  - [Anthropic API Key](https://console.anthropic.com/) for Claude models
+  - [OpenAI API Key](https://platform.openai.com/) for GPT models
+
+**Cloud Provider Setup:**
+
+1. Set up a proxy server (see [Cloud Provider Guide](/guides/cloud-provider))
+2. Store API keys securely on your backend
+3. Configure Agentary JS to use your proxy endpoint
+
+```bash
+# Example: Install proxy dependencies
+npm install express @anthropic-ai/sdk
+# or
+npm install express openai
+```
+
 ## Verifying Installation
 
-Create a simple test file to verify the installation:
+### Test Device Provider
+
+Create a simple test file to verify device provider installation:
+
+```javascript
+import { createSession, isSupportedModel, getSupportedModelIds } from 'agentary-js';
+
+console.log('Agentary JS installed successfully!');
+console.log('Supported models:', getSupportedModelIds());
+console.log('Qwen3 supported:', isSupportedModel('onnx-community/Qwen3-0.6B-ONNX'));
+```
+
+### Test Cloud Provider
+
+Verify cloud provider connectivity:
 
 ```javascript
 import { createSession } from 'agentary-js';
 
-console.log('Agentary JS installed successfully!');
+const session = await createSession({
+  models: [{
+    type: 'cloud',
+    model: 'claude-3-5-sonnet-20241022',
+    proxyUrl: 'http://localhost:3001/api/anthropic',
+    modelProvider: 'anthropic'
+  }]
+});
+
+console.log('Cloud provider configured successfully!');
+await session.dispose();
 ```
 
 ## Next Steps
 
-Now that you have Agentary JS installed, proceed to the [Quick Start](/getting-started/quick-start) guide to create your first session.
+Now that you have Agentary JS installed:
+
+1. Choose between [on-device or cloud inference](/getting-started/quick-start)
+2. Set up a [Cloud Provider](/guides/cloud-provider) (if using cloud models)
+3. Review [Core Concepts](/getting-started/concepts) to understand the architecture
+4. Build your first application with the [Quick Start](/getting-started/quick-start) guide
