@@ -110,7 +110,7 @@ export class CloudProvider implements InferenceProvider {
         if (attempt > 0) {
           // Exponential backoff: 1s, 2s, 4s, etc.
           const delay = Math.pow(2, attempt) * 1000;
-          logger.cloudProvider?.info(`Retrying request (attempt ${attempt + 1}/${maxRetries}) after ${delay}ms`, {
+          logger.cloudProvider?.debug(`Retrying request (attempt ${attempt + 1}/${maxRetries}) after ${delay}ms`, {
             model: this.config.model
           });
           await this.sleep(delay);
@@ -162,7 +162,7 @@ export class CloudProvider implements InferenceProvider {
         ...this.config.headers
       };
 
-      logger.cloudProvider?.info('Sending request to proxy', {
+      logger.cloudProvider?.info('Sending generate request to proxy', {
         model: this.config.model,
         proxyUrl: this.config.proxyUrl,
         modelProvider: this.config.modelProvider
@@ -172,6 +172,8 @@ export class CloudProvider implements InferenceProvider {
       const requestPayload = this.config.modelProvider === 'openai'
         ? transformArgs(args, this.config.modelProvider)
         : { ...args };
+
+      logger.cloudProvider?.verbose('Generate request payload', { payload: requestPayload });
 
       const response = await fetch(this.config.proxyUrl, {
         method: 'POST',
@@ -366,10 +368,8 @@ export class CloudProvider implements InferenceProvider {
 
     logger.cloudProvider?.debug('Received non-streaming response', {
       model: this.config.model,
-      hasOutput: !!data.output,
-      hasChoices: !!data.choices,
-      hasContent: !!(data.choices?.[0]?.message?.content)
     });
+    logger.cloudProvider?.verbose('Response data', { data });
 
     // Handle different provider response formats
     let content = '';

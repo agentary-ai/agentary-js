@@ -79,16 +79,17 @@ export class Summarization implements MemoryCompressor {
     
     logger.agent.debug('Starting message summarization', {
       messageCount: messages.length,
-      messages,
       targetTokens
     });
+    logger.agent.verbose('Starting message summarization', { messages });
     
     const { preserved, toSummarize } = this.partitionMessages(messages);
     
     logger.agent.debug('Partitioned messages', {
-      preserved,
-      toSummarize
+      preservedCount: preserved.length,
+      toSummarizeCount: toSummarize.length
     });
+    logger.agent.verbose('Partitioned messages', { preserved, toSummarize });
 
     try {
       // 3. Generate summary message
@@ -145,8 +146,9 @@ export class Summarization implements MemoryCompressor {
       // Group messages by workflow step for better summarization
       const stepGroups = this.groupByStep(toSummarize);
       logger.agent.debug('Step groups for summarization', {
-        stepGroups
+        groupCount: stepGroups.length
       });
+      logger.agent.verbose('Step groups for summarization', { stepGroups });
       
       // Format for summarization
       const userPrompt = allMessages.find(m => m.metadata?.type === 'user_prompt')?.content || '';
@@ -215,30 +217,6 @@ export class Summarization implements MemoryCompressor {
       throw error;
     }
   }
-  
-  // shouldCompress(metrics: MemoryMetrics, config: MemoryConfig): boolean {
-  //   const threshold = config.compressionThreshold ?? 0.8;
-  //   const maxTokens = config.maxTokens ?? 512;
-  //   const shouldCompress = metrics.estimatedTokens > maxTokens * threshold;
-    
-  //   if (shouldCompress) {
-  //     logger.agent.debug('Compression threshold reached', {
-  //       currentTokens: metrics.estimatedTokens,
-  //       maxTokens,
-  //       threshold,
-  //       utilizationPercent: (metrics.estimatedTokens / maxTokens) * 100
-  //     });
-  //   } else {
-  //     logger.agent.debug('Compression threshold not reached', {
-  //       currentTokens: metrics.estimatedTokens,
-  //       maxTokens,
-  //       threshold,
-  //       utilizationPercent: (metrics.estimatedTokens / maxTokens) * 100
-  //     });
-  //   }
-    
-  //   return shouldCompress;
-  // }
   
   /**
    * Group messages by workflow step for structured summarization

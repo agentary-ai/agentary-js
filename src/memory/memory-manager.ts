@@ -92,6 +92,7 @@ export class MemoryManager {
     }));
 
     await this.messages.push(...messages);
+    logger.agent.verbose('Messages added to memory', { messages });
     
     if (!skipCompression) {
       const beforeCount = this.messages.length;
@@ -153,18 +154,10 @@ export class MemoryManager {
    * Rollback to a previously created checkpoint
    * 
    * @param checkpoint - The ID of the checkpoint
+   * @deprecated Use rollbackToCheckpoint() instead
    */
   rollback(checkpoint: string): void {
-    const checkpointMessages = this.checkpoints.get(checkpoint);
-    if (checkpointMessages) {
-      this.messages = [...checkpointMessages];
-      logger.agent.debug('Rolled back to checkpoint', { 
-        checkpoint, 
-        messageCount: this.messages.length 
-      });
-    } else {
-      logger.agent.warn('Checkpoint not found', { checkpoint });
-    }
+    this.rollbackToCheckpoint(checkpoint);
   }
   
   /**
@@ -255,9 +248,7 @@ export class MemoryManager {
     
     if (this.isNearLimit()) {
       if (this.memoryCompressor) {
-        // logger.agent.debug('Using memory compressor', {
-        //   compressor: this.memoryCompressor.name
-        // });
+        logger.agent.debug('Using memory compressor');
         try {
           const compressed = await this.memoryCompressor.compress(
             this.messages,

@@ -139,7 +139,7 @@ class Logger {
   }
 
   private formatLogEntry(entry: LogEntry): string {
-    const { level, category, message, data, requestId, context } = entry;
+    const { level, category, message, requestId } = entry;
     
     // Check for custom formatter
     if (this.config.customFormatters?.[category]) {
@@ -164,13 +164,8 @@ class Logger {
     
     formatted += ` ${message}`;
     
-    if (data !== undefined) {
-      formatted += ` ${JSON.stringify(data)}`;
-    }
-    
-    if (this.config.enableContextInfo && context && Object.keys(context).length > 0) {
-      formatted += ` | Context: ${JSON.stringify(context)}`;
-    }
+    // Note: data and context are now passed as separate console arguments
+    // for better formatting and interactivity in browser consoles
     
     return formatted;
   }
@@ -203,40 +198,49 @@ class Logger {
     const formatted = this.formatLogEntry(entry);
     const color = this.getLevelColor(level);
 
+    // Build additional console arguments for data and context
+    const consoleArgs: unknown[] = [];
+    if (data !== undefined) {
+      consoleArgs.push(data);
+    }
+    if (this.config.enableContextInfo && options?.context && Object.keys(options.context).length > 0) {
+      consoleArgs.push({ Context: options.context });
+    }
+
     if (this.config.enableColors && color) {
       switch (level) {
         case LogLevel.VERBOSE:
-          console.log(`%c${formatted}`, color);
+          console.log(`%c${formatted}`, color, ...consoleArgs);
           break;
         case LogLevel.DEBUG:
-          console.log(`%c${formatted}`, color);
+          console.log(`%c${formatted}`, color, ...consoleArgs);
           break;
         case LogLevel.INFO:
-          console.info(`%c${formatted}`, color);
+          console.info(`%c${formatted}`, color, ...consoleArgs);
           break;
         case LogLevel.WARN:
-          console.warn(`%c${formatted}`, color);
+          console.warn(`%c${formatted}`, color, ...consoleArgs);
           break;
         case LogLevel.ERROR:
-          console.error(`%c${formatted}`, color);
+          console.error(`%c${formatted}`, color, ...consoleArgs);
           break;
       }
     } else {
       switch (level) {
         case LogLevel.VERBOSE:
-          console.log(formatted);
+          console.log(formatted, ...consoleArgs);
           break;
         case LogLevel.DEBUG:
-          console.log(formatted);
+          console.log(formatted, ...consoleArgs);
           break;
         case LogLevel.INFO:
-          console.info(formatted);
+          console.info(formatted, ...consoleArgs);
           break;
         case LogLevel.WARN:
-          console.warn(formatted);
+          console.warn(formatted, ...consoleArgs);
           break;
         case LogLevel.ERROR:
-          console.error(formatted);
+          console.error(formatted, ...consoleArgs);
           break;
       }
     }

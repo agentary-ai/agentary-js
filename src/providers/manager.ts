@@ -52,7 +52,7 @@ export class InferenceProviderManager {
     model: string,
     config: InferenceProviderConfig,
   ): Promise<InferenceProvider> {
-    logger.inferenceProviderManager?.debug('Creating inference provider', { model, config });
+    logger.inferenceProviderManager?.debug('Creating inference provider', { model, type: config.type });
 
     let provider: InferenceProvider;
 

@@ -37,8 +37,7 @@ export class StepExecutor {
     const stepState = this.workflowStateManager.getStepState(step.id);
     
     logger.agent.debug('Executing step', { 
-      stepId: step.id,
-      toolChoice: step.toolChoice,
+      ...step,
       attempt: stepState.attempts + 1,
       maxAttempts: stepState.maxAttempts
     });
@@ -55,6 +54,7 @@ export class StepExecutor {
 
       // Generate response
       const modelResponse = await this.session.createResponse(step.model, generateArgs) as NonStreamingResponse;
+      
       logger.agent.debug('Model response received', {
         stepId: step.id,
         modelResponse,
@@ -110,6 +110,11 @@ export class StepExecutor {
     } else {
       // Filter tools by toolChoice names for tool_use tasks
       toolsAvailable = tools.filter(tool => step.toolChoice!.includes(tool.definition.name));
+      logger.agent.debug('Tools available for step', {
+        stepId: step.id,
+        toolChoice: step.toolChoice,
+        toolsAvailable: toolsAvailable.map(tool => tool.definition.name)
+      });
     }
     
     // Get messages from memory (now async)

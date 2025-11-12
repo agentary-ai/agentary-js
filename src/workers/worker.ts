@@ -14,21 +14,21 @@ function post(message: OutboundMessage) {
   (self as unknown as DedicatedWorkerGlobalScope).postMessage(message);
 }
 
-function postDebug(requestId: string, message: string, data?: unknown) {
-  const debugMessage: OutboundMessage = {
-    type: 'debug',
-    requestId,
-    args: { message, ...(data !== undefined ? { data } : {}) } as const,
-  };
-  post(debugMessage);
-  logger.worker.debug(message, data, requestId);
-}
+// function postDebug(requestId: string, message: string, data?: unknown) {
+//   const debugMessage: OutboundMessage = {
+//     type: 'debug',
+//     requestId,
+//     args: { message, ...(data !== undefined ? { data } : {}) } as const,
+//   };
+//   post(debugMessage);
+//   logger.worker.debug(message, data, requestId);
+// }
 
 async function handleInit(msg: InboundMessage) {
   if (disposed) throw new Error('Worker disposed');
   const { config } = msg.args as InitArgs;
 
-  logger.worker.debug('Initializing worker', { model:config.model, quantization:config.quantization }, msg.requestId);
+  logger.worker.debug('Initializing worker', { model:config.model, quantization:config.quantization, engine:config.engine }, msg.requestId);
 
   // Get the message transformer for this model
   try {
@@ -104,7 +104,7 @@ async function handleInit(msg: InboundMessage) {
 }
 
 async function handleGenerate(msg: InboundMessage) {
-  postDebug(msg.requestId, 'Generate request received', msg.args);
+  logger.worker.debug('Generate request received', { args: msg.args }, msg.requestId);
 
   if (!generator) throw new Error('Generator not initialized');
   if (!messageTransformer) throw new Error('Message transformer not initialized');
@@ -129,11 +129,11 @@ async function handleGenerate(msg: InboundMessage) {
 
   // Transform messages using model-specific transformer
   const tokenizerMessages: Message[] = messageTransformer(messages);
-  logger.worker.debug('Messages transformed to tokenizer format', tokenizerMessages, msg.requestId);
+  logger.worker.debug('Messages transformed to tokenizer format', { count: tokenizerMessages.length }, msg.requestId);
+  logger.worker.verbose('Messages transformed to tokenizer format', { messages: tokenizerMessages }, msg.requestId);
 
   const renderedPrompt: string = generator.tokenizer.apply_chat_template(tokenizerMessages, applyTemplateOptions) as string;
-  // TODO: Add warning if tools aren't supported in rendered prompt
-  postDebug(msg.requestId, 'Rendered chat template', renderedPrompt);
+  logger.worker.verbose('Rendered chat template', { prompt: renderedPrompt }, msg.requestId);
 
   let first = true;
   const ttfbStart = performance.now();

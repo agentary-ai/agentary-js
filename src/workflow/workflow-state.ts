@@ -51,16 +51,11 @@ export class WorkflowStateManager {
       memoryConfig
     );
 
-    logger.agent.debug('Adding initial messages to memory', {
-      workflowId: workflow.id,
-      systemPromptLength: (workflow.systemPrompt ?? WorkflowStateManager.DEFAULT_SYSTEM_PROMPT).length,
-      userPromptLength: userPrompt.length
-    });
-    
-    await this.addMessagesToMemory([
+    const initialMessages = [
       { role: 'system', content: workflow.systemPrompt ?? WorkflowStateManager.DEFAULT_SYSTEM_PROMPT, metadata: { type: 'system_instruction' } },
       { role: 'user', content: userPrompt, metadata: { type: 'user_prompt' } }
-    ]);
+    ] as MemoryMessage[];
+    await this.addMessagesToMemory(initialMessages);
 
     const steps: Record<string, StepState> = {};
     workflow.steps.forEach(step => {
@@ -223,7 +218,7 @@ export class WorkflowStateManager {
       throw new Error('State not initialized');
     }
 
-    logger.agent.debug('Finding next step', {
+    logger.agent.debug('Finding next step in workflow', {
       workflowId: this.state.workflow.id,
       iteration: this.state.iteration,
       maxIterations: this.state.maxIterations,
@@ -234,10 +229,6 @@ export class WorkflowStateManager {
 
     return this.state.workflow.steps.find((step: WorkflowStep) => {
       if (!step.id || completedSteps.has(step.id)) {
-        logger.agent.debug('Skipping step', {
-          stepId: step.id,
-          completedSteps: Array.from(completedSteps)
-        });
         return false;
       }
       
@@ -252,7 +243,7 @@ export class WorkflowStateManager {
         return false;
       }
       
-      logger.agent.debug('Returning step', {
+      logger.agent.debug('Found next step for execution', {
         stepId: step.id,
       });
       return true;

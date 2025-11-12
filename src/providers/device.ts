@@ -43,7 +43,12 @@ export class DeviceProvider implements InferenceProvider {
 
     // Create worker instance if it doesn't exist
     if (!this.workerInstance) {
-      logger.deviceProvider?.debug('Creating Web Worker', { model: this.config.model });
+      logger.deviceProvider?.debug('Creating Web Worker', { 
+        model: this.config.model, 
+        quantization: this.config.quantization, 
+        engine: this.config.engine,
+        hfToken: this.config.hfToken ? 'present' : 'missing'
+      });
 
       const worker = new Worker(
         new URL('./runtime/worker.js', import.meta.url),
@@ -166,6 +171,7 @@ export class DeviceProvider implements InferenceProvider {
   
       const stream = this.streamMessages(requestId, (msg) => {
         if (msg.type === 'chunk' && msg.args) {
+          logger.deviceProvider?.verbose('Received chunk from worker', { chunk: msg.args });
           return {
             token: msg.args.token,
             tokenId: msg.args.tokenId,
@@ -224,6 +230,7 @@ export class DeviceProvider implements InferenceProvider {
     // Return streaming response (default)
     const stream = this.streamMessages(requestId, (msg) => {
       if (msg.type === 'chunk' && msg.args) {
+        logger.deviceProvider?.verbose('Received chunk from worker', { chunk: msg.args });
         return {
           token: msg.args.token,
           tokenId: msg.args.tokenId,
