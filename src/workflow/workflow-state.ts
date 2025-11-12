@@ -39,11 +39,23 @@ export class WorkflowStateManager {
     tools: Tool[],
     memoryConfig?: MemoryConfig
   ): Promise<void> {
+    logger.agent.debug('Creating memory manager', {
+      workflowId: workflow.id,
+      hasCustomConfig: !!memoryConfig,
+      maxTokens: memoryConfig?.maxTokens
+    });
+
     // Update memory manager if workflow provides config
     this.memoryManager = new MemoryManager(
       this.session,
       memoryConfig
     );
+
+    logger.agent.debug('Adding initial messages to memory', {
+      workflowId: workflow.id,
+      systemPromptLength: (workflow.systemPrompt ?? WorkflowStateManager.DEFAULT_SYSTEM_PROMPT).length,
+      userPromptLength: userPrompt.length
+    });
     
     await this.addMessagesToMemory([
       { role: 'system', content: workflow.systemPrompt ?? WorkflowStateManager.DEFAULT_SYSTEM_PROMPT, metadata: { type: 'system_instruction' } },
@@ -71,6 +83,13 @@ export class WorkflowStateManager {
       steps,
       toolResults: {},
     };
+
+    logger.agent.info('Workflow state ready', {
+      workflowId: workflow.id,
+      stepCount: workflow.steps.length,
+      toolCount: this.state.tools.length,
+      maxIterations: this.state.maxIterations
+    });
   }
 
   /**

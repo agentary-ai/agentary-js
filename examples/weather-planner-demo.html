@@ -374,10 +374,10 @@
     </div>
 
     <script type="module">
-      import { createAgentSession, enableDebuggingMode, LLMSummarization } from '../dist/index.js';
+      import { LogLevel, setLogLevel } from '../dist/index.js';
       
       // Enable debugging mode
-      enableDebuggingMode();
+      setLogLevel(LogLevel.DEBUG);
 
       // Get DOM elements
       const cityInput = document.getElementById('city');
@@ -936,15 +936,13 @@
           updateStatus('Agent running...', 'running');
 
           const userMessage = createUserMessage();
-          const memoryConfig = {
-            maxTokens: 512,
-            memoryCompressor: new LLMSummarization({}),
-          };
           const completedSteps = new Set();
           
-          for await (const stepResult of agent.runWorkflow(userMessage, weatherActivityWorkflow, memoryConfig)) {
-            console.log(JSON.stringify(stepResult, null, 2));
-            
+          for await (const stepResult of agent.runWorkflow(userMessage, weatherActivityWorkflow, {
+            memoryCompressorConfig: {
+              name: 'sliding-window'
+            }
+          })) {
             completedSteps.add(stepResult.stepId);
             addStep(stepResult);
             

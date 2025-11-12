@@ -15,10 +15,12 @@ export class InferenceProviderManager {
   }
 
   async registerModels(models: InferenceProviderConfig[]): Promise<void> {
+    logger.inferenceProviderManager?.debug('Registering models', { modelCount: models.length });
     for (const modelConfig of models) {
       const inferenceProvider = await this.createProvider(modelConfig.model, modelConfig);
       this.models.set(modelConfig.model, inferenceProvider);
     }
+    logger.inferenceProviderManager?.info('Models registered successfully', { modelCount: models.length });
   }
 
   /**
@@ -50,7 +52,7 @@ export class InferenceProviderManager {
     model: string,
     config: InferenceProviderConfig,
   ): Promise<InferenceProvider> {
-    logger.inferenceProviderManager?.info('Creating inference provider', { model, config });
+    logger.inferenceProviderManager?.debug('Creating inference provider', { model, config });
 
     let provider: InferenceProvider;
 

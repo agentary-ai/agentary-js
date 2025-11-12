@@ -3,7 +3,7 @@ export { MemoryManager } from './memory-manager';
 
 // Memory strategies
 export { SlidingWindowMemory } from './compression-utils/sliding-window-memory';
-export { LLMSummarization } from './compression-utils/summarization';
+export { Summarization } from './compression-utils/summarization';
 
 // Memory formatters
 export { DefaultMemoryFormatter } from './formatters/default-formatter';

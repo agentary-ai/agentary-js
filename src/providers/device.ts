@@ -43,7 +43,7 @@ export class DeviceProvider implements InferenceProvider {
 
     // Create worker instance if it doesn't exist
     if (!this.workerInstance) {
-      logger.deviceProvider?.info('Creating Web Worker', { model: this.config.model });
+      logger.deviceProvider?.debug('Creating Web Worker', { model: this.config.model });
 
       const worker = new Worker(
         new URL('./runtime/worker.js', import.meta.url),
@@ -108,12 +108,12 @@ export class DeviceProvider implements InferenceProvider {
           timestamp: Date.now()
         });
 
-        logger.deviceProvider?.info('Worker initialized successfully', {
+        logger.deviceProvider?.info('Device provider initialized successfully', {
           model: this.config.model,
           duration: Date.now() - initStartTime
         });
       } catch (error: any) {
-        logger.deviceProvider?.error('Worker initialization failed', {
+        logger.deviceProvider?.error('Device provider initialization failed', {
           model: this.config.model,
           error: error.message
         });

@@ -68,6 +68,14 @@ export class WorkflowExecutor {
       });
     }
 
+    logger.agent.debug('Initializing workflow state', {
+      workflowId: workflow.id,
+      hasMemoryConfig: !!memoryConfig,
+      memoryConfigType: memoryConfig?.memoryCompressorConfig?.name,
+      maxTokens: memoryConfig?.maxTokens,
+      toolCount: this.tools.length
+    });
+
     // Initialize the workflow state
     await this.stateManager.initializeState(
       userPrompt,
@@ -127,6 +135,7 @@ export class WorkflowExecutor {
       }
 
     } catch (error: any) {
+      logger.agent.error('Workflow execution failed', { error: error.message });
       // Emit workflow error event
       if (emitter && state) {
         const event: WorkflowErrorEvent = {
@@ -162,148 +171,153 @@ export class WorkflowExecutor {
   private async* executeWorkflowSteps(
     state: WorkflowState
   ): AsyncIterable<WorkflowIterationResponse> {
-    while (state.iteration < state.maxIterations) {
-      logger.agent.debug('New workflow iteration', {
-        workflowId: state.workflow.id,
-        iteration: state.iteration,
-        maxIterations: state.maxIterations
-      });
-      
-      const currentStep = this.stateManager.findNextStep();
-      if (!currentStep) {
-        logger.agent.warn('No next available step found', { 
-          workflowId: state.workflow.id, 
-          availableSteps: state.workflow.steps.map((step: WorkflowStep) => step.id)
-        });
-        break;
-      }
-
-      if (!currentStep.id) {
-        logger.agent.error('ID undefined for workflow step', { 
-          workflowId: state.workflow.id, 
-          step: currentStep
-        });
-        break;
-      }
-
-      // Check timeout
-      if (this.stateManager.isTimeout(state)) {
-        logger.agent.warn('Workflow timeout exceeded', {
+    try {
+      while (state.iteration < state.maxIterations) {
+        logger.agent.debug('New workflow iteration', {
           workflowId: state.workflow.id,
-          stepId: currentStep.id,
-          elapsedMs: Date.now() - state.startTime,
-          timeoutMs: state.timeout
+          iteration: state.iteration,
+          maxIterations: state.maxIterations
         });
+        
+        const currentStep = this.stateManager.findNextStep();
+        if (!currentStep) {
+          logger.agent.warn('No next available step found', { 
+            workflowId: state.workflow.id, 
+            availableSteps: state.workflow.steps.map((step: WorkflowStep) => step.id)
+          });
+          break;
+        }
 
-        // Emit workflow timeout event
+        if (!currentStep.id) {
+          logger.agent.error('ID undefined for workflow step', { 
+            workflowId: state.workflow.id, 
+            step: currentStep
+          });
+          break;
+        }
+
+        // Check timeout
+        if (this.stateManager.isTimeout(state)) {
+          logger.agent.warn('Workflow timeout exceeded', {
+            workflowId: state.workflow.id,
+            stepId: currentStep.id,
+            elapsedMs: Date.now() - state.startTime,
+            timeoutMs: state.timeout
+          });
+
+          // Emit workflow timeout event
+          const emitter = this.session._eventEmitter;
+          if (emitter) {
+            emitter.emit({
+              type: 'workflow:timeout',
+              workflowId: state.workflow.id,
+              stepId: currentStep.id,
+              duration: Date.now() - state.startTime,
+              timestamp: Date.now()
+            });
+          }
+
+          yield WorkflowResultBuilder.createTimeoutResult(
+            currentStep.id,
+            state.startTime,
+          );
+          break;
+        }
+
+        // Emit step start event
+        const stepStartTime = Date.now();
         const emitter = this.session._eventEmitter;
         if (emitter) {
           emitter.emit({
-            type: 'workflow:timeout',
+            type: 'workflow:step:start',
             workflowId: state.workflow.id,
             stepId: currentStep.id,
-            duration: Date.now() - state.startTime,
+            stepPrompt: currentStep.prompt,
+            iteration: state.iteration,
+            timestamp: stepStartTime
+          });
+        }
+
+        // Execute the step
+        const stepResult = await this.stepExecutor.execute(currentStep, state.tools);
+        yield stepResult;
+
+        // Emit step complete event
+        if (emitter) {
+          emitter.emit({
+            type: 'workflow:step:complete',
+            workflowId: state.workflow.id,
+            stepId: currentStep.id,
+            success: !stepResult.error,
+            duration: Date.now() - stepStartTime,
+            hasToolCall: !!stepResult.toolCall,
+            hasError: !!stepResult.error,
             timestamp: Date.now()
           });
         }
 
-        yield WorkflowResultBuilder.createTimeoutResult(
-          currentStep.id,
-          state.startTime,
-        );
-        break;
-      }
+        // Emit retry event if step failed and will retry
+        if (stepResult.error && stepResult.metadata?.willRetry) {
+          if (emitter) {
+            emitter.emit({
+              type: 'workflow:step:retry',
+              workflowId: state.workflow.id,
+              stepId: currentStep.id,
+              attempt: stepResult.metadata.attempt || 1,
+              maxAttempts: stepResult.metadata.maxAttempts || 1,
+              reason: stepResult.error.message,
+              timestamp: Date.now()
+            });
+          }
+        }
 
-      // Emit step start event
-      const stepStartTime = Date.now();
-      const emitter = this.session._eventEmitter;
-      if (emitter) {
-        emitter.emit({
-          type: 'workflow:step:start',
-          workflowId: state.workflow.id,
+        // Cancel workflow if step failed and reached max retries
+        if (stepResult.error && stepResult.metadata?.willRetry === false) {
+          logger.agent.error('Step reached maximum retries, cancelling workflow', {
+            workflowId: state.workflow.id,
+            stepId: currentStep.id,
+            attempt: stepResult.metadata.attempt,
+            maxAttempts: stepResult.metadata.maxAttempts,
+            error: stepResult.error.message,
+            totalTimeMs: Date.now() - state.startTime
+          });
+
+          // Emit workflow cancelled event
+          if (emitter) {
+            emitter.emit({
+              type: 'workflow:cancelled',
+              workflowId: state.workflow.id,
+              stepId: currentStep.id,
+              reason: `Step ${currentStep.id} failed after ${stepResult.metadata.attempt} attempts: ${stepResult.error.message}`,
+              timestamp: Date.now()
+            });
+          }
+
+          yield WorkflowResultBuilder.createErrorResult(
+            new Error(`Workflow cancelled: Step ${currentStep.id} failed after ${stepResult.metadata.attempt} attempts - ${stepResult.error.message}`),
+            state.startTime
+          );
+          break;
+        }
+
+        logger.agent.debug('Step execution completed, continuing workflow', {
           stepId: currentStep.id,
-          stepPrompt: currentStep.prompt,
-          iteration: state.iteration,
-          timestamp: stepStartTime
-        });
-      }
-
-      // Execute the step
-      const stepResult = await this.stepExecutor.execute(currentStep, state.tools);
-      yield stepResult;
-
-      // Emit step complete event
-      if (emitter) {
-        emitter.emit({
-          type: 'workflow:step:complete',
-          workflowId: state.workflow.id,
-          stepId: currentStep.id,
-          success: !stepResult.error,
-          duration: Date.now() - stepStartTime,
-          hasToolCall: !!stepResult.toolCall,
           hasError: !!stepResult.error,
-          timestamp: Date.now()
-        });
-      }
-
-      // Emit retry event if step failed and will retry
-      if (stepResult.error && stepResult.metadata?.willRetry) {
-        if (emitter) {
-          emitter.emit({
-            type: 'workflow:step:retry',
-            workflowId: state.workflow.id,
-            stepId: currentStep.id,
-            attempt: stepResult.metadata.attempt || 1,
-            maxAttempts: stepResult.metadata.maxAttempts || 1,
-            reason: stepResult.error.message,
-            timestamp: Date.now()
-          });
-        }
-      }
-
-      // Cancel workflow if step failed and reached max retries
-      if (stepResult.error && stepResult.metadata?.willRetry === false) {
-        logger.agent.error('Step reached maximum retries, cancelling workflow', {
-          workflowId: state.workflow.id,
-          stepId: currentStep.id,
-          attempt: stepResult.metadata.attempt,
-          maxAttempts: stepResult.metadata.maxAttempts,
-          error: stepResult.error.message,
-          totalTimeMs: Date.now() - state.startTime
+          willContinue: true,
+          iteration: state.iteration
         });
 
-        // Emit workflow cancelled event
-        if (emitter) {
-          emitter.emit({
-            type: 'workflow:cancelled',
-            workflowId: state.workflow.id,
-            stepId: currentStep.id,
-            reason: `Step ${currentStep.id} failed after ${stepResult.metadata.attempt} attempts: ${stepResult.error.message}`,
-            timestamp: Date.now()
-          });
-        }
-
-        yield WorkflowResultBuilder.createErrorResult(
-          new Error(`Workflow cancelled: Step ${currentStep.id} failed after ${stepResult.metadata.attempt} attempts - ${stepResult.error.message}`),
-          state.startTime
-        );
-        break;
+        state.iteration++;    
       }
-
-      logger.agent.debug('Step execution completed, continuing workflow', {
-        stepId: currentStep.id,
-        hasError: !!stepResult.error,
-        willContinue: true,
-        iteration: state.iteration
+      logger.agent.debug('Workflow steps execution complete', {
+        workflowId: state.workflow.id,
+        iterations: state.iteration,
+        totalTimeMs: Date.now() - state.startTime
       });
 
-      state.iteration++;    
+    } catch (error: any) {
+      throw error;
     }
-    logger.agent.debug('Workflow steps execution complete', {
-      workflowId: state.workflow.id,
-      iterations: state.iteration,
-      totalTimeMs: Date.now() - state.startTime
-    });
   }
 
   /**

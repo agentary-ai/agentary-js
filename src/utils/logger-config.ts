@@ -51,6 +51,14 @@ export const LogConfigs = {
       'openaiProvider': (entry) => `🔮 [OPENAI] ${entry.message} ${entry.data ? JSON.stringify(entry.data) : ''}`,
     }
   } as Partial<LoggerConfig>,
+
+  verbose: {
+    level: LogLevel.VERBOSE,
+    enableColors: true,
+    enableTimestamps: true,
+    enableContextInfo: true,
+    maxLogHistory: 3000,
+  } as Partial<LoggerConfig>,
 };
 
 /**
@@ -89,33 +97,64 @@ export function getEnvironmentConfig(): Partial<LoggerConfig> {
 }
 
 /**
- * Enable enhanced debugging mode
- * Useful for debugging complex workflows or worker interactions
+ * Set the log level for the application
+ * 
+ * @param level - The log level to set (verbose, debug, info, warn, error, silent)
+ * 
+ * @example
+ * ```typescript
+ * import { setLogLevel } from './utils/logger-config';
+ * 
+ * setLogLevel('verbose'); // Enable verbose logging
+ * setLogLevel('debug');   // Enable debug logging
+ * setLogLevel('info');    // Enable info logging (default for production)
+ * ```
  */
-export function enableDebuggingMode(): void {
+export function setLogLevel(level: LogLevel | string): void {
+  // Import logger to avoid circular dependency issues
+  const { logger } = require('./logger');
+  
+  const parseLogLevel = (level: string): LogLevel => {
+    const normalizedLevel = level.toUpperCase();
+    switch (normalizedLevel) {
+      case 'VERBOSE': return LogLevel.VERBOSE;
+      case 'DEBUG': return LogLevel.DEBUG;
+      case 'INFO': return LogLevel.INFO;
+      case 'WARN': case 'WARNING': return LogLevel.WARN;
+      case 'ERROR': return LogLevel.ERROR;
+      case 'SILENT': case 'NONE': return LogLevel.SILENT;
+      default: return LogLevel.INFO;
+    }
+  };
+
+  const levelValue = typeof level === 'string' ? parseLogLevel(level) : level;
+  const levelStr = typeof level === 'string' ? level.toLowerCase() : LogLevel[level].toLowerCase();
+  
+  // Set in logger instance
+  logger.setLevel(levelValue);
+  
+  // Persist in browser
   if (typeof window !== 'undefined') {
-    (window as any).agentaryDebug = true;
-    localStorage.setItem('agentary_log_level', 'debug');
+    localStorage.setItem('agentary_log_level', levelStr);
   }
 }
 
 /**
- * Disable debugging mode
+ * Get the current log level
+ * 
+ * @returns The current log level enum value
+ * 
+ * @example
+ * ```typescript
+ * import { getLogLevel, LogLevel } from './utils/logger-config';
+ * 
+ * const currentLevel = getLogLevel();
+ * if (currentLevel === LogLevel.VERBOSE) {
+ *   console.log('Verbose logging is enabled');
+ * }
+ * ```
  */
-export function disableDebuggingMode(): void {
-  if (typeof window !== 'undefined') {
-    (window as any).agentaryDebug = false;
-    localStorage.removeItem('agentary_log_level');
-  }
-}
-
-/**
- * Check if debugging mode is enabled
- */
-export function isDebuggingMode(): boolean {
-  if (typeof window !== 'undefined') {
-    return !!(window as any).agentaryDebug || 
-           localStorage.getItem('agentary_log_level') === 'debug';
-  }
-  return false;
+export function getLogLevel(): LogLevel {
+  const { logger } = require('./logger');
+  return logger.getLevel();
 }

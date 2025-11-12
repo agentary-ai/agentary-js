@@ -2,7 +2,7 @@ export { createSession } from './core/session.js';
 export { createAgentSession } from './core/agent-session.js';
 
 export { logger, createLogger, setGlobalLogLevel, LogLevel } from './utils/logger';
-export { LogConfigs, getEnvironmentConfig, enableDebuggingMode, disableDebuggingMode, isDebuggingMode } from './utils/logger-config';
+export { LogConfigs, getEnvironmentConfig, setLogLevel, getLogLevel } from './utils/logger-config';
 
 // Event system exports
 export type {
@@ -38,7 +38,7 @@ export type {
 export { 
   MemoryManager,
   SlidingWindowMemory,
-  LLMSummarization,
+  Summarization,
   DefaultMemoryFormatter
 } from './memory';
 export type {

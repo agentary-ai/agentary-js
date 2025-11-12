@@ -28,7 +28,7 @@ async function handleInit(msg: InboundMessage) {
   if (disposed) throw new Error('Worker disposed');
   const { config } = msg.args as InitArgs;
 
-  logger.worker.info('Initializing worker', { model:config.model, quantization:config.quantization }, msg.requestId);
+  logger.worker.debug('Initializing worker', { model:config.model, quantization:config.quantization }, msg.requestId);
 
   // Get the message transformer for this model
   try {
@@ -90,7 +90,7 @@ async function handleInit(msg: InboundMessage) {
         }
       });
 
-      logger.worker.debug('Model loading progress', {
+      logger.worker.verbose('Model loading progress', {
         status: info.status,
         file: file || 'unknown',
         progress: `${Math.round(progressPercent)}%`

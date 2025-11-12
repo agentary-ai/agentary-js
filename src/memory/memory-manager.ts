@@ -24,7 +24,6 @@ import { Summarization } from './compression-utils/summarization';
  */
 export class MemoryManager {
   private formatter: MemoryFormatter;
-  private memoryCompressorConfig?: MemoryCompressorConfig;
   private memoryCompressor?: MemoryCompressor;
   private tokenCounter: TokenCounter;
   private config: MemoryConfig;
@@ -64,7 +63,7 @@ export class MemoryManager {
         break;
     }
     
-    logger.agent.debug('Memory manager initialized', {
+    logger.agent.info('Memory manager created', {
       maxTokens: this.config.maxTokens,
       compressionThreshold: this.config.compressionThreshold,
       hasMemoryCompressor: !!this.memoryCompressor
@@ -80,7 +79,7 @@ export class MemoryManager {
    */
   async addMessages(messages: MemoryMessage[], skipCompression = false): Promise<void> {
     logger.agent.debug('Adding messages to memory', {
-      messages,
+      messageCount: messages.length,
       skipCompression
     });
     messages = messages.map(m => ({
@@ -95,7 +94,17 @@ export class MemoryManager {
     await this.messages.push(...messages);
     
     if (!skipCompression) {
+      const beforeCount = this.messages.length;
       await this.compress();
+      const afterCount = this.messages.length;
+      
+      if (beforeCount !== afterCount) {
+        logger.agent.info('Memory compressed', {
+          beforeCount,
+          afterCount,
+          compressionCount: this.compressionCount,
+        });
+      }
     }
   }
   

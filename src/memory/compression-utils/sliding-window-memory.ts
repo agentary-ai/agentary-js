@@ -29,7 +29,7 @@ export class SlidingWindowMemory implements MemoryCompressor {
     const originalTokens = this.estimateTokens(messages);
     
     // Always preserve these message types
-    const alwaysPreserveTypes = ['system_instruction', 'user_prompt', 'summary'];
+    const alwaysPreserveTypes = this.config.preserveTypes || ['system_instruction', 'user_prompt', 'summary'];
     
     // Separate messages to preserve by priority
     const priorityMessages = messages.filter(m => 

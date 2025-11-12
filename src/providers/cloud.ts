@@ -69,16 +69,7 @@ export class CloudProvider implements InferenceProvider {
     if (this.initialized) {
       return;
     }
-
     const initStartTime = Date.now();
-
-    logger.cloudProvider?.info('Initializing cloud provider', {
-      model: this.config.model,
-      proxyUrl: this.config.proxyUrl
-    });
-
-    // For cloud providers, we can optionally validate connectivity
-    // For now, we'll just mark as initialized
     this.initialized = true;
 
     this.eventEmitter.emit({
@@ -88,7 +79,7 @@ export class CloudProvider implements InferenceProvider {
       timestamp: Date.now()
     });
 
-    logger.cloudProvider?.info('Cloud provider initialized', {
+    logger.cloudProvider?.info('Cloud provider initialized successfully', {
       model: this.config.model,
       duration: Date.now() - initStartTime
     });

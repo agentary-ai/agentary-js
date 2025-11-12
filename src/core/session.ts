@@ -1,4 +1,4 @@
-import { ModelResponse, NonStreamingResponse, type Session, type TokenStreamChunk } from '../types/session';
+import { ModelResponse, type Session, type TokenStreamChunk } from '../types/session';
 import { GenerateArgs } from '../types/worker';
 import { InferenceProviderManager } from '../providers/manager';
 import { logger } from '../utils/logger';
@@ -16,16 +16,13 @@ import { CreateSessionArgs } from '../types/session';
  * @returns A Promise resolving to a fully configured Session instance
  */
 export async function createSession(args: CreateSessionArgs): Promise<Session> {
+  logger.session?.info('Creating session', { args });
+
   const eventEmitter = new EventEmitter();
   const inferenceProviderManager = new InferenceProviderManager(eventEmitter);
 
-
-  logger.session?.debug('Creating session', { args });
   // Register any models provided at initialization time
-  if (args.models) {
-    logger.session?.debug('Registering models', { models: args.models });
-    await inferenceProviderManager.registerModels(args.models);
-  }
+  if (args.models) await inferenceProviderManager.registerModels(args.models);
 
   let disposed = false;
 

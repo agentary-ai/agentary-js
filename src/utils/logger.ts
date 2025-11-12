@@ -4,11 +4,12 @@
  */
 
 export enum LogLevel {
-  DEBUG = 0,
-  INFO = 1,
-  WARN = 2,
-  ERROR = 3,
-  SILENT = 4,
+  VERBOSE = 0,
+  DEBUG = 1,
+  INFO = 2,
+  WARN = 3,
+  ERROR = 4,
+  SILENT = 5,
 }
 
 export interface LogEntry {
@@ -82,6 +83,7 @@ class Logger {
   private parseLogLevel(level: string): LogLevel {
     const normalizedLevel = level.toUpperCase();
     switch (normalizedLevel) {
+      case 'VERBOSE': return LogLevel.VERBOSE;
       case 'DEBUG': return LogLevel.DEBUG;
       case 'INFO': return LogLevel.INFO;
       case 'WARN': case 'WARNING': return LogLevel.WARN;
@@ -114,6 +116,7 @@ class Logger {
 
   private getLevelName(level: LogLevel): string {
     switch (level) {
+      case LogLevel.VERBOSE: return 'VERBOSE';
       case LogLevel.DEBUG: return 'DEBUG';
       case LogLevel.INFO: return 'INFO';
       case LogLevel.WARN: return 'WARN';
@@ -126,6 +129,7 @@ class Logger {
     if (!this.config.enableColors) return '';
     
     switch (level) {
+      case LogLevel.VERBOSE: return 'color: #666';
       case LogLevel.DEBUG: return 'color: #888';
       case LogLevel.INFO: return 'color: #007acc';
       case LogLevel.WARN: return 'color: #ff9500';
@@ -201,6 +205,9 @@ class Logger {
 
     if (this.config.enableColors && color) {
       switch (level) {
+        case LogLevel.VERBOSE:
+          console.log(`%c${formatted}`, color);
+          break;
         case LogLevel.DEBUG:
           console.log(`%c${formatted}`, color);
           break;
@@ -216,6 +223,9 @@ class Logger {
       }
     } else {
       switch (level) {
+        case LogLevel.VERBOSE:
+          console.log(formatted);
+          break;
         case LogLevel.DEBUG:
           console.log(formatted);
           break;
@@ -230,6 +240,13 @@ class Logger {
           break;
       }
     }
+  }
+
+  verbose(category: string, message: string, data?: unknown, options?: {
+    requestId?: string;
+    context?: Record<string, unknown>;
+  }): void {
+    this.log(LogLevel.VERBOSE, category, message, data, options);
   }
 
   debug(category: string, message: string, data?: unknown, options?: {
@@ -262,6 +279,8 @@ class Logger {
 
   // Convenience methods for common categories
   worker = {
+    verbose: (message: string, data?: unknown, requestId?: string) => 
+      this.verbose('worker', message, data, requestId ? { requestId } : undefined),
     debug: (message: string, data?: unknown, requestId?: string) => 
       this.debug('worker', message, data, requestId ? { requestId } : undefined),
     info: (message: string, data?: unknown, requestId?: string) => 
@@ -273,6 +292,8 @@ class Logger {
   };
 
   inferenceProviderManager = {
+    verbose: (message: string, data?: unknown, context?: Record<string, unknown>) => 
+      this.verbose('inference-provider-manager', message, data, context ? { context } : undefined),
     debug: (message: string, data?: unknown, context?: Record<string, unknown>) => 
       this.debug('inference-provider-manager', message, data, context ? { context } : undefined),
     info: (message: string, data?: unknown, context?: Record<string, unknown>) => 
@@ -284,6 +305,8 @@ class Logger {
   };
 
   deviceProvider = {
+    verbose: (message: string, data?: unknown, context?: Record<string, unknown>) =>
+      this.verbose('device-provider', message, data, context ? { context } : undefined),
     debug: (message: string, data?: unknown, context?: Record<string, unknown>) =>
       this.debug('device-provider', message, data, context ? { context } : undefined),
     info: (message: string, data?: unknown, context?: Record<string, unknown>) =>
@@ -295,6 +318,8 @@ class Logger {
   };
 
   cloudProvider = {
+    verbose: (message: string, data?: unknown, context?: Record<string, unknown>) =>
+      this.verbose('cloud-provider', message, data, context ? { context } : undefined),
     debug: (message: string, data?: unknown, context?: Record<string, unknown>) =>
       this.debug('cloud-provider', message, data, context ? { context } : undefined),
     info: (message: string, data?: unknown, context?: Record<string, unknown>) =>
@@ -306,6 +331,8 @@ class Logger {
   };
 
   session = {
+    verbose: (message: string, data?: unknown, requestId?: string) => 
+      this.verbose('session', message, data, requestId ? { requestId } : undefined),
     debug: (message: string, data?: unknown, requestId?: string) => 
       this.debug('session', message, data, requestId ? { requestId } : undefined),
     info: (message: string, data?: unknown, requestId?: string) => 
@@ -317,6 +344,8 @@ class Logger {
   };
 
   agent = {
+    verbose: (message: string, data?: unknown, context?: Record<string, unknown>) => 
+      this.verbose('agent', message, data, context ? { context } : undefined),
     debug: (message: string, data?: unknown, context?: Record<string, unknown>) => 
       this.debug('agent', message, data, context ? { context } : undefined),
     info: (message: string, data?: unknown, context?: Record<string, unknown>) => 
@@ -328,6 +357,8 @@ class Logger {
   };
 
   workerManager = {
+    verbose: (message: string, data?: unknown, requestId?: string) => 
+      this.verbose('worker-manager', message, data, requestId ? { requestId } : undefined),
     debug: (message: string, data?: unknown, requestId?: string) => 
       this.debug('worker-manager', message, data, requestId ? { requestId } : undefined),
     info: (message: string, data?: unknown, requestId?: string) => 
@@ -339,6 +370,8 @@ class Logger {
   };
 
   performance = {
+    verbose: (message: string, data?: unknown, context?: Record<string, unknown>) => 
+      this.verbose('performance', message, data, context ? { context } : undefined),
     debug: (message: string, data?: unknown, context?: Record<string, unknown>) => 
       this.debug('performance', message, data, context ? { context } : undefined),
     info: (message: string, data?: unknown, context?: Record<string, unknown>) => 
@@ -387,6 +420,7 @@ export function setGlobalLogLevel(level: LogLevel | string): void {
   const parseLogLevel = (level: string): LogLevel => {
     const normalizedLevel = level.toUpperCase();
     switch (normalizedLevel) {
+      case 'VERBOSE': return LogLevel.VERBOSE;
       case 'DEBUG': return LogLevel.DEBUG;
       case 'INFO': return LogLevel.INFO;
       case 'WARN': case 'WARNING': return LogLevel.WARN;
