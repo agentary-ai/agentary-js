@@ -36,7 +36,7 @@ export class StepExecutor {
     const stepStartTime = Date.now();
     const stepState = this.workflowStateManager.getStepState(step.id);
     
-    logger.agent.debug('Executing step', { 
+    logger.agent.info('Executing step', { 
       ...step,
       attempt: stepState.attempts + 1,
       maxAttempts: stepState.maxAttempts

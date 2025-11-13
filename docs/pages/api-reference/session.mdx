@@ -127,8 +127,10 @@ createResponse(
 interface GenerateArgs {
   messages: Message[];
   max_new_tokens?: number;
-  tools?: Tool[];
+  tools?: ToolDefinition[];  // Tool definitions only (implementations handled separately)
+  stream?: boolean;           // Request streaming response (device providers only)
   temperature?: number;
+  enable_thinking?: boolean;  // Enable thinking mode where supported
   top_p?: number;
   top_k?: number;
   repetition_penalty?: number;
@@ -297,34 +299,49 @@ interface Message {
   content: string | MessageContent[];
 }
 
-interface MessageContent {
-  type: 'text' | 'tool_use' | 'tool_result';
-  text?: string;
-  id?: string;
-  name?: string;
-  arguments?: Record<string, any>;
-  tool_use_id?: string;
-  result?: any;
+type MessageContent = TextContent | ToolUseContent | ToolResultContent;
+
+interface TextContent {
+  type: 'text';
+  text: string;
+}
+
+interface ToolUseContent {
+  type: 'tool_use';
+  id: string;
+  name: string;
+  arguments: Record<string, any>;
+}
+
+interface ToolResultContent {
+  type: 'tool_result';
+  tool_use_id: string;
+  result: string;
 }
 ```
 
 ### Tool
 
+Tools are defined separately from their implementations:
+
 ```typescript
 interface Tool {
-  type: 'function';
-  function: {
-    name: string;
-    description: string;
-    parameters: {
-      type: 'object';
-      properties: Record<string, any>;
-      required?: string[];
-    };
-    implementation?: Function;
+  definition: ToolDefinition;
+  implementation?: (...args: any[]) => any;
+}
+
+interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: {
+    type: 'object';
+    properties: Record<string, any>;
+    required: string[];
   };
 }
 ```
+
+**Note:** When passing tools to `createResponse()`, you only pass `ToolDefinition[]` (the definitions). The implementations are handled separately in your application code or registered with agent sessions.
 
 ### Provider Errors
 

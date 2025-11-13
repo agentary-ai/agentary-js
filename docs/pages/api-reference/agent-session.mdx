@@ -19,13 +19,7 @@ const agent = await createAgentSession({
   models: [
     {
       type: 'device',
-      model: 'onnx-community/gemma-3-270m-it-ONNX',
-      quantization: 'q4',
-      engine: 'webgpu'
-    },
-    {
-      type: 'device',
-      model: 'onnx-community/Qwen2.5-0.5B-Instruct',
+      model: 'onnx-community/Qwen3-0.6B-ONNX',
       quantization: 'q4',
       engine: 'webgpu'
     }
@@ -42,35 +36,33 @@ Execute a multi-step agent workflow.
 ```typescript
 runWorkflow(
   prompt: string,
-  workflow: AgentWorkflow
+  workflow: Workflow,
+  memoryConfig?: MemoryConfig
 ): AsyncIterable<WorkflowIterationResponse>
 ```
 
 #### Parameters
 
 ```typescript
-interface AgentWorkflow {
+interface Workflow {
   id: string;
-  name: string;
-  description?: string;
   systemPrompt?: string;
-  steps: WorkflowStep[];
   context?: Record<string, any>;
-  tools?: Tool[];
+  steps: WorkflowStep[];
+  tools: Tool[];
   timeout?: number;
   maxIterations?: number;
-  memoryConfig?: MemoryConfig;
 }
 
 interface WorkflowStep {
   id: string;
-  description?: string;
   prompt: string;
+  model: string;           // Model to use for this step
   maxTokens?: number;
   temperature?: number;
-  generationTask?: GenerationTask;
-  toolChoice?: string[];
-  maxAttempts?: number;
+  enableThinking?: boolean;
+  toolChoice?: string[];   // Restrict to specific tools
+  maxAttempts?: number;    // Retry attempts on failure
 }
 ```
 
@@ -95,52 +87,62 @@ interface WorkflowIterationResponse {
 ```javascript
 const workflow = {
   id: 'my-workflow',
-  name: 'My Workflow',
   systemPrompt: 'You are a helpful assistant.',
   maxIterations: 5,
   steps: [
     {
       id: 'step1',
       prompt: 'Analyze the input',
+      model: 'onnx-community/Qwen3-0.6B-ONNX',
       maxTokens: 200
     }
   ],
   tools: []
 };
 
-for await (const iteration of agent.runWorkflow('Hello', workflow)) {
+const memoryConfig = {
+  maxTokens: 2048,
+  compressionThreshold: 0.8,
+  memoryCompressorConfig: {
+    name: 'sliding-window'
+  }
+};
+
+for await (const iteration of agent.runWorkflow('Hello', workflow, memoryConfig)) {
   console.log(iteration.content);
 }
 ```
 
-### registerTool
+### registerTools
 
-Register a tool for use in workflows.
+Register tools for use in workflows.
 
 ```typescript
-registerTool(tool: Tool): void
+registerTools(tools: Tool[]): void
 ```
 
 #### Example
 
 ```javascript
-agent.registerTool({
-  type: 'function',
-  function: {
+agent.registerTools([{
+  definition: {
     name: 'my_tool',
     description: 'Does something useful',
     parameters: {
       type: 'object',
       properties: {
-        input: { type: 'string' }
+        input: { 
+          type: 'string',
+          description: 'Input to process'
+        }
       },
       required: ['input']
-    },
-    implementation: async ({ input }) => {
-      return `Processed: ${input}`;
     }
+  },
+  implementation: async ({ input }) => {
+    return `Processed: ${input}`;
   }
-});
+}]);
 ```
 
 ### getRegisteredTools
@@ -168,38 +170,60 @@ Agent Session inherits all methods from [Session](/api/session):
 
 ## Memory Configuration
 
-Configure memory management for workflows.
+Configure memory management for workflows by passing a `MemoryConfig` to `runWorkflow()`.
 
 ```typescript
 interface MemoryConfig {
-  memory?: Memory;
-  formatter?: MemoryFormatter;
-  memoryCompressor?: MemoryCompressor;
   maxTokens?: number;
   compressionThreshold?: number;
-  preserveMessageTypes?: string[];
-  autoCompress?: boolean;
-  checkpointInterval?: number;
+  preserveMessageTypes?: MemoryMessageType[];
+  formatter?: MemoryFormatter;
+  memoryCompressorConfig?: MemoryCompressorConfig;
 }
+
+type MemoryCompressorConfig = 
+  | { name: 'sliding-window' }
+  | { 
+      name: 'summarization';
+      model: string;
+      temperature?: number;
+      enableThinking?: boolean;
+    };
 ```
 
 ### Example
 
+**Sliding Window Memory:**
 ```javascript
-import { SlidingWindowMemory, LLMSummarization } from 'agentary-js';
-
-const workflow = {
-  memoryConfig: {
-    memory: new SlidingWindowMemory(),
-    memoryCompressor: new LLMSummarization({
-      maxSummaryTokens: 512,
-      recentWindowSize: 4
-    }),
-    maxTokens: 2048,
-    compressionThreshold: 0.8
-  },
-  // ...
+const memoryConfig = {
+  maxTokens: 2048,
+  compressionThreshold: 0.8,
+  memoryCompressorConfig: {
+    name: 'sliding-window'
+  }
 };
+
+for await (const result of agent.runWorkflow(prompt, workflow, memoryConfig)) {
+  // ...
+}
+```
+
+**LLM Summarization:**
+```javascript
+const memoryConfig = {
+  maxTokens: 4096,
+  compressionThreshold: 0.75,
+  memoryCompressorConfig: {
+    name: 'summarization',
+    model: 'onnx-community/Qwen3-0.6B-ONNX',
+    temperature: 0.1,
+    enableThinking: false
+  }
+};
+
+for await (const result of agent.runWorkflow(prompt, workflow, memoryConfig)) {
+  // ...
+}
 ```
 
 ## Workflow Events

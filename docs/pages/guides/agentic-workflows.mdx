@@ -66,7 +66,10 @@ const workflow = {
         parameters: {
           type: 'object',
           properties: {
-            query: { type: 'string' }
+            query: { 
+              type: 'string',
+              description: 'The search query'
+            }
           },
           required: ['query']
         },
@@ -79,9 +82,18 @@ const workflow = {
   ]
 };
 
+const memoryConfig = {
+  maxTokens: 2048,
+  compressionThreshold: 0.8,
+  memoryCompressorConfig: {
+    name: 'sliding-window'
+  }
+};
+
 for await (const iteration of agent.runWorkflow(
   'Research the benefits of renewable energy',
-  workflow
+  workflow,
+  memoryConfig
 )) {
   if (iteration?.content) {
     console.log(`[Step ${iteration.stepId}]: ${iteration.content}`);
@@ -112,6 +124,14 @@ const workflow = {
   timeout: 30000,           // Timeout in milliseconds
   maxIterations: 10,        // Maximum iterations before stopping
 };
+
+const memoryConfig = {
+  maxTokens: 2048,          // Maximum context size
+  compressionThreshold: 0.8, // Compress at 80% capacity
+  memoryCompressorConfig: {
+    name: 'sliding-window'  // or 'summarization'
+  }
+};
 ```
 
 ## Workflow Steps
@@ -137,57 +157,56 @@ Each step defines a discrete action:
 |----------|------|-------------|
 | `id` | string | Unique step identifier |
 | `prompt` | string | Instructions for this step |
-| `maxTokens` | number | Token limit for generation |
-| `temperature` | number | Sampling temperature |
+| `maxTokens` | number | Token limit for generation (optional) |
+| `temperature` | number | Sampling temperature (optional) |
 | `model` | string | Registered model to handle generation |
-| `enableThinking` | string | Enable thinking mode where supported |
-| `toolChoice` | string[] | Available tools for this step |
-| `maxAttempts` | number | Retry attempts on failure |
+| `enableThinking` | boolean | Enable thinking mode where supported (optional) |
+| `toolChoice` | string[] | Available tools for this step (optional) |
+| `maxAttempts` | number | Retry attempts on failure (optional) |
 
 ## Memory Management
 
-Workflows automatically manage conversation history:
+Workflows automatically manage conversation history. Configure memory settings when calling `runWorkflow()`:
 
 ```javascript
-const workflow = {
-  memoryConfig: {
-    maxTokens: 2048,              // Maximum overall context size
-    compressionThreshold: 0.8,    // Compress at 80% capacity
-    memory: new SlidingWindowMemory(),
-    memoryCompressor: new LLMSummarization({
-      maxSummaryTokens: 512,
-      recentWindowSize: 4
-    })
-  },
-  // ...
+const memoryConfig = {
+  maxTokens: 2048,              // Maximum overall context size
+  compressionThreshold: 0.8,    // Compress at 80% capacity
+  memoryCompressorConfig: {
+    name: 'sliding-window'      // Compression strategy
+  }
 };
+
+for await (const iteration of agent.runWorkflow(prompt, workflow, memoryConfig)) {
+  // ...
+}
 ```
 
 ### Memory Strategies
 
 **Sliding Window** (default):
 ```javascript
-import { SlidingWindowMemory } from 'agentary-js';
-
-memoryConfig: {
-  memory: new SlidingWindowMemory(),
-  maxTokens: 2048
-}
+const memoryConfig = {
+  maxTokens: 2048,
+  compressionThreshold: 0.8,
+  memoryCompressorConfig: {
+    name: 'sliding-window'
+  }
+};
 ```
 
-**With Compression**:
+**LLM Summarization**:
 ```javascript
-import { SlidingWindowMemory, LLMSummarization } from 'agentary-js';
-
-memoryConfig: {
-  memory: new SlidingWindowMemory(),
-  memoryCompressor: new LLMSummarization({
-    maxSummaryTokens: 512,
-    recentWindowSize: 4
-  }),
+const memoryConfig = {
   maxTokens: 4096,
-  compressionThreshold: 0.75
-}
+  compressionThreshold: 0.75,
+  memoryCompressorConfig: {
+    name: 'summarization',
+    model: 'onnx-community/Qwen2.5-0.5B-Instruct',
+    temperature: 0.1,
+    enableThinking: false
+  }
+};
 ```
 
 ## Error Handling and Retries
@@ -198,7 +217,7 @@ Steps can automatically retry on failure:
 {
   id: 'api-call',
   prompt: 'Fetch user data from the API',
-  generationTask: 'tool_use',
+  model: 'onnx-community/Qwen2.5-0.5B-Instruct',
   maxAttempts: 3,  // Retry up to 3 times
   toolChoice: ['fetch_user_data']
 }
@@ -290,49 +309,50 @@ const agent = await createAgentSession({
 
 const mathWorkflow = {
   id: 'math-solver',
-  name: 'Math Problem Solver',
   systemPrompt: 'You are a math tutor that helps solve problems step-by-step.',
   maxIterations: 5,
   steps: [
     {
       id: 'understand',
       prompt: 'Identify what mathematical operation is needed',
-      maxTokens: 150,
-      generationTask: 'reasoning'
+      model: 'onnx-community/Qwen2.5-0.5B-Instruct',
+      maxTokens: 150
     },
     {
       id: 'calculate',
       prompt: 'Use the calculator to compute the result',
-      toolChoice: ['calculator'],
-      generationTask: 'tool_use'
+      model: 'onnx-community/Qwen2.5-0.5B-Instruct',
+      toolChoice: ['calculator']
     },
     {
       id: 'explain',
       prompt: 'Explain the solution in simple terms',
-      maxTokens: 200,
-      generationTask: 'chat'
+      model: 'onnx-community/gemma-3-270m-it-ONNX',
+      maxTokens: 200
     }
   ],
   tools: [{
-    type: 'function',
-    function: {
+    definition: {
       name: 'calculator',
       description: 'Evaluate mathematical expressions',
       parameters: {
         type: 'object',
         properties: {
-          expression: { type: 'string', description: 'Math expression' }
+          expression: { 
+            type: 'string', 
+            description: 'Math expression to evaluate' 
+          }
         },
         required: ['expression']
-      },
-      implementation: async ({ expression }) => {
-        try {
-          // Safe evaluation (use a proper math parser in production)
-          const result = eval(expression);
-          return String(result);
-        } catch (error) {
-          return 'Invalid expression';
-        }
+      }
+    },
+    implementation: async ({ expression }) => {
+      try {
+        // Safe evaluation (use a proper math parser in production)
+        const result = eval(expression);
+        return String(result);
+      } catch (error) {
+        return 'Invalid expression';
       }
     }
   }]

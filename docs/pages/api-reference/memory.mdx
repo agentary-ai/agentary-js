@@ -1,118 +1,64 @@
-# Memory System API
+# Memory System
 
-The memory system in Agentary JS provides intelligent context management for long-running conversations and workflows. It includes automatic compression, pruning, and retrieval strategies to optimize token usage while maintaining conversation coherence.
+The memory system in Agentary JS provides intelligent context management for long-running conversations and workflows through configuration-based settings. It includes automatic compression strategies to optimize token usage while maintaining conversation coherence.
 
 ## Overview
 
-The memory system consists of several components:
-- **MemoryManager**: Core interface for memory operations
-- **SlidingWindowMemory**: Keeps recent messages in memory with a sliding window
-- **LLMSummarization**: Uses an LLM to compress and summarize conversation history
-- **MemoryFormatter**: Formats memory for LLM consumption
+Memory is configured when calling `runWorkflow()` and managed automatically during workflow execution. The system supports:
+- **Sliding Window**: Keeps recent messages with automatic pruning of older messages
+- **LLM Summarization**: Uses an LLM to compress and summarize conversation history
+- **Automatic Compression**: Triggers when context approaches token limits
 
-## MemoryManager
+## Memory Configuration
 
-The base interface for all memory implementations.
-
-```typescript
-interface MemoryManager {
-  addMessage(message: MemoryMessage): Promise<void>;
-  getMessages(options?: RetrievalOptions): Promise<MemoryMessage[]>;
-  compress(options?: CompressionOptions): Promise<void>;
-  prune(maxMessages?: number): Promise<void>;
-  clear(): Promise<void>;
-  getMetrics(): MemoryMetrics;
-}
-```
-
-### Types
+Configure memory behavior through `MemoryConfig` when calling `runWorkflow()`:
 
 ```typescript
-interface MemoryMessage {
-  role: 'user' | 'assistant' | 'system' | 'tool';
-  content: string | MessageContent[];
-  timestamp?: number;
-  metadata?: Record<string, any>;
+interface MemoryConfig {
+  maxTokens?: number;                      // Maximum context size (default: 1024)
+  compressionThreshold?: number;           // Trigger compression at % of max (default: 0.8)
+  preserveMessageTypes?: MemoryMessageType[];  // Message types to always keep
+  formatter?: MemoryFormatter;             // Custom message formatter
+  memoryCompressorConfig?: MemoryCompressorConfig;  // Compression strategy
 }
 
-interface RetrievalOptions {
-  limit?: number;
-  filter?: (message: MemoryMessage) => boolean;
-  includeSystem?: boolean;
-  includeTools?: boolean;
-}
+type MemoryCompressorConfig = 
+  | SlidingWindowConfig 
+  | SummarizationConfig;
 
-interface CompressionOptions {
-  strategy?: 'summarize' | 'truncate' | 'smart';
-  targetTokens?: number;
-  preserveRecent?: number;
-}
-
-interface MemoryMetrics {
-  totalMessages: number;
-  totalTokens: number;
-  compressionRatio?: number;
-  lastCompressionTime?: number;
-}
-```
-
-## SlidingWindowMemory
-
-Maintains a fixed-size window of recent messages, automatically removing older messages when the window is full.
-
-### Usage
-
-```javascript
-import { SlidingWindowMemory } from 'agentary-js';
-
-const memory = new SlidingWindowMemory({
-  windowSize: 20,  // Keep last 20 messages
-  preserveSystem: true  // Always keep system messages
-});
-
-// Add messages to memory
-await memory.addMessage({
-  role: 'user',
-  content: 'Hello, how are you?'
-});
-
-await memory.addMessage({
-  role: 'assistant',
-  content: 'I am doing well, thank you!'
-});
-
-// Retrieve messages
-const messages = await memory.getMessages({
-  limit: 10,
-  includeSystem: true
-});
-
-// Get memory metrics
-const metrics = memory.getMetrics();
-console.log(`Total messages: ${metrics.totalMessages}`);
-```
-
-### Configuration
-
-```typescript
 interface SlidingWindowConfig {
-  windowSize: number;        // Maximum number of messages to keep
-  preserveSystem?: boolean;  // Always keep system messages
-  preserveTools?: boolean;   // Always keep tool messages
+  name: 'sliding-window';
 }
+
+interface SummarizationConfig {
+  name: 'summarization';
+  model: string;              // Model to use for summarization
+  temperature?: number;       // Sampling temperature (default: 0.1)
+  enableThinking?: boolean;   // Enable thinking mode (default: false)
+  systemPrompt?: string;      // Custom summarization prompt
+  userPromptTemplate?: string; // Custom user prompt template
+}
+
+type MemoryMessageType = 
+  | 'system_instruction' 
+  | 'user_prompt' 
+  | 'step_prompt' 
+  | 'step_result' 
+  | 'tool_use' 
+  | 'tool_result' 
+  | 'summary';
 ```
 
-## LLMSummarization
+## Sliding Window Memory
 
-Uses a language model to intelligently compress and summarize conversation history while preserving important context.
+Automatically keeps recent messages while pruning older ones to stay within token limits.
 
 ### Usage
 
 ```javascript
-import { LLMSummarization, createSession } from 'agentary-js';
+import { createAgentSession } from 'agentary-js';
 
-// Create a session for summarization
-const session = await createSession({
+const agent = await createAgentSession({
   models: [{
     type: 'device',
     model: 'onnx-community/Qwen3-0.6B-ONNX',
@@ -121,175 +67,203 @@ const session = await createSession({
   }]
 });
 
-const memory = new LLMSummarization({
-  session,
-  modelId: 'onnx-community/Qwen3-0.6B-ONNX',
-  maxMessages: 50,
-  compressionThreshold: 30,  // Compress when reaching 30 messages
-  summaryMaxTokens: 200
-});
+const workflow = {
+  id: 'chat-workflow',
+  steps: [/* ... */],
+  tools: []
+};
 
-// Memory will automatically compress when threshold is reached
-for (let i = 0; i < 40; i++) {
-  await memory.addMessage({
-    role: i % 2 === 0 ? 'user' : 'assistant',
-    content: `Message ${i}`
-  });
-}
+const memoryConfig = {
+  maxTokens: 2048,
+  compressionThreshold: 0.8,
+  memoryCompressorConfig: {
+    name: 'sliding-window'
+  }
+};
 
-// Manual compression
-await memory.compress({
-  strategy: 'summarize',
-  targetTokens: 500
-});
-```
-
-### Configuration
-
-```typescript
-interface LLMSummarizationConfig {
-  session: Session;
-  modelId: string;
-  maxMessages?: number;           // Default: 100
-  compressionThreshold?: number;  // Default: 50
-  summaryMaxTokens?: number;      // Default: 150
-  summaryPrompt?: string;         // Custom summarization prompt
+// Memory automatically managed during execution
+for await (const result of agent.runWorkflow(prompt, workflow, memoryConfig)) {
+  console.log(result.content);
 }
 ```
 
-## DefaultMemoryFormatter
+## LLM Summarization
 
-Formats memory messages for LLM consumption with support for various content types.
+Uses a language model to intelligently compress and summarize conversation history while preserving important context.
 
 ### Usage
 
 ```javascript
+import { createAgentSession } from 'agentary-js';
+
+const agent = await createAgentSession({
+  models: [
+    {
+      type: 'device',
+      model: 'onnx-community/Qwen3-0.6B-ONNX',
+      quantization: 'q4',
+      engine: 'webgpu'
+    }
+  ]
+});
+
+const workflow = {
+  id: 'long-conversation',
+  steps: [/* ... */],
+  tools: []
+};
+
+const memoryConfig = {
+  maxTokens: 4096,
+  compressionThreshold: 0.75,
+  memoryCompressorConfig: {
+    name: 'summarization',
+    model: 'onnx-community/Qwen3-0.6B-ONNX',
+    temperature: 0.1,
+    enableThinking: false
+  },
+  preserveMessageTypes: ['system_instruction', 'user_prompt', 'summary']
+};
+
+// Compression happens automatically when threshold is reached
+for await (const result of agent.runWorkflow(prompt, workflow, memoryConfig)) {
+  console.log(result.content);
+}
+```
+
+## Custom Message Formatting
+
+You can provide a custom formatter to control how messages are formatted for the LLM:
+
+```javascript
 import { DefaultMemoryFormatter } from 'agentary-js';
 
-const formatter = new DefaultMemoryFormatter();
+// Create a custom formatter
+const customFormatter = new DefaultMemoryFormatter();
 
-const messages = [
-  { role: 'user', content: 'Hello' },
-  { role: 'assistant', content: 'Hi there!' },
-  { 
-    role: 'assistant', 
-    content: [
-      { type: 'text', text: 'Let me search for that.' },
-      { 
-        type: 'tool_use', 
-        name: 'web_search',
-        arguments: { query: 'weather today' }
-      }
-    ]
+const memoryConfig = {
+  maxTokens: 2048,
+  formatter: customFormatter,  // Use custom formatter
+  memoryCompressorConfig: {
+    name: 'sliding-window'
   }
-];
+};
 
-const formatted = formatter.format(messages);
-console.log(formatted);
-// Output: Formatted string ready for LLM input
+for await (const result of agent.runWorkflow(prompt, workflow, memoryConfig)) {
+  console.log(result.content);
+}
 ```
 
 ## Memory in Workflows
 
-The memory system integrates seamlessly with agent workflows:
+Memory is automatically managed during workflow execution. The system:
+- Tracks all messages (user prompts, assistant responses, tool calls)
+- Estimates token usage for each message
+- Triggers compression when threshold is reached
+- Preserves important message types
+- Maintains conversation coherence
 
 ```javascript
 const workflow = {
   id: 'chatbot',
-  name: 'Chatbot with Memory',
-  memoryConfig: {
-    type: 'sliding-window',
-    windowSize: 20
-  },
-  // Or use LLM summarization
-  memoryConfig: {
-    type: 'llm-summarization',
-    modelId: 'onnx-community/Qwen3-0.6B-ONNX',
-    compressionThreshold: 30
-  },
   steps: [
     {
       id: 'respond',
       prompt: 'Continue the conversation naturally',
+      model: 'onnx-community/Qwen3-0.6B-ONNX',
       maxTokens: 200
     }
-  ]
+  ],
+  tools: []
+};
+
+const memoryConfig = {
+  maxTokens: 2048,
+  compressionThreshold: 0.8,
+  memoryCompressorConfig: {
+    name: 'sliding-window'
+  }
 };
 
 // Memory is automatically managed during workflow execution
-for await (const response of agent.runWorkflow(userInput, workflow)) {
+for await (const response of agent.runWorkflow(userInput, workflow, memoryConfig)) {
   console.log(response.content);
 }
 ```
 
 ## Tool Results in Memory
 
-Tool call results are automatically stored in memory:
+Tool calls and results are automatically tracked in memory with special message types:
+- `tool_use`: When the model calls a tool
+- `tool_result`: The result from tool execution
 
-```typescript
-interface ToolResult {
-  tool_use_id: string;
-  name: string;
-  result: any;
-  error?: string;
-  timestamp: number;
-}
-```
-
-Example with tool results:
+The memory system preserves tool interactions based on your `preserveMessageTypes` configuration.
 
 ```javascript
-// Tool calls and results are preserved in memory
-const messages = await memory.getMessages({
-  includeTools: true
-});
-
-// Messages will include tool interactions
-// [
-//   { role: 'user', content: 'What's the weather?' },
-//   { role: 'assistant', content: [
-//     { type: 'tool_use', name: 'get_weather', arguments: {...} }
-//   ]},
-//   { role: 'tool', content: [
-//     { type: 'tool_result', tool_use_id: '...', result: {...} }
-//   ]},
-//   { role: 'assistant', content: 'The weather is sunny and 72°F.' }
-// ]
+// Example: Always preserve tool calls in memory
+const memoryConfig = {
+  maxTokens: 2048,
+  compressionThreshold: 0.8,
+  preserveMessageTypes: [
+    'system_instruction',
+    'user_prompt',
+    'tool_use',       // Keep tool calls
+    'tool_result',    // Keep tool results
+    'summary'
+  ],
+  memoryCompressorConfig: {
+    name: 'summarization',
+    model: 'onnx-community/Qwen3-0.6B-ONNX'
+  }
+};
 ```
 
 ## Best Practices
 
 1. **Choose the Right Strategy**
-   - Use `SlidingWindowMemory` for simple conversations with recent context
-   - Use `LLMSummarization` for long-running sessions that need context preservation
+   - Use `sliding-window` for simple conversations focused on recent context
+   - Use `summarization` for long-running sessions that need full context preservation
 
 2. **Token Management**
-   - Monitor memory metrics to track token usage
-   - Set appropriate compression thresholds based on your model's context window
-   - Use `targetTokens` in compression options to stay within limits
+   - Set `maxTokens` based on your model's context window
+   - Use `compressionThreshold` to trigger compression early (0.7-0.8 recommended)
+   - Leave room for tool outputs and responses
 
-3. **Performance Optimization**
-   - Configure `preserveRecent` to keep important recent messages during compression
-   - Use filters in `getMessages()` to retrieve only relevant messages
-   - Clear memory periodically for long-running applications
+3. **Message Preservation**
+   - Always preserve `system_instruction` and `user_prompt`
+   - Preserve `tool_use` and `tool_result` for tool-heavy workflows
+   - Summaries should be preserved to maintain conversation context
 
-4. **Custom Formatters**
-   - Implement custom `MemoryFormatter` for specialized formatting needs
-   - Handle multi-modal content appropriately
+4. **Performance Optimization**
+   - Lower `compressionThreshold` for more frequent compression (better memory usage)
+   - Higher `compressionThreshold` for fewer compressions (better performance)
+   - For summarization, choose a smaller, faster model if possible
 
-## Error Handling
+## Example: Complete Configuration
 
 ```javascript
-try {
-  await memory.compress({
-    strategy: 'summarize',
-    targetTokens: 500
-  });
-} catch (error) {
-  console.error('Compression failed:', error);
-  // Fall back to truncation
-  await memory.prune(20);
-}
+const memoryConfig = {
+  // Maximum context size
+  maxTokens: 4096,
+  
+  // Compress when reaching 75% of capacity
+  compressionThreshold: 0.75,
+  
+  // Always keep these message types
+  preserveMessageTypes: [
+    'system_instruction',
+    'user_prompt',
+    'summary'
+  ],
+  
+  // Use LLM summarization
+  memoryCompressorConfig: {
+    name: 'summarization',
+    model: 'onnx-community/Qwen3-0.6B-ONNX',
+    temperature: 0.1,
+    enableThinking: false
+  }
+};
 ```
 
 ## See Also

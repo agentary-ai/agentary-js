@@ -20,8 +20,7 @@ const session = await createSession({
 });
 
 const tools = [{
-  type: 'function',
-  function: {
+  definition: {
     name: 'get_weather',
     description: 'Get current weather for a city',
     parameters: {
@@ -38,13 +37,13 @@ const tools = [{
         }
       },
       required: ['city']
-    },
-    implementation: async ({ city, units = 'celsius' }) => {
-      // Call your weather API
-      const response = await fetch(`https://api.weather.com/${city}`);
-      const data = await response.json();
-      return JSON.stringify(data);
     }
+  },
+  implementation: async ({ city, units = 'celsius' }) => {
+    // Call your weather API
+    const response = await fetch(`https://api.weather.com/${city}`);
+    const data = await response.json();
+    return JSON.stringify(data);
   }
 }];
 
@@ -75,8 +74,7 @@ const session = await createSession({
 });
 
 const tools = [{
-  type: 'function',
-  function: {
+  definition: {
     name: 'get_weather',
     description: 'Get current weather for a city',
     parameters: {
@@ -85,11 +83,11 @@ const tools = [{
         city: { type: 'string', description: 'City name' }
       },
       required: ['city']
-    },
-    implementation: async ({ city }) => {
-      const data = await fetchWeather(city);
-      return JSON.stringify(data);
     }
+  },
+  implementation: async ({ city }) => {
+    const data = await fetchWeather(city);
+    return JSON.stringify(data);
   }
 }];
 
@@ -112,8 +110,7 @@ Tools use JSON Schema for parameter validation:
 
 ```javascript
 {
-  type: 'function',
-  function: {
+  definition: {
     name: 'search_database',
     description: 'Search a database with filters',
     parameters: {
@@ -140,6 +137,11 @@ Tools use JSON Schema for parameter validation:
       },
       required: ['query']
     }
+  },
+  implementation: async ({ query, limit = 10, filters = {} }) => {
+    // Your database search implementation
+    const results = await searchDatabase(query, limit, filters);
+    return JSON.stringify(results);
   }
 }
 ```
@@ -151,8 +153,7 @@ Provide multiple tools for complex tasks:
 ```javascript
 const tools = [
   {
-    type: 'function',
-    function: {
+    definition: {
       name: 'calculate',
       description: 'Perform mathematical calculations',
       parameters: {
@@ -161,16 +162,15 @@ const tools = [
           expression: { type: 'string', description: 'Math expression to evaluate' }
         },
         required: ['expression']
-      },
-      implementation: async ({ expression }) => {
-        // Safe math evaluation
-        return String(eval(expression));
       }
+    },
+    implementation: async ({ expression }) => {
+      // Safe math evaluation
+      return String(eval(expression));
     }
   },
   {
-    type: 'function',
-    function: {
+    definition: {
       name: 'get_date',
       description: 'Get current date and time',
       parameters: {
@@ -178,10 +178,10 @@ const tools = [
         properties: {
           timezone: { type: 'string', description: 'Timezone (optional)' }
         }
-      },
-      implementation: async ({ timezone = 'UTC' }) => {
-        return new Date().toLocaleString('en-US', { timeZone: timezone });
       }
+    },
+    implementation: async ({ timezone = 'UTC' }) => {
+      return new Date().toLocaleString('en-US', { timeZone: timezone });
     }
   }
 ];
@@ -235,35 +235,36 @@ const agent = await createAgentSession({
 });
 
 // Register tools
-agent.registerTool({
-  type: 'function',
-  function: {
+agent.registerTools([{
+  definition: {
     name: 'web_search',
     description: 'Search the web',
     parameters: {
       type: 'object',
       properties: {
-        query: { type: 'string' }
+        query: { type: 'string', description: 'Search query' }
       },
       required: ['query']
-    },
-    implementation: async ({ query }) => {
-      // Your search implementation
-      return searchResults;
     }
+  },
+  implementation: async ({ query }) => {
+    // Your search implementation
+    return searchResults;
   }
-});
+}]);
 
 // Tools available in all workflow steps
 const workflow = {
-  model: 'onnx-community/Qwen3-0.6B-ONNX',
+  id: 'research-workflow',
   steps: [
     {
       id: 'research',
       prompt: 'Research the topic',
+      model: 'onnx-community/Qwen3-0.6B-ONNX',
       toolChoice: ['web_search']  // Restrict to specific tools
     }
-  ]
+  ],
+  tools: []  // Or specify tools here if not registered globally
 };
 ```
 

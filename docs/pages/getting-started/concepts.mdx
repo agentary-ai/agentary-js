@@ -5,24 +5,24 @@ Understanding the key concepts in Agentary JS will help you build powerful AI ap
 ## Architecture Overview
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│              Your Application                            │
-├──────────────────────────────────────────────────────────┤
-│            Agentary JS Session                           │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │        Provider Manager                            │  │
+┌─────────────────────────────────────────────────────────┐
+│              Your Application                           │
+├─────────────────────────────────────────────────────────┤
+│            Agentary JS Session                          │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │        Inference Provider Manager                 │  │
 │  │  ┌──────────────┐         ┌──────────────┐        │  │
 │  │  │ Device       │         │ Cloud        │        │  │
 │  │  │ Provider     │         │ Provider     │        │  │
 │  │  │ (WebGPU/WASM)│         │ (HTTP Proxy) │        │  │
 │  │  └──────────────┘         └──────────────┘        │  │
-│  └────────────────────────────────────────────────────┘  │
-│                                                           │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │      Workflow Engine                                │  │
-│  │   (for agentic workflows)                          │  │
-│  └────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────┘
+│  └───────────────────────────────────────────────────┘  │
+│                                                         │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │      Workflow Engine                              │  │
+│  │   (for agentic workflows)                         │  │
+│  └───────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
          │                              │
          ▼                              ▼
     WebGPU/WASM                   Cloud LLM APIs
@@ -230,35 +230,43 @@ const generationPromise = (async () => {
 updateProgressBar();
 ```
 
-### Model Validation
+### Model Loading
 
-Device providers validate models during initialization:
+Device providers handle model loading and initialization automatically:
 
 ```javascript
-import { isSupportedModel, getSupportedModelIds } from 'agentary-js';
+// Models are validated and loaded during session creation
+const session = await createSession({
+  models: [{
+    type: 'device',
+    model: 'onnx-community/Qwen3-0.6B-ONNX',
+    quantization: 'q4',
+    engine: 'webgpu'
+  }]
+});
 
-// Check if model is supported
-if (isSupportedModel('onnx-community/Qwen3-0.6B-ONNX')) {
-  console.log('Model is supported!');
-}
+// Monitor loading progress
+session.on('worker:init:progress', (event) => {
+  console.log(`Loading ${event.modelName}: ${event.progress}%`);
+});
 
-// Get all supported models
-const models = getSupportedModelIds();
-console.log('Available models:', models);
+session.on('worker:init:complete', (event) => {
+  console.log(`${event.modelName} ready in ${event.duration}ms`);
+});
 ```
 
-See the [Model Support](/MODEL-SUPPORT) documentation for details.
+See the [Model Support](/MODEL-SUPPORT) documentation for supported models.
 
 ## Memory Management
 
-Agentary JS provides built-in memory management for long conversations:
+Agentary JS provides built-in memory management for long conversations. Configure memory when calling `runWorkflow()`:
 
 ```javascript
 const agent = await createAgentSession({
   models: [
     { 
       type: 'device',
-      model: 'onnx-community/gemma-3-270m-it-ONNX',
+      model: 'onnx-community/Qwen3-0.6B-ONNX',
       quantization: 'q4',
       engine: 'webgpu'
     }
@@ -266,13 +274,22 @@ const agent = await createAgentSession({
 });
 
 const workflow = {
-  memoryConfig: {
-    maxTokens: 2048,              // Maximum context size
-    compressionThreshold: 0.8,    // Compress at 80% capacity
-    enablePruning: true            // Auto-remove old messages
-  },
-  // ...
+  id: 'my-workflow',
+  steps: [ /* ... */ ],
+  tools: [ /* ... */ ]
 };
+
+const memoryConfig = {
+  maxTokens: 2048,              // Maximum context size
+  compressionThreshold: 0.8,    // Compress at 80% capacity
+  memoryCompressorConfig: {
+    name: 'sliding-window'      // or 'summarization'
+  }
+};
+
+for await (const result of agent.runWorkflow(prompt, workflow, memoryConfig)) {
+  // Process workflow results
+}
 ```
 
 ## Lifecycle Events
@@ -299,29 +316,36 @@ Define tools that the model can call:
 
 ```javascript
 const tools = [{
-  type: 'function',
-  function: {
+  definition: {
     name: 'get_weather',
     description: 'Get current weather',
     parameters: {
       type: 'object',
       properties: {
-        city: { type: 'string' }
+        city: { 
+          type: 'string',
+          description: 'City name'
+        }
       },
       required: ['city']
-    },
-    implementation: async (city) => {
-      // Your implementation
-      return { temp: 72, condition: 'sunny' };
     }
+  },
+  implementation: async ({ city }) => {
+    // Your implementation
+    const data = { temp: 72, condition: 'sunny' };
+    return JSON.stringify(data);
   }
 }];
 
-for await (const chunk of session.createResponse({
+const response = await session.createResponse(modelId, {
   messages,
   tools
-})) {
-  // Model can now call your tools
+});
+
+if (response.type === 'streaming') {
+  for await (const chunk of response.stream) {
+    console.log(chunk.token);
+  }
 }
 ```
 
