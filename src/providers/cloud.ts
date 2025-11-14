@@ -339,7 +339,11 @@ export class CloudProvider implements InferenceProvider {
                 errorObj.statusCode || 500,
                 errorObj.code
               );
-            } catch {
+            } catch (error: any) {
+              // Only catch JSON parse errors, re-throw if it's already a ProviderAPIError
+              if (error instanceof ProviderAPIError) {
+                throw error;
+              }
               throw new ProviderAPIError(errorData, 500);
             }
           }
