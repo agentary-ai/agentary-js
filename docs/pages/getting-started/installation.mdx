@@ -15,12 +15,27 @@ npm install agentary-js
 
 #### Browser Support
 
-| Browser | WebGPU | WebAssembly |
-|---------|--------|-------------|
-| Chrome 113+ | ✅ | ✅ |
-| Edge 113+ | ✅ | ✅ |
-| Firefox (with flag) | ⚠️ | ✅ |
-| Safari | Coming soon | ✅ |
+##### WebGPU Support
+
+| Browser / Platform | Version (Shipped/Enabled by Default) | Notes |
+|-------------------|--------------------------------------|-------|
+| Chromium (Chrome / Edge / other) on Windows/macOS/ChromeOS | Chrome 113 / Edge 113 and above for desktop | Initial release: Chrome 113 on Windows, macOS, ChromeOS |
+| Chromium on Android | Chrome 121 and up | Android support came later |
+| Firefox (desktop) | Firefox 141 (Windows) and later | On Windows; Mac/Linux coming. Android not yet enabled by default |
+| Safari / WebKit (macOS/iOS/iPadOS) | Safari 26 (macOS Tahoe) / iOS/iPadOS 26 etc. | Enabled by default in Safari 26 |
+
+##### WebAssembly Support
+
+| Browser / Platform | Version (Full Support for Wasm 1.0 MVP) | Notes |
+|-------------------|----------------------------------------|-------|
+| Chrome (desktop) | Chrome 57 and later | Widely supported early |
+| Edge (desktop) | Edge 16 and later | Edge legacy / Edge HTML era |
+| Firefox (desktop) | Firefox 52 and later | Full support has been long present |
+| Safari (desktop) | Safari 11 and later | On macOS; note that on iOS Safari engine is the same WebKit so behaviour aligns |
+| Chrome for Android | All Chrome for Android versions (post-support) | Mobile support good |
+| Firefox for Android | Fully supported in the mobile version | - |
+
+WebAssembly is used as a fallback when WebGPU is not available, providing broad compatibility across devices.
 
 #### Minimum Hardware
 
