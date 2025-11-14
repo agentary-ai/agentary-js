@@ -2,7 +2,7 @@ export { createSession } from './core/session.js';
 export { createAgentSession } from './core/agent-session.js';
 
 export { logger, createLogger, setGlobalLogLevel, LogLevel } from './utils/logger';
-export { LogConfigs, getEnvironmentConfig, enableDebuggingMode, disableDebuggingMode, isDebuggingMode } from './utils/logger-config';
+export { LogConfigs, getEnvironmentConfig, setLogLevel, getLogLevel } from './utils/logger-config';
 
 // Event system exports
 export type {
@@ -38,42 +38,52 @@ export type {
 export { 
   MemoryManager,
   SlidingWindowMemory,
-  LLMSummarization,
+  Summarization,
   DefaultMemoryFormatter
 } from './memory';
 export type {
   MemoryMessage,
-  RetrievalOptions,
-  CompressionOptions,
   MemoryMetrics,
-  Memory,
   MemoryFormatter,
   MemoryCompressor,
   ToolResult,
   MemoryConfig,
-  LLMSummarizationConfig,
+  SummarizationConfig,
+  SlidingWindowConfig,
 } from './memory';
 
 export type { 
   WorkflowStep,
   WorkflowIterationResponse,
   WorkflowStepError,
-  AgentWorkflow,
+  Workflow,
   AgentSession
 } from './types/agent-session';
-export type { 
-  CreateSessionArgs, 
-  TokenStreamChunk, 
-  Session, 
-  GenerationTask 
+export type {
+  TokenStreamChunk,
+  Session,
 } from './types/session';
-export type { 
+export type {
   EngineKind,
   WorkerInstance,
   InitArgs,
   MessageContent,
   Message,
   Model,
+  ToolDefinition,
   Tool,
   GenerateArgs
 } from './types/worker';
+
+// Provider system exports
+export type {
+  InferenceProvider,
+  ProviderError,
+  ProviderNetworkError,
+  ProviderTimeoutError,
+  ProviderConfigurationError,
+  ProviderAPIError
+} from './types/provider';
+export type {
+  DeviceProviderConfig
+} from './types/provider';

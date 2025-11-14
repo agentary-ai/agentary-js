@@ -1,5 +1,9 @@
-import type { Message, MessageRole } from './worker';
+import type { Message } from './worker';
 import type { Session } from './session';
+import type { SummarizationConfig } from '../memory/compression-utils/summarization';
+import type { SlidingWindowConfig } from '../memory/compression-utils/sliding-window-memory';
+
+export type { SummarizationConfig, SlidingWindowConfig };
 
 export type MemoryMessageType = 
   'system_instruction' | 'user_prompt' | 'step_prompt' | 
@@ -16,54 +20,12 @@ export interface MemoryMessage extends Message {
   };
 }
 
-// Options for retrieving messages from memory
-export interface RetrievalOptions {
-  maxTokens?: number;
-  includeTypes?: string[];
-  excludeTypes?: string[];
-  sinceTimestamp?: number;
-  relevanceQuery?: string; // For future semantic search support
-}
-
-// Options for compressing memory
-export interface CompressionOptions {
-  targetTokens?: number;
-  // strategy?: 'prune' | 'summarize' | 'hybrid';
-  preserveTypes?: MemoryMessageType[]; // Message types to never compress
-}
-
 // Memory metrics for monitoring
 export interface MemoryMetrics {
   messageCount: number;
   estimatedTokens: number;
   compressionCount: number;
   lastCompressionTime: number | undefined;
-}
-
-// Main memory interface
-export interface Memory {
-  name: string;
-  
-  // Add messages to memory
-  add(messages: MemoryMessage[]): Promise<void>;
-  
-  // Retrieve messages for context
-  retrieve(options?:  RetrievalOptions): Promise<MemoryMessage[]>;
-  
-  // Compress/summarize when needed
-  compress?(options?: CompressionOptions): Promise<void>;
-  
-  // Get current memory metrics
-  getMetrics(messageTypes?: MemoryMessageType[]): MemoryMetrics;
-  
-  // Clear or reset memory
-  clear(): void;
-  
-  // Rollback to previous state
-  rollback?(checkpoint: string): void;
-  
-  // Create checkpoint for rollback
-  createCheckpoint?(id: string): void;
 }
 
 // Formatter interface for decoupling prompt construction
@@ -83,17 +45,13 @@ export interface MemoryFormatter {
 
 // Compression strategy interface
 export interface MemoryCompressor {
-  name: string;
-  
   // Compress messages
   compress(
     messages: MemoryMessage[], 
     targetTokens: number,
+    preserveTypes?: string[],
     session?: Session
   ): Promise<MemoryMessage[]>;
-  
-  // Estimate if compression is needed
-  // shouldCompress(metrics: MemoryMetrics, config: MemoryConfig): boolean;
 }
 
 // Tool result type
@@ -103,15 +61,14 @@ export interface ToolResult {
   result: string;
 }
 
+export type MemoryCompressorConfig = SlidingWindowConfig | SummarizationConfig;
+
 // Memory configuration
 export interface MemoryConfig {
-  memory?: Memory;
   preserveMessageTypes?: MemoryMessageType[];
   formatter?: MemoryFormatter;
-  memoryCompressor?: MemoryCompressor;
+  memoryCompressorConfig?: MemoryCompressorConfig;
   maxTokens?: number;
   compressionThreshold?: number; // 0-1, percentage of maxTokens
-  autoCompress?: boolean;
-  checkpointInterval?: number; // For rollback support
 }
 

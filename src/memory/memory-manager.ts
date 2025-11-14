@@ -1,31 +1,38 @@
 import type { Message } from '../types/worker';
 import type { Session } from '../types/session';
 import type {
-  Memory,
   MemoryFormatter,
-  MemoryCompressor,
+  MemoryCompressorConfig,
   MemoryMessage,
   MemoryConfig,
   MemoryMetrics,
+  MemoryMessageType,
+  MemoryCompressor,
+  SlidingWindowConfig,
+  SummarizationConfig,
 } from '../types/memory';
 
 import { logger } from '../utils/logger';
 import { TokenCounter } from '../utils/token-counter';
-import { SlidingWindowMemory } from './implementations/sliding-window-memory';
+import { SlidingWindowMemory } from './compression-utils/sliding-window-memory';
 import { DefaultMemoryFormatter } from './formatters/default-formatter';
+import { Summarization } from './compression-utils/summarization';
 
 /**
  * Manages agent memory including storage, retrieval, compression, and formatting.
  * Encapsulates all memory-related operations and strategies.
  */
 export class MemoryManager {
-  private memory: Memory;
   private formatter: MemoryFormatter;
   private memoryCompressor?: MemoryCompressor;
   private tokenCounter: TokenCounter;
-  private config: Required<Pick<MemoryConfig, 'maxTokens' | 'compressionThreshold' | 'preserveMessageTypes'>> & MemoryConfig;
+  private config: MemoryConfig;
   private session?: Session;
-  
+  private messages: MemoryMessage[] = [];
+  private checkpoints: Map<string, MemoryMessage[]> = new Map();
+  private compressionCount = 0;
+  private lastCompressionTime: number | undefined;
+
   constructor(session: Session, config?: MemoryConfig) {
     this.session = session;
     this.tokenCounter = new TokenCounter();
@@ -38,18 +45,25 @@ export class MemoryManager {
       ...config
     };
     
-    // Initialize strategies
-    this.memory = config?.memory || 
-      new SlidingWindowMemory();
-    
+    // Setup formatter
     this.formatter = config?.formatter || 
       new DefaultMemoryFormatter();
     
-    if (config?.memoryCompressor) {
-      this.memoryCompressor = config.memoryCompressor;
+    // Setup memory compressor - support both string and instance
+    switch(this.config.memoryCompressorConfig?.name) {
+      case 'sliding-window':
+        this.memoryCompressor = new SlidingWindowMemory(
+          this.config.memoryCompressorConfig as SlidingWindowConfig
+        );
+        break;
+      case 'summarization':
+        this.memoryCompressor = new Summarization(
+          this.config.memoryCompressorConfig as SummarizationConfig
+        );
+        break;
     }
     
-    logger.agent.debug('Memory manager initialized', {
+    logger.agent.info('Memory manager created', {
       maxTokens: this.config.maxTokens,
       compressionThreshold: this.config.compressionThreshold,
       hasMemoryCompressor: !!this.memoryCompressor
@@ -58,10 +72,14 @@ export class MemoryManager {
   
   /**
    * Add messages to memory with optional compression check
+   * 
+   * @param messages - The messages to add to memory
+   * @param skipCompression - Whether to skip compression
+   * @returns A promise that resolves when the messages have been added to memory
    */
   async addMessages(messages: MemoryMessage[], skipCompression = false): Promise<void> {
     logger.agent.debug('Adding messages to memory', {
-      messages,
+      messageCount: messages.length,
       skipCompression
     });
     messages = messages.map(m => ({
@@ -72,79 +90,113 @@ export class MemoryManager {
         ...m.metadata
       }
     }));
-    
-    // const memoryMessages = this.convertToMemoryMessages(messages);
-    await this.memory.add(messages);
+
+    await this.messages.push(...messages);
+    logger.agent.verbose('Messages added to memory', { messages });
     
     if (!skipCompression) {
-      await this.checkAndCompress();
+      const beforeCount = this.messages.length;
+      await this.compress();
+      const afterCount = this.messages.length;
+      
+      if (beforeCount !== afterCount) {
+        logger.agent.info('Memory compressed', {
+          beforeCount,
+          afterCount,
+          compressionCount: this.compressionCount,
+        });
+      }
     }
   }
   
   /**
-   * Retrieve messages from memory and format them for LLM consumption
+   * Retrieve messages from memory and format them for model consumption
+   * 
+   * @returns A promise that resolves with the formatted messages
    */
   async getMessages(): Promise<Message[]> {
-    const memoryMessages = await this.memory.retrieve();
-    return this.formatter.formatMessages(memoryMessages);
-  }
-  
-  /**
-   * Rollback memory to a specific message count
-   */
-  async rollbackToCount(targetCount: number): Promise<void> {
-    const messages = await this.memory.retrieve();
-    const currentCount = messages.length;
-    
-    if (currentCount > targetCount) {
-      this.memory.clear();
-      await this.memory.add(messages.slice(0, targetCount));
-      
-      logger.agent.debug('Rolled back messages', {
-        from: currentCount,
-        to: targetCount,
-        removed: currentCount - targetCount
-      });
-    }
+    return this.formatter.formatMessages(this.messages);
   }
   
   /**
    * Get current memory metrics
+   * 
+   * @returns The current memory metrics
    */
-  getMetrics(): MemoryMetrics {
-    return this.memory.getMetrics();
+  getMetrics(messageTypes?: MemoryMessageType[]): MemoryMetrics {
+    // Filter messages by type if specified
+    const messagesToCount = (messageTypes && messageTypes.length > 0)
+      ? this.messages.filter(m => 
+          m.metadata?.type && messageTypes.includes(m.metadata.type)
+        )
+      : this.messages;
+    
+    return {
+      messageCount: messagesToCount.length,
+      estimatedTokens: this.messages.reduce((sum, m) => sum + (m.metadata?.tokenCount || 0), 0),
+      compressionCount: this.compressionCount,
+      lastCompressionTime: this.lastCompressionTime
+    };
   }
   
   /**
    * Clear all messages from memory
    */
   clear(): void {
-    this.memory.clear();
+    this.messages = [];
+    this.checkpoints.clear();
+    this.compressionCount = 0;
+    this.lastCompressionTime = undefined;
     logger.agent.debug('Memory cleared');
+  }
+
+  /**
+   * Rollback to a previously created checkpoint
+   * 
+   * @param checkpoint - The ID of the checkpoint
+   * @deprecated Use rollbackToCheckpoint() instead
+   */
+  rollback(checkpoint: string): void {
+    this.rollbackToCheckpoint(checkpoint);
   }
   
   /**
    * Create a checkpoint for potential rollback
+   * 
+   * @param id - The ID of the checkpoint
    */
   createCheckpoint(id: string): void {
-    if (this.memory.createCheckpoint) {
-      this.memory.createCheckpoint(id);
-      logger.agent.debug('Created memory checkpoint', { checkpoint: id });
-    }
+    this.checkpoints.set(id, [...this.messages]);
+    logger.agent.debug('Created checkpoint', { 
+      checkpoint: id, 
+      messageCount: this.messages.length 
+    });
   }
   
   /**
    * Rollback to a previously created checkpoint
+   * 
+   * @param id - The ID of the checkpoint
    */
   rollbackToCheckpoint(id: string): void {
-    if (this.memory.rollback) {
-      this.memory.rollback(id);
-      logger.agent.debug('Rolled back to checkpoint', { checkpoint: id });
+    const checkpointMessages = this.checkpoints.get(id);
+    if (checkpointMessages) {
+      this.messages = [...checkpointMessages];
+      logger.agent.debug('Rolled back to checkpoint', { 
+        checkpoint: id, 
+        messageCount: this.messages.length 
+      });
+    } else {
+      logger.agent.warn('Checkpoint not found', { checkpoint: id });
     }
   }
   
   /**
    * Format a step instruction using the configured formatter
+   * 
+   * @param stepId - The ID of the step
+   * @param prompt - The prompt to format
+   * @returns The formatted step instruction
    */
   formatStepInstruction(stepId: string, prompt: string): string {
     return this.formatter.formatStepInstruction?.(stepId, prompt) 
@@ -153,10 +205,12 @@ export class MemoryManager {
   
   /**
    * Check if memory usage is near the configured limit
-   */
+   * 
+   * @returns True if memory usage is near the configured limit, false otherwise
+   */ 
   isNearLimit(): boolean {
-    const metrics = this.memory.getMetrics();
-    const isNearLimit = metrics.estimatedTokens > this.config.maxTokens * this.config.compressionThreshold;
+    const metrics = this.getMetrics();
+    const isNearLimit = metrics.estimatedTokens > this.config.maxTokens! * this.config.compressionThreshold!;
     if (isNearLimit) {
       logger.agent.warn('Memory is near limit', {
         estimatedTokens: metrics.estimatedTokens,
@@ -170,90 +224,56 @@ export class MemoryManager {
   
   /**
    * Get the message count
+   * 
+   * @returns The message count
    */
   getMessageCount(): number {
-    return this.memory.getMetrics().messageCount;
+    return this.getMetrics().messageCount;
   }
   
   /**
-   * Get current token count
+   * Get the total token count for all messages
+   * 
+   * @returns The total token count
    */
   getTokenCount(): number {
-    return this.memory.getMetrics().estimatedTokens;
+    return this.getMetrics().estimatedTokens;
   }
   
   /**
    * Check memory pressure and compress if needed
    */
-  private async checkAndCompress(): Promise<void> {
-
-    // TODO: Don't count tokens of preserved messages
-    const metrics = this.memory.getMetrics(this.config.preserveMessageTypes);
-    const targetTokens = Math.floor(this.config.maxTokens * 0.7);
+  private async compress(): Promise<void> {
+    const targetTokens = Math.floor(this.config.maxTokens! * 0.7);
     
     if (this.isNearLimit()) {
-      logger.agent.warn('Memory pressure detected, compressing', {
-        currentTokens: metrics.estimatedTokens,
-        maxTokens: this.config.maxTokens,
-        messageCount: metrics.messageCount
-      });
-
       if (this.memoryCompressor) {
-        logger.agent.debug('Using memory compressor', {
-          compressor: this.memoryCompressor.name
-        });
-        const messages = await this.memory.retrieve();
+        logger.agent.debug('Using memory compressor');
         try {
           const compressed = await this.memoryCompressor.compress(
-            messages,
+            this.messages,
             targetTokens,
+            this.config.preserveMessageTypes,
             this.session
           );
           
-          this.memory.clear();
-          await this.memory.add(compressed);
+          // Replace messages without triggering compression again
+          this.messages = compressed;
+          this.compressionCount++;
+          this.lastCompressionTime = Date.now();
           
           logger.agent.info('Memory compressed', {
-            originalCount: messages.length,
-            newCount: compressed.length,
-            newTokens: this.getTokenCount()
+            tokenCount: this.getTokenCount(),
+            messageCount: this.messages.length,
+            compressionCount: this.compressionCount
           });
           
         } catch (error: any) {
-          logger.agent.error('Memory compressor failed, falling back to pruning', {
+          logger.agent.error('Memory compression failed', {
             error: error.message,
-            messageCount: messages.length
           });
-          
-          // Fall back to simple pruning if LLM summarization fails
-          await this.compressMemory(targetTokens);
         }
-      } else if (this.memory.compress) {
-        logger.agent.debug('Using simple pruning compression', {
-          currentTokens: this.getTokenCount(),
-          targetTokens,
-          messageCount: this.getMessageCount()
-        });
-        await this.compressMemory(targetTokens);
       }
     }
-  }
-  
-  /**
-   * Fall back to simple message pruning
-   */
-  private async compressMemory(targetTokens: number): Promise<void> {
-    if (!this.memory.compress) {
-      logger.agent.error('Cannot fall back to pruning: memory implementation does not support compress');
-      return;
-    }    
-    await this.memory.compress({
-      targetTokens,
-      preserveTypes: this.config.preserveMessageTypes
-    });
-    logger.agent.info('Memory pruned', {
-      newTokens: this.getTokenCount(),
-      newMessageCount: this.getMessageCount()
-    });
   }
 }

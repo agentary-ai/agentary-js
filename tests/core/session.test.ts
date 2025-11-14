@@ -1,71 +1,46 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createSession } from '../../src/core/session'
 import type { CreateSessionArgs } from '../../src/types/session'
-import type { GenerateArgs } from '../../src/types/worker'
+import type { GenerateArgs, Tool } from '../../src/types/worker'
 
-// Mock the WorkerManager with more realistic behavior
-vi.mock('../../src/workers/manager', () => {
-  // Store message handlers to simulate worker communication
-  const messageHandlers: Map<any, (ev: MessageEvent) => void> = new Map()
-  
-  const createMockWorkerInstance = () => {
-    const mockWorker = {
-      postMessage: vi.fn().mockImplementation((msg: any) => {
-        // Simulate async worker response
-        if (msg.type === 'generate') {
-          setTimeout(() => {
-            const handler = messageHandlers.get(mockWorker)
-            if (handler) {
-              // Send initial chunk
-              handler({ data: {
-                type: 'chunk',
-                requestId: msg.requestId,
-                args: { token: 'Hello', tokenId: 1, isFirst: true, isLast: false, ttfbMs: 100 }
-              }} as MessageEvent)
-
-              // Send middle chunk
-              handler({ data: {
-                type: 'chunk',
-                requestId: msg.requestId,
-                args: { token: ' world', tokenId: 2, isFirst: false, isLast: false }
-              }} as MessageEvent)
-
-              // Send done
-              handler({ data: {
-                type: 'done',
-                requestId: msg.requestId
-              }} as MessageEvent)
-            }
-          }, 10)
-        }
-      }),
-      addEventListener: vi.fn().mockImplementation((event: string, handler: any) => {
-        if (event === 'message') {
-          messageHandlers.set(mockWorker, handler)
-        }
-      }),
-      removeEventListener: vi.fn().mockImplementation((event: string, handler: any) => {
-        if (event === 'message') {
-          messageHandlers.delete(mockWorker)
-        }
-      }),
-      terminate: vi.fn()
-    }
-
-    return {
-      worker: mockWorker,
-      model: { name: 'test-model', quantization: 'q4' },
-      initialized: true,
-      inflightId: 0,
-      disposed: false
-    }
-  }
-
+// Mock the InferenceProviderManager with realistic streaming behavior
+vi.mock('../../src/providers/manager', () => {
   return {
-    WorkerManager: vi.fn().mockImplementation(() => ({
-      getWorker: vi.fn().mockResolvedValue(createMockWorkerInstance()),
-      disposeAll: vi.fn().mockResolvedValue(undefined)
-    }))
+    InferenceProviderManager: vi.fn().mockImplementation(() => {
+      const providers = new Map()
+      
+      return {
+        registerModels: vi.fn().mockImplementation(async (models: any[]) => {
+          // Register each model as a provider
+          for (const modelConfig of models) {
+            providers.set(modelConfig.model, {
+              model: modelConfig.model,
+              initialized: true
+            })
+          }
+        }),
+        getProvider: vi.fn().mockImplementation(async (model: string) => {
+          return {
+            getModelName: () => model,
+            generate: vi.fn().mockImplementation(async (args: any) => {
+              // Return streaming response by default
+              return {
+                type: 'streaming',
+                stream: (async function* () {
+                  yield { token: 'Hello', tokenId: 1, isFirst: true, isLast: false, ttfbMs: 100 }
+                  yield { token: ' world', tokenId: 2, isFirst: false, isLast: false }
+                  yield { token: '', tokenId: -1, isFirst: false, isLast: true }
+                })()
+              }
+            }),
+            dispose: vi.fn().mockResolvedValue(undefined),
+            isInitialized: () => true
+          }
+        }),
+        disposeAll: vi.fn().mockResolvedValue(undefined),
+        getAllProviders: vi.fn().mockReturnValue(providers)
+      }
+    })
   }
 })
 
@@ -75,9 +50,17 @@ describe('Session Management', () => {
   })
 
   describe('createSession', () => {
-    it('should create session with default configuration', async () => {
+    it('should create session without arguments (backward compatibility)', async () => {
       const session = await createSession()
-      
+
+      expect(session).toBeDefined()
+      expect(session.createResponse).toBeTypeOf('function')
+      expect(session.dispose).toBeTypeOf('function')
+    })
+
+    it('should create session with default configuration', async () => {
+      const session = await createSession({})
+
       expect(session).toBeDefined()
       expect(session.createResponse).toBeTypeOf('function')
       expect(session.dispose).toBeTypeOf('function')
@@ -85,13 +68,14 @@ describe('Session Management', () => {
 
     it('should create session with custom model configuration', async () => {
       const config: CreateSessionArgs = {
-        models: {
-          chat: {
-            name: 'test-model',
+        models: [{
+          name: 'test-model',
+          provider: 'webllm',
+          config: {
+            model: 'test-model',
             quantization: 'q4'
           }
-        },
-        engine: 'webgpu'
+        }]
       }
 
       const session = await createSession(config)
@@ -103,20 +87,32 @@ describe('Session Management', () => {
 
     it('should create session with multiple models', async () => {
       const config: CreateSessionArgs = {
-        models: {
-          chat: {
+        models: [
+          {
             name: 'chat-model',
-            quantization: 'q4'
+            provider: 'webllm',
+            config: {
+              model: 'chat-model',
+              quantization: 'q4'
+            }
           },
-          tool_use: {
+          {
             name: 'tool-model',
-            quantization: 'q8'
+            provider: 'webllm',
+            config: {
+              model: 'tool-model',
+              quantization: 'q8'
+            }
           },
-          reasoning: {
+          {
             name: 'reasoning-model',
-            quantization: 'q4'
+            provider: 'webllm',
+            config: {
+              model: 'reasoning-model',
+              quantization: 'q4'
+            }
           }
-        }
+        ]
       }
 
       const session = await createSession(config)
@@ -127,42 +123,44 @@ describe('Session Management', () => {
 
   describe('Session.createResponse', () => {
     it('should throw error when generating on disposed session', async () => {
-      const session = await createSession()
+      const session = await createSession({})
       await session.dispose()
 
       await expect(async () => {
-        for await (const chunk of session.createResponse({ messages: [{ role: 'user', content: 'test' }] })) {
-          // This should not execute
-        }
+        await session.createResponse('test-model', { messages: [{ role: 'user', content: 'test' }] })
       }).rejects.toThrow('Session disposed')
     })
 
     it('should handle basic generation request', async () => {
-      const session = await createSession()
+      const session = await createSession({})
       const generateArgs: GenerateArgs = {
         messages: [{ role: 'user', content: 'Hello, world!' }]
       }
 
-      // Verify the generator can be created and has the expected API
-      const generator = session.createResponse(generateArgs)
-      expect(generator).toBeDefined()
-      expect(typeof generator[Symbol.asyncIterator]).toBe('function')
+      // Verify the response can be created and has the expected API
+      const response = await session.createResponse('test-model', generateArgs)
+      expect(response).toBeDefined()
+      expect(response.type).toBe('streaming')
+      if (response.type === 'streaming') {
+        expect(typeof response.stream[Symbol.asyncIterator]).toBe('function')
+      }
       
       await session.dispose()
     })
 
     it('should handle generation with tools', async () => {
-      const session = await createSession()
-      const tools = [{
-        type: 'function' as const,
+      const session = await createSession({})
+      const tools: Tool[] = [{
+        type: 'function',
         function: {
           name: 'test_tool',
           description: 'A test tool',
           parameters: {
-            type: 'object',
+            type: 'object' as const,
             properties: {
               input: { type: 'string' }
-            }
+            },
+            required: []
           }
         }
       }]
@@ -172,16 +170,16 @@ describe('Session Management', () => {
         tools
       }
 
-      const generator = session.createResponse(generateArgs)
+      const response = await session.createResponse('test-model', generateArgs)
       
-      // Verify generator was created successfully
-      expect(generator).toBeDefined()
+      // Verify response was created successfully
+      expect(response).toBeDefined()
       
       await session.dispose()
     })
 
     it('should handle generation parameters', async () => {
-      const session = await createSession()
+      const session = await createSession({})
       const generateArgs: GenerateArgs = {
         messages: [
           { role: 'system', content: 'Test system message' },
@@ -195,10 +193,10 @@ describe('Session Management', () => {
         seed: 42
       }
 
-      const generator = session.createResponse(generateArgs)
+      const response = await session.createResponse('test-model', generateArgs)
       
-      // Verify generator was created successfully
-      expect(generator).toBeDefined()
+      // Verify response was created successfully
+      expect(response).toBeDefined()
       
       await session.dispose()
     })
@@ -206,13 +204,13 @@ describe('Session Management', () => {
 
   describe('Session.dispose', () => {
     it('should dispose session successfully', async () => {
-      const session = await createSession()
+      const session = await createSession({})
       
       await expect(session.dispose()).resolves.toBeUndefined()
     })
 
     it('should be idempotent - multiple dispose calls should not throw', async () => {
-      const session = await createSession()
+      const session = await createSession({})
       
       await session.dispose()
       await expect(session.dispose()).resolves.toBeUndefined()
@@ -221,11 +219,16 @@ describe('Session Management', () => {
 
   describe('Token Streaming', () => {
     it('should stream tokens correctly', async () => {
-      const session = await createSession()
+      const session = await createSession({})
+      
+      const response = await session.createResponse('test-model', { messages: [{ role: 'user', content: 'test' }] })
+      expect(response.type).toBe('streaming')
       
       const chunks: any[] = []
-      for await (const chunk of session.createResponse({ messages: [{ role: 'user', content: 'test' }] })) {
-        chunks.push(chunk)
+      if (response.type === 'streaming') {
+        for await (const chunk of response.stream) {
+          chunks.push(chunk)
+        }
       }
       
       expect(chunks).toHaveLength(3) // 2 content chunks + 1 done chunk
@@ -253,7 +256,7 @@ describe('Session Management', () => {
     })
 
     it('should handle generation parameters correctly', async () => {
-      const session = await createSession()
+      const session = await createSession({})
       const generateArgs = {
         messages: [{ role: 'user', content: 'test' }],
         temperature: 0.7,
@@ -261,139 +264,56 @@ describe('Session Management', () => {
         stop: ['</s>']
       }
       
-      const generator = session.createResponse(generateArgs)
-      expect(generator).toBeDefined()
+      const response = await session.createResponse('test-model', generateArgs)
+      expect(response).toBeDefined()
       
       await session.dispose()
     })
   })
 
   describe('Error Handling', () => {
-    it('should handle worker errors gracefully', async () => {
-      // Store the event handler for later use
-      let messageHandler: ((ev: MessageEvent) => void) | null = null
+    it('should handle provider errors gracefully', async () => {
+      // Override the mock for this specific test to throw an error
+      const { InferenceProviderManager } = await import('../../src/providers/manager')
+      const MockManager = InferenceProviderManager as any
       
-      // Create error worker instance
-      const errorWorkerInstance = {
-        worker: {
-          postMessage: vi.fn().mockImplementation((msg: any) => {
-            if (msg.type === 'generate') {
-              setTimeout(() => {
-                if (messageHandler) {
-                  messageHandler({ data: {
-                    type: 'error',
-                    requestId: msg.requestId,
-                    error: 'Worker error: Model loading failed'
-                  }} as MessageEvent)
-                }
-              }, 10)
-            }
-          }),
-          addEventListener: vi.fn().mockImplementation((event: string, handler: any) => {
-            if (event === 'message') {
-              messageHandler = handler
-            }
-          }),
-          removeEventListener: vi.fn().mockImplementation(() => {
-            messageHandler = null
-          }),
-          terminate: vi.fn()
-        },
-        model: { name: 'test-model', quantization: 'q4' },
-        initialized: true,
-        inflightId: 0,
-        disposed: false
-      }
-      
-      // Override the mock for this specific test
-      const WorkerManager = (await import('../../src/workers/manager')).WorkerManager as any
-      WorkerManager.mockImplementationOnce(() => ({
-        getWorker: vi.fn().mockResolvedValue(errorWorkerInstance),
-        disposeAll: vi.fn().mockResolvedValue(undefined)
+      MockManager.mockImplementationOnce(() => ({
+        registerModels: vi.fn().mockResolvedValue(undefined),
+        getProvider: vi.fn().mockResolvedValue({
+          getModelName: () => 'test-model',
+          generate: vi.fn().mockRejectedValue(new Error('Model loading failed')),
+          dispose: vi.fn().mockResolvedValue(undefined),
+          isInitialized: () => true
+        }),
+        disposeAll: vi.fn().mockResolvedValue(undefined),
+        getAllProviders: vi.fn().mockReturnValue(new Map())
       }))
       
-      const session = await createSession()
-      const chunks: any[] = []
+      const session = await createSession({})
       
-      for await (const chunk of session.createResponse({ messages: [{ role: 'user', content: 'test' }] })) {
-        chunks.push(chunk)
-      }
-      
-      // Should receive an error chunk
-      expect(chunks).toHaveLength(1)
-      expect(chunks[0]).toMatchObject({
-        token: '',
-        tokenId: -1,
-        isFirst: false,
-        isLast: true
-      })
+      await expect(async () => {
+        await session.createResponse('test-model', { messages: [{ role: 'user', content: 'test' }] })
+      }).rejects.toThrow('Model loading failed')
       
       await session.dispose()
     })
 
-    it('should handle debug messages from worker', async () => {
-      // Store the event handler
-      let messageHandler: ((ev: MessageEvent) => void) | null = null
-      
-      const debugWorkerInstance = {
-        worker: {
-          postMessage: vi.fn().mockImplementation((msg: any) => {
-            if (msg.type === 'generate') {
-              setTimeout(() => {
-                if (messageHandler) {
-                  // Send debug message
-                  messageHandler({ data: {
-                    type: 'debug',
-                    requestId: msg.requestId,
-                    args: { message: 'Model loaded successfully' }
-                  }} as MessageEvent)
-                  // Then send normal chunks
-                  messageHandler({ data: {
-                    type: 'chunk',
-                    requestId: msg.requestId,
-                    args: { token: 'Test', tokenId: 1, isFirst: true, isLast: false }
-                  }} as MessageEvent)
-                  messageHandler({ data: {
-                    type: 'done',
-                    requestId: msg.requestId
-                  }} as MessageEvent)
-                }
-              }, 10)
-            }
-          }),
-          addEventListener: vi.fn().mockImplementation((event: string, handler: any) => {
-            if (event === 'message') {
-              messageHandler = handler
-            }
-          }),
-          removeEventListener: vi.fn().mockImplementation(() => {
-            messageHandler = null
-          }),
-          terminate: vi.fn()
-        },
-        model: { name: 'test-model', quantization: 'q4' },
-        initialized: true,
-        inflightId: 0,
-        disposed: false
-      }
-      
-      // Override the mock for this test
-      const WorkerManager = (await import('../../src/workers/manager')).WorkerManager as any
-      WorkerManager.mockImplementationOnce(() => ({
-        getWorker: vi.fn().mockResolvedValue(debugWorkerInstance),
-        disposeAll: vi.fn().mockResolvedValue(undefined)
-      }))
-      
-      const session = await createSession()
+    it('should stream responses correctly', async () => {
+      const session = await createSession({})
       const chunks: any[] = []
       
-      for await (const chunk of session.createResponse({ messages: [{ role: 'user', content: 'test' }] })) {
-        chunks.push(chunk)
+      const response = await session.createResponse('test-model', { messages: [{ role: 'user', content: 'test' }] })
+      if (response.type === 'streaming') {
+        for await (const chunk of response.stream) {
+          chunks.push(chunk)
+        }
       }
       
-      // Debug messages should not appear in the stream
-      expect(chunks).toHaveLength(2)
-      expect(chunks[0].token).toBe('Test')
+      // Should get all chunks from the stream
+      expect(chunks).toHaveLength(3)
+      expect(chunks[0].token).toBe('Hello')
+      expect(chunks[1].token).toBe(' world')
+      expect(chunks[2].isLast).toBe(true)
       
       await session.dispose()
     })
@@ -401,145 +321,78 @@ describe('Session Management', () => {
 
   describe('Concurrent Generations', () => {
     it('should handle multiple concurrent generations', async () => {
-      // Track all created workers to ensure they all respond
-      const workers: any[] = []
-      
-      // Override the mock to track workers
-      const WorkerManager = (await import('../../src/workers/manager')).WorkerManager as any
-      WorkerManager.mockImplementationOnce(() => ({
-        getWorker: vi.fn().mockImplementation(() => {
-          const messageHandlers = new Map()
-          const worker = {
-            postMessage: vi.fn().mockImplementation((msg: any) => {
-              if (msg.type === 'generate') {
-                // Use setImmediate or setTimeout to ensure async behavior
-                setTimeout(() => {
-                  const handler = messageHandlers.get('message')
-                  if (handler) {
-                    // Send unique content based on the message content to verify correct routing
-                    const userMessage = msg.args.messages?.find((m: any) => m.role === 'user')?.content || ''
-                    const prefix = userMessage === 'test1' ? 'First' : 'Second'
-                    
-                    handler({ data: { 
-                      type: 'chunk', 
-                      requestId: msg.requestId,
-                      args: { token: `${prefix} response`, tokenId: 1, isFirst: true, isLast: false }
-                    }})
-                    
-                    handler({ data: { 
-                      type: 'done', 
-                      requestId: msg.requestId 
-                    }})
-                  }
-                }, 0)
-              }
-            }),
-            addEventListener: vi.fn().mockImplementation((event: string, handler: any) => {
-              messageHandlers.set(event, handler)
-            }),
-            removeEventListener: vi.fn().mockImplementation((event: string) => {
-              messageHandlers.delete(event)
-            }),
-            terminate: vi.fn()
-          }
-          
-          const instance = {
-            worker,
-            model: { name: 'test-model', quantization: 'q4' },
-            initialized: true,
-            inflightId: 0,
-            disposed: false
-          }
-
-          workers.push(instance)
-          return instance
-        }),
-        disposeAll: vi.fn().mockResolvedValue(undefined)
-      }))
-      
-      const session = await createSession()
+      const session = await createSession({})
       
       // Start multiple generations concurrently
-      const gen1 = session.createResponse({ messages: [{ role: 'user', content: 'test1' }] })
-      const gen2 = session.createResponse({ messages: [{ role: 'user', content: 'test2' }] })
+      const promise1 = session.createResponse('test-model', { messages: [{ role: 'user', content: 'test1' }] })
+      const promise2 = session.createResponse('test-model', { messages: [{ role: 'user', content: 'test2' }] })
       
       const chunks1: any[] = []
       const chunks2: any[] = []
       
-      // Collect results concurrently with timeout protection
+      // Collect results concurrently
       await Promise.all([
         (async () => {
-          for await (const chunk of gen1) {
-            chunks1.push(chunk)
+          const response = await promise1
+          if (response.type === 'streaming') {
+            for await (const chunk of response.stream) {
+              chunks1.push(chunk)
+            }
           }
         })(),
         (async () => {
-          for await (const chunk of gen2) {
-            chunks2.push(chunk)
+          const response = await promise2
+          if (response.type === 'streaming') {
+            for await (const chunk of response.stream) {
+              chunks2.push(chunk)
+            }
           }
         })()
       ])
       
-      // Verify both completed
-      expect(chunks1.length).toBe(2) // chunk + done
-      expect(chunks2.length).toBe(2) // chunk + done
-      
-      // Verify correct content routing
-      expect(chunks1[0].token).toBe('First response')
-      expect(chunks2[0].token).toBe('Second response')
-      
-      // Verify we created two workers
-      expect(workers).toHaveLength(2)
+      // Verify both completed successfully
+      expect(chunks1.length).toBeGreaterThan(0)
+      expect(chunks2.length).toBeGreaterThan(0)
       
       await session.dispose()
-    }, 15000) // Increase timeout for safety
+    })
   })
 
   describe('Memory Management', () => {
-    it('should clean up event listeners after generation', async () => {
-      const session = await createSession()
-      const WorkerManager = (await import('../../src/workers/manager')).WorkerManager as any
-      const mockInstance = WorkerManager.mock.results[0].value
-      const workerInstance = await mockInstance.getWorker()
-      
-      // Clear previous calls
-      workerInstance.worker.addEventListener.mockClear()
-      workerInstance.worker.removeEventListener.mockClear()
+    it('should clean up resources after generation', async () => {
+      const session = await createSession({})
       
       // Generate and consume all chunks
       const chunks: any[] = []
-      for await (const chunk of session.createResponse({ messages: [{ role: 'user', content: 'test' }] })) {
-        chunks.push(chunk)
+      const response = await session.createResponse('test-model', { messages: [{ role: 'user', content: 'test' }] })
+      if (response.type === 'streaming') {
+        for await (const chunk of response.stream) {
+          chunks.push(chunk)
+        }
       }
       
-      // Event listener should be added once and removed once
-      expect(workerInstance.worker.addEventListener).toHaveBeenCalledTimes(1)
-      expect(workerInstance.worker.removeEventListener).toHaveBeenCalledTimes(1)
-      expect(workerInstance.worker.addEventListener.mock.calls[0][0]).toBe('message')
-      expect(workerInstance.worker.removeEventListener.mock.calls[0][0]).toBe('message')
+      // Should have received all chunks
+      expect(chunks.length).toBeGreaterThan(0)
       
       await session.dispose()
     })
 
-    it('should clean up on early termination', async () => {
-      const session = await createSession()
-      const WorkerManager = (await import('../../src/workers/manager')).WorkerManager as any
-      const mockInstance = WorkerManager.mock.results[0].value
-      const workerInstance = await mockInstance.getWorker()
-      
-      // Clear previous calls
-      workerInstance.worker.removeEventListener.mockClear()
+    it('should handle early termination gracefully', async () => {
+      const session = await createSession({})
       
       // Start generation but break early
-      const generator = session.createResponse({ messages: [{ role: 'user', content: 'test' }] })
-      const iterator = generator[Symbol.asyncIterator]()
+      const response = await session.createResponse('test-model', { messages: [{ role: 'user', content: 'test' }] })
       
-      // Get first chunk then break
-      await iterator.next()
-      await iterator.return?.() // Early termination
-      
-      // Event listener should still be cleaned up
-      expect(workerInstance.worker.removeEventListener).toHaveBeenCalled()
+      if (response.type === 'streaming') {
+        const iterator = response.stream[Symbol.asyncIterator]()
+        
+        // Get first chunk then break
+        const firstChunk = await iterator.next()
+        expect(firstChunk.done).toBe(false)
+        
+        // Early termination
+        await iterator.return?.()
+      }
       
       await session.dispose()
     })

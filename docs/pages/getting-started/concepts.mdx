@@ -1,45 +1,52 @@
 # Core Concepts
 
-Understanding the key concepts in Agentary JS will help you build powerful browser-based AI applications.
+Understanding the key concepts in Agentary JS will help you build powerful AI applications with flexible deployment options.
 
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────┐
-│           Your Application                  │
-├─────────────────────────────────────────────┤
-│         Agentary JS Session                 │
-│  ┌──────────────────────────────────────┐  │
-│  │      Worker Manager                   │  │
-│  │  ┌────────────┐  ┌────────────┐     │  │
-│  │  │ Chat Model │  │ Tool Model │     │  │
-│  │  │  Worker    │  │  Worker    │     │  │
-│  │  └────────────┘  └────────────┘     │  │
-│  └──────────────────────────────────────┘  │
-│                                             │
-│  ┌──────────────────────────────────────┐  │
-│  │      Workflow Engine                  │  │
-│  │   (for agentic workflows)            │  │
-│  └──────────────────────────────────────┘  │
-└─────────────────────────────────────────────┘
-         │                    │
-         ▼                    ▼
-    WebGPU/WASM          ONNX Models
+┌─────────────────────────────────────────────────────────┐
+│              Your Application                           │
+├─────────────────────────────────────────────────────────┤
+│            Agentary JS Session                          │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │        Inference Provider Manager                 │  │
+│  │  ┌──────────────┐         ┌──────────────┐        │  │
+│  │  │ Device       │         │ Cloud        │        │  │
+│  │  │ Provider     │         │ Provider     │        │  │
+│  │  │ (WebGPU/WASM)│         │ (HTTP Proxy) │        │  │
+│  │  └──────────────┘         └──────────────┘        │  │
+│  └───────────────────────────────────────────────────┘  │
+│                                                         │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │      Workflow Engine                              │  │
+│  │   (for agentic workflows)                         │  │
+│  └───────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+         │                              │
+         ▼                              ▼
+    WebGPU/WASM                   Cloud LLM APIs
+    ONNX Models                   (OpenAI, Anthropic)
 ```
 
 ## Sessions
 
 A **Session** is the main interface for interacting with language models. It manages:
-- Model initialization and loading
-- Web Workers for non-blocking inference
-- Resource cleanup
+- Provider initialization and configuration
+- Model inference (device or cloud)
+- Resource cleanup and connection management
 
 ### Types of Sessions
 
 **Basic Session**
 ```javascript
 import { createSession } from 'agentary-js';
-const session = await createSession({ /* config */ });
+const session = await createSession({
+  models: [
+    { type: 'device', model: 'onnx-community/Qwen3-0.6B-ONNX', quantization: 'q4', engine: 'webgpu' },
+    { type: 'cloud', model: 'claude-3-5-sonnet-20241022', proxyUrl: 'https://api.example.com/anthropic', modelProvider: 'anthropic' }
+  ]
+});
 ```
 Use for simple text generation and tool calling.
 
@@ -50,53 +57,97 @@ const agent = await createAgentSession({ /* config */ });
 ```
 Use for multi-step workflows with memory and state management.
 
-## Models
+## Providers
 
-Agentary JS supports multiple models for different tasks:
+Agentary JS uses a provider architecture that supports both on-device and cloud-based inference.
+
+### Provider Types
+
+#### Device Provider
+
+Runs models locally in the browser using WebGPU or WebAssembly:
+
+```javascript
+{
+  type: 'device',
+  model: 'onnx-community/Qwen3-0.6B-ONNX',
+  quantization: 'q4',  // q4, q8, fp16, fp32
+  engine: 'webgpu',    // webgpu, wasm, auto
+  hfToken?: string     // Optional: for private models
+}
+```
+
+**Benefits:**
+- Complete privacy (data never leaves the browser)
+- Zero server costs
+- Offline capability
+- Low latency after initial load
+
+**Considerations:**
+- Requires model download (100MB-500MB)
+- Limited to smaller models
+- Browser compatibility varies
+
+#### Cloud Provider
+
+Uses cloud LLM APIs via a secure proxy:
+
+```javascript
+{
+  type: 'cloud',
+  model: 'claude-3-5-sonnet-20241022',
+  proxyUrl: 'https://your-backend.com/api/anthropic',
+  modelProvider: 'anthropic',  // 'anthropic' or 'openai'
+  timeout: 30000,
+  maxRetries: 3
+}
+```
+
+**Benefits:**
+- Access to powerful models (GPT-4, Claude)
+- No browser limitations
+- Instant startup
+- Regular model updates
+
+**Considerations:**
+- Requires backend proxy
+- API costs per request
+- Network latency
+- Requires internet connection
+
+### Multi-Provider Setup
+
+You can register multiple providers and choose which to use for each request:
 
 ```javascript
 const session = await createSession({
-  models: {
-    chat: {
-      name: 'onnx-community/gemma-3-270m-it-ONNX',
-      quantization: 'q4'
+  models: [
+    // Fast on-device model for quick tasks
+    {
+      type: 'device',
+      model: 'onnx-community/Qwen3-0.6B-ONNX',
+      quantization: 'q4',
+      engine: 'webgpu'
     },
-    tool_use: {
-      name: 'onnx-community/Qwen2.5-0.5B-Instruct',
-      quantization: 'q4'
-    },
-    reasoning: {
-      name: 'onnx-community/Qwen2.5-0.5B-Instruct',
-      quantization: 'q4'
-    },
-    default: {
-      name: 'onnx-community/gemma-3-270m-it-ONNX',
-      quantization: 'q4'
+    // Powerful cloud model for complex tasks
+    {
+      type: 'cloud',
+      model: 'claude-3-5-sonnet-20241022',
+      proxyUrl: 'https://api.example.com/anthropic',
+      modelProvider: 'anthropic'
     }
-  }
+  ]
 });
-```
 
-### Model Selection
+// Use device model for quick response
+const quickResponse = await session.createResponse('onnx-community/Qwen3-0.6B-ONNX', {
+  messages: [{ role: 'user', content: 'Quick question' }]
+});
 
-- **chat**: General conversation and text generation
-- **tool_use**: Function/tool calling (requires better reasoning)
-- **reasoning**: Complex reasoning and planning
-- **default**: Fallback when no specific model is defined
-
-## Generation Tasks
-
-Specify the task type to use the appropriate model:
-
-```javascript
-// Uses the 'chat' model
-session.createResponse({ messages }, 'chat')
-
-// Uses the 'tool_use' model
-session.createResponse({ messages, tools }, 'tool_use')
-
-// Uses the 'reasoning' model
-session.createResponse({ messages }, 'reasoning')
+// Use cloud model for complex task
+const complexResponse = await session.createResponse('claude-3-5-sonnet-20241022', {
+  messages: [{ role: 'user', content: 'Complex analysis' }]
+});
 ```
 
 ## Messages
@@ -117,32 +168,61 @@ const messages = [
 - `user`: Input from the user
 - `assistant`: Model's previous responses
 
-## Streaming
+## Response Types
 
-All generation in Agentary JS is streaming by default:
+Agentary JS supports both streaming and non-streaming responses, depending on the provider and configuration.
+
+### Streaming Response
+
+Process tokens as they're generated:
 
 ```javascript
-for await (const chunk of session.createResponse({ messages })) {
-  // Process each token as it's generated
-  console.log(chunk.token);
+const response = await session.createResponse(modelId, { messages });
+
+if (response.type === 'streaming') {
+  for await (const chunk of response.stream) {
+    console.log(chunk.token);
+  }
 }
 ```
 
-### Why Streaming?
+**Benefits:**
+- Better UX (show progress)
+- Faster time to first byte
+- Cancellable generation
+- Lower perceived latency
 
-- **Better UX**: Show progress as the model generates
-- **Faster TTFB**: Display results immediately
-- **Cancellable**: Stop generation early if needed
+### Non-Streaming Response
 
-## Web Workers
+Get the complete response at once:
 
-Models run in Web Workers to avoid blocking the main thread:
+```javascript
+const response = await session.createResponse(modelId, { messages });
+
+if (response.type === 'complete') {
+  console.log(response.content);
+  console.log('Tokens used:', response.usage);
+}
+```
+
+**Benefits:**
+- Simpler to handle
+- Complete token usage stats
+- Tool call information
+- Finish reason available
+
+## Device Provider Internals
+
+Device providers use Web Workers to avoid blocking the main thread:
 
 ```javascript
 // Main thread continues running while model generates
 const generationPromise = (async () => {
-  for await (const chunk of session.createResponse({ messages })) {
-    updateUI(chunk.token);
+  const response = await session.createResponse(deviceModelId, { messages });
+  if (response.type === 'streaming') {
+    for await (const chunk of response.stream) {
+      updateUI(chunk.token);
+    }
   }
 })();
 
@@ -150,23 +230,66 @@ const generationPromise = (async () => {
 updateProgressBar();
 ```
 
+### Model Loading
+
+Device providers handle model loading and initialization automatically:
+
+```javascript
+// Models are validated and loaded during session creation
+const session = await createSession({
+  models: [{
+    type: 'device',
+    model: 'onnx-community/Qwen3-0.6B-ONNX',
+    quantization: 'q4',
+    engine: 'webgpu'
+  }]
+});
+
+// Monitor loading progress
+session.on('worker:init:progress', (event) => {
+  console.log(`Loading ${event.modelName}: ${event.progress}%`);
+});
+
+session.on('worker:init:complete', (event) => {
+  console.log(`${event.modelName} ready in ${event.duration}ms`);
+});
+```
+
+See the [Model Support](/MODEL-SUPPORT) documentation for supported models.
+
 ## Memory Management
 
-Agentary JS provides built-in memory management for long conversations:
+Agentary JS provides built-in memory management for long conversations. Configure memory when calling `runWorkflow()`:
 
 ```javascript
 const agent = await createAgentSession({
-  models: { chat: { /* ... */ } }
+  models: [
+    { 
+      type: 'device',
+      model: 'onnx-community/Qwen3-0.6B-ONNX',
+      quantization: 'q4',
+      engine: 'webgpu'
+    }
+  ]
 });
 
 const workflow = {
-  memoryConfig: {
-    maxTokens: 2048,              // Maximum context size
-    compressionThreshold: 0.8,    // Compress at 80% capacity
-    enablePruning: true            // Auto-remove old messages
-  },
-  // ...
+  id: 'my-workflow',
+  steps: [ /* ... */ ],
+  tools: [ /* ... */ ]
 };
+
+const memoryConfig = {
+  maxTokens: 2048,              // Maximum context size
+  compressionThreshold: 0.8,    // Compress at 80% capacity
+  memoryCompressorConfig: {
+    name: 'sliding-window'      // or 'summarization'
+  }
+};
+
+for await (const result of agent.runWorkflow(prompt, workflow, memoryConfig)) {
+  // Process workflow results
+}
 ```
 
 ## Lifecycle Events
@@ -193,34 +316,42 @@ Define tools that the model can call:
 
 ```javascript
 const tools = [{
-  type: 'function',
-  function: {
+  definition: {
     name: 'get_weather',
     description: 'Get current weather',
     parameters: {
       type: 'object',
       properties: {
-        city: { type: 'string' }
+        city: { 
+          type: 'string',
+          description: 'City name'
+        }
       },
       required: ['city']
-    },
-    implementation: async (city) => {
-      // Your implementation
-      return { temp: 72, condition: 'sunny' };
     }
+  },
+  implementation: async ({ city }) => {
+    // Your implementation
+    const data = { temp: 72, condition: 'sunny' };
+    return JSON.stringify(data);
   }
 }];
 
-for await (const chunk of session.createResponse({
+const response = await session.createResponse(modelId, {
   messages,
   tools
-})) {
-  // Model can now call your tools
+});
+
+if (response.type === 'streaming') {
+  for await (const chunk of response.stream) {
+    console.log(chunk.token);
+  }
 }
 ```
 
 ## Next Steps
 
+- Set up a [Cloud Provider](/guides/cloud-provider)
 - Learn about [Tool Calling](/guides/tool-calling)
 - Build [Agentic Workflows](/guides/agentic-workflows)
-- Explore [API Reference](/api)
+- Explore [API Reference](/api-reference/session)

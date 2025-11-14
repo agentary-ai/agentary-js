@@ -43,19 +43,28 @@ describe('WorkflowExecutor', () => {
   let mockStepExecutor: any
   let mockStateManager: any
   let mockTools: Tool[]
+  let mockSession: any
 
   beforeEach(() => {
     vi.clearAllMocks()
-    // Create mock session object
-    const mockSession = {
+    
+    // Create mock session object with event emitter
+    mockSession = {
       workerManager: vi.fn(),
       createResponse: vi.fn(),
-      dispose: vi.fn()
+      dispose: vi.fn(),
+      _eventEmitter: {
+        emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+        removeAllListeners: vi.fn()
+      }
     }
+    
     mockStepExecutor = new StepExecutor(mockSession as any, new WorkflowStateManager())
     mockStateManager = new WorkflowStateManager()
     mockTools = []
-    workflowExecutor = new WorkflowExecutor(mockStepExecutor, mockTools, mockStateManager)
+    workflowExecutor = new WorkflowExecutor(mockStepExecutor, mockTools, mockStateManager, mockSession)
     
     // Setup default mock behavior for WorkflowStateManager
     mockStateManager.getState.mockReturnValue({

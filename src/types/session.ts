@@ -1,22 +1,36 @@
-import { DeviceType } from "@huggingface/transformers";
-import { WorkerManager } from "../workers/manager";
-import { GenerateArgs, Model } from "./worker";
+import { GenerateArgs } from "./worker";
 import { EventHandler, UnsubscribeFn } from "./events";
+import { InferenceProviderConfig } from "./provider";
+import { EventEmitter } from "../utils/event-emitter";
+import { InferenceProviderManager } from "../providers/manager";
 
-export type GenerationTask = 'chat' | 'tool_use' | 'reasoning';
+// export interface ModelConfig {
+//   model: string,
+//   config: InferenceProviderConfig;
+// }
 
 export interface CreateSessionArgs {
-  models?: {
-    default?: Model;
-    tool_use?: Model;
-    chat?: Model;
-    reasoning?: Model;
-  }
-  ctx?: number;
-  engine?: DeviceType;
-  // Optional: Hugging Face access token for private models when using the
-  // `hf:` model scheme. Ignored otherwise.
-  hfToken?: string;
+  models?: InferenceProviderConfig[];
+}
+
+export interface NonStreamingResponse {
+  type: 'complete';  // Add this discriminator
+  content: string;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  toolCalls?: Array<{
+    id: string;
+    type: 'function';
+    function: {
+      name: string;
+      arguments: string;
+    };
+  }>;
+  finishReason?: 'stop' | 'length' | 'tool_calls' | 'content_filter';
+  reasoning?: string;
 }
 
 export interface TokenStreamChunk {
@@ -28,9 +42,16 @@ export interface TokenStreamChunk {
   tokensPerSecond?: number;
 }
 
+export interface StreamingResponse {
+  type: 'streaming';  // Add this discriminator
+  stream: AsyncIterable<TokenStreamChunk>;
+}
+
+export type ModelResponse = NonStreamingResponse | StreamingResponse;
+
 export interface Session {
-  workerManager: WorkerManager;
-  createResponse(args: GenerateArgs, generationTask?: GenerationTask): AsyncIterable<TokenStreamChunk>;
+  registerModels(models: InferenceProviderConfig[]): Promise<void>;
+  createResponse(model: string, args: GenerateArgs): Promise<ModelResponse>;
   dispose(): Promise<void>;
   /**
    * Subscribe to session events
@@ -45,4 +66,6 @@ export interface Session {
    * @param handler - Event handler to remove
    */
   off(eventType: string | '*', handler: EventHandler): void;
+  _eventEmitter: EventEmitter;
+  _providerManager: InferenceProviderManager;
 }

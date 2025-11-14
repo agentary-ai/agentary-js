@@ -1,43 +1,43 @@
-import type { Session } from '../types/session'
-import type { Tool, GenerateArgs, Message } from '../types/worker';
+import type { ModelResponse, NonStreamingResponse, Session } from '../types/session'
+import type { Tool, GenerateArgs } from '../types/worker';
 import type { 
   WorkflowStep,
 } from '../types/agent-session';
 
 import { logger } from '../utils/logger';
-import { ToolParser } from '../processing/tools/parser';
-import { ContentProcessor } from '../processing/content/processor';
 import { WorkflowStateManager } from './workflow-state';
 import { WorkflowIterationResponse } from '../types/agent-session';
 
+/**
+ * Executes individual workflow steps, handling tool calls and response generation.
+ */
 export class StepExecutor {
   private session: Session;
-  private toolParser: ToolParser;
-  private contentProcessor: ContentProcessor;
   private workflowStateManager: WorkflowStateManager;
-  private eventSession: Session;
 
   constructor(
     session: Session,
     workflowStateManager: WorkflowStateManager,
-    eventSession: Session
   ) {
     this.session = session;
-    this.toolParser = new ToolParser();
-    this.contentProcessor = new ContentProcessor();
     this.workflowStateManager = workflowStateManager;
-    this.eventSession = eventSession;
   }
 
+  /**
+   * Executes a workflow step, handling tool calls and response generation.
+   * 
+   * @param step - The workflow step to execute
+   * @param tools - The tools to use for the step
+   * @returns A promise that resolves with the workflow iteration response
+   */
   async execute(
     step: WorkflowStep, tools: Tool[]
   ): Promise<WorkflowIterationResponse> {
     const stepStartTime = Date.now();
     const stepState = this.workflowStateManager.getStepState(step.id);
     
-    logger.agent.debug('Executing step', { 
-      stepId: step.id,
-      hasToolChoice: !!step.toolChoice,
+    logger.agent.info('Executing step', { 
+      ...step,
       attempt: stepState.attempts + 1,
       maxAttempts: stepState.maxAttempts
     });
@@ -50,49 +50,45 @@ export class StepExecutor {
       stepState.attempts = stepState.attempts + 1;
 
       // Prepare generation arguments and filtered tools
-      const { generateArgs, filteredTools, isLastStep } = await this.prepareGeneration(step, tools);
+      const { generateArgs, toolsAvailable, isLastStep } = await this.prepareGeneration(step, tools);
 
       // Generate response
-      const stepResult = await this.executeGeneration(step, generateArgs);
+      const modelResponse = await this.session.createResponse(step.model, generateArgs) as NonStreamingResponse;
+      
       logger.agent.debug('Model response received', {
         stepId: step.id,
-        stepResult,
-        generationTask: step.generationTask,
+        modelResponse,
         currentTokenCount: this.workflowStateManager.getCurrentTokenCount(),
         messageCount: this.workflowStateManager.getMessageCount(),
       });
       
-      // Filter out thinking tags and extract clean content
-      const { cleanContent, thinkingContent } = this.contentProcessor.removeThinkTags(stepResult);
-      logger.agent.debug('Model response parsed', {
-        stepId: step.id,
-        cleanContent,
-        thinkingContent,
-      });
-      
-      if (step.generationTask === 'tool_use') {
+      if (step.toolChoice && step.toolChoice.length > 0 && modelResponse.toolCalls) {
         return await this.handleToolUse(
           step, 
-          filteredTools, 
-          cleanContent, 
-          thinkingContent, 
-          stepResult, 
+          toolsAvailable, 
+          modelResponse, 
           isLastStep, 
-          stepState, 
-          stepStartTime
+          stepStartTime,
         );
       } else {
-        return this.handleContentResponse(step, cleanContent, stepResult, isLastStep, stepStartTime);
+        return this.handleContentResponse(step, modelResponse, isLastStep, stepStartTime);
       }        
     } catch (error: any) {
       return this.handleError(error, step, stepState, stepStartTime);
     }
   }
 
+  /**
+   * Prepares the generation arguments and filtered tools for a workflow step.
+   * 
+   * @param step - The workflow step to prepare the generation arguments and filtered tools for
+   * @param tools - The tools to use for the step
+   * @returns A promise that resolves with the generation arguments and filtered tools
+   */
   private async prepareGeneration(
     step: WorkflowStep, 
     tools: Tool[]
-  ): Promise<{ generateArgs: GenerateArgs; filteredTools: Tool[]; isLastStep: boolean }> {
+  ): Promise<{ generateArgs: GenerateArgs; toolsAvailable: Tool[]; isLastStep: boolean }> {
     let prompt = step.prompt;
     const isLastStep = this.workflowStateManager.isLastStep(step.id);
 
@@ -107,23 +103,18 @@ export class StepExecutor {
       }
     }], true);
 
-    if (step.generationTask) {
-    } else if (step.toolChoice && step.toolChoice.length > 0) {
-      // Add tool use prompt suffix by default if tool choice is provided
-      step.generationTask = 'tool_use';
-    }
-
     // Select tools based on generationTask and toolChoice
-    let filteredTools: Tool[];
-    if (step.generationTask !== 'tool_use') {
-      // Include no tools if generation task is not tool_use
-      filteredTools = [];
-    } else if (!step.toolChoice || step.toolChoice.length === 0) {
-      // Include all tools if toolChoice is empty for tool_use tasks
-      filteredTools = tools;
+    let toolsAvailable: Tool[];
+    if (!step.toolChoice || step.toolChoice.length === 0) {
+      toolsAvailable = [];
     } else {
       // Filter tools by toolChoice names for tool_use tasks
-      filteredTools = tools.filter(tool => step.toolChoice!.includes(tool.function.name));
+      toolsAvailable = tools.filter(tool => step.toolChoice!.includes(tool.definition.name));
+      logger.agent.debug('Tools available for step', {
+        stepId: step.id,
+        toolChoice: step.toolChoice,
+        toolsAvailable: toolsAvailable.map(tool => tool.definition.name)
+      });
     }
     
     // Get messages from memory (now async)
@@ -132,147 +123,85 @@ export class StepExecutor {
     // System and user prompts are already in memory, so just use memoryMessages
     const generateArgs: GenerateArgs = {
       messages: memoryMessages,
+      enable_thinking: step.enableThinking ?? false,
       temperature: step.temperature ?? 0.1,
       max_new_tokens: step.maxTokens ?? 1024,
-      enable_thinking: step.enableThinking ?? false,
+      stream: false,
     };
-    if (filteredTools.length > 0) {
-      generateArgs.tools = filteredTools;
+    if (toolsAvailable.length > 0) {
+      // Extract just the tool definitions for the generate args
+      generateArgs.tools = toolsAvailable.map(tool => tool.definition);
     }
 
-    return { generateArgs, filteredTools, isLastStep };
+    return { generateArgs, toolsAvailable, isLastStep };
   }
 
-  private async executeGeneration(
-    step: WorkflowStep, 
-    generateArgs: GenerateArgs
-  ): Promise<string> {
-    let stepResult = '';
-    for await (const chunk of this.session.createResponse(
-      generateArgs, step.generationTask
-    )) {
-      if (!chunk.isLast) {
-        stepResult += chunk.token;
-      }
-    }
-    logger.agent.debug('Step result', {
-      stepId: step.id,
-      resultLength: stepResult.length,
-      generationTask: step.generationTask,
-      currentTokenCount: this.workflowStateManager.getCurrentTokenCount(),
-      messageCount: this.workflowStateManager.getMessageCount()
-    });
-    return stepResult;
-  }
-
+  /**
+   * Handles the tool use for a workflow step.
+   * 
+   * @param step - The workflow step to handle the tool use for
+   * @param toolsAvailable - The available tools to use for the step
+   * @param modelResponse - The model response containing content and tool calls
+   * @param isLastStep - Whether the step is the last step
+   * @param stepState - The state of the step
+   * @param stepStartTime - The start time of the step
+   * @returns A promise that resolves with the workflow iteration response
+   */
   private async handleToolUse(
     step: WorkflowStep,
-    filteredTools: Tool[],
-    cleanContent: string,
-    thinkingContent: string | undefined,
-    stepResult: string,
+    toolsAvailable: Tool[],
+    modelResponse: ModelResponse,
     isLastStep: boolean,
-    stepState: any,
     stepStartTime: number
   ): Promise<WorkflowIterationResponse> {
-    const toolCallId = (Math.random().toString(36).slice(2, 12));
-    const toolCall = this.toolParser.parse(cleanContent);
-    logger.agent.debug('Tool call parsing result', { 
-      stepId: step.id,
-      toolName: toolCall?.name,
-      hasArgs: !!toolCall?.args
-    });
-    
-    if (!toolCall) {
-      logger.agent.error('Tool call parsing failed', {
-        stepId: step.id,
-        cleanContent,
-        rawContent: stepResult,
-        expectedTools: step.toolChoice,
-        thinkingContent: thinkingContent?.substring(0, 200) // Log first 200 chars of thinking
-      });
-      // Rollback to checkpoint before this step
-      this.workflowStateManager.rollbackToCheckpoint(step.id);
-      this.workflowStateManager.handleStepCompletion(step.id, false);
-      const willRetry = stepState.maxAttempts && stepState.attempts < stepState.maxAttempts;
-
-      return {
-        stepId: step.id,
-        error: {
-          message: 'No tool call detected in response for tool_use generation task'
-        },
-        metadata: {
-          duration: Date.now() - stepStartTime,
-          rawResult: stepResult,
-          cleanContent, // Add clean content to help debug
-          stepType: step.generationTask,
-          attempt: stepState.attempts,
-          maxAttempts: stepState.maxAttempts,
-          willRetry
-        }
-      };
+    // Type guard to ensure we have a non-streaming response
+    if (modelResponse.type === 'streaming') {
+      throw new Error('Streaming responses are not supported for tool use');
     }
-    
-    // Find tool in tools array
-    const toolSelected = filteredTools.find(tool => tool.function.name === toolCall.name);
-    if (!toolSelected) {
-      logger.agent.error('Tool not found', {
-        stepId: step.id,
-        requestedTool: toolCall.name,
-        availableTools: filteredTools.map(t => t.function.name),
-        parsedArgs: toolCall.args
-      });
-      // Rollback to checkpoint before this step
-      this.workflowStateManager.rollbackToCheckpoint(step.id);
-      this.workflowStateManager.handleStepCompletion(step.id, false);
-      
-      const willRetry = stepState.maxAttempts && stepState.attempts < stepState.maxAttempts;
-      
-      return {
-        stepId: step.id,
-        error: {
-          message: 'Tool ' + toolCall.name + ' not found for tool_use generation task'
-        },
-        metadata: {
-          duration: Date.now() - stepStartTime,
-          rawResult: stepResult,
-          stepType: step.generationTask,
-          attempt: stepState.attempts,
-          maxAttempts: stepState.maxAttempts,
-          willRetry
-        }
-      };
+    if (!modelResponse.toolCalls) {
+      throw new Error('Tool calls not found in response');
     }
 
-    if (toolSelected.function.implementation) {
-      // Emit tool call start event
+    for (const toolCall of modelResponse.toolCalls) {
+      const toolSelected = toolsAvailable.find(
+        tool => tool.definition.name === toolCall.function.name
+      )!;
+
+      if (!toolSelected.implementation) {
+        throw new Error(
+          'Tool implementation not found for tool ' + 
+          toolCall.function.name
+        );
+      }
+
       const toolStartTime = Date.now();
-      const emitter = (this.eventSession as any)._eventEmitter;
+      const emitter = this.session._eventEmitter;
       if (emitter) {
         emitter.emit({
           type: 'tool:call:start',
           stepId: step.id,
-          toolName: toolCall.name,
-          args: toolCall.args,
+          toolName: toolCall.function.name,
+          args: JSON.parse(toolCall.function.arguments),
           timestamp: toolStartTime
         });
       }
 
+      // Execute tool
       let toolResult: any;
       try {
-        toolResult = await toolSelected.function.implementation(toolCall.args);
+        toolResult = await toolSelected.implementation(
+          JSON.parse(toolCall.function.arguments)
+        );
         logger.agent.debug('Tool execution result', {
           stepId: step.id,
-          toolName: toolCall.name,
-          resultType: typeof toolResult
+          toolName: toolCall.function.name,
+          result: toolResult
         });
-
-        // Emit tool call complete event
         if (emitter) {
           emitter.emit({
             type: 'tool:call:complete',
             stepId: step.id,
-            toolName: toolCall.name,
+            toolName: toolCall.function.name,
             result: toolResult,
             duration: Date.now() - toolStartTime,
             timestamp: Date.now()
@@ -281,37 +210,32 @@ export class StepExecutor {
       } catch (error: any) {
         logger.agent.error('Tool execution failed', {
           stepId: step.id,
-          toolName: toolCall.name,
+          toolName: toolCall.function.name,
           error: error.message
         });
-
-        // Emit tool call error event
         if (emitter) {
           emitter.emit({
             type: 'tool:call:error',
             stepId: step.id,
-            toolName: toolCall.name,
+            toolName: toolCall.function.name,
             error: error.message,
             duration: Date.now() - toolStartTime,
             timestamp: Date.now()
           });
         }
-
-        throw error;
+        throw new Error('Tool execution failed: ' + error.message);
       }
-      
+
+      // Add tool result to memory
       await this.workflowStateManager.addMessagesToMemory([
         {
           role: 'assistant',
-          content: "",
-          tool_calls: [
+          content: [
             {
-              id: toolCallId,
-              type: 'function',
-              function: {
-                name: toolCall.name,
-                arguments: toolCall.args
-              }
+              type: 'tool_use',
+              id: toolCall.id,
+              name: toolCall.function.name,
+              arguments: JSON.parse(toolCall.function.arguments)
             }
           ],
           metadata: {
@@ -319,67 +243,62 @@ export class StepExecutor {
           }
         },
         {
-          role: 'tool',
-          tool_call_id: toolCallId,
-          content: JSON.stringify(toolResult),
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: toolCall.id,
+              result: JSON.stringify(toolResult)
+            }
+          ],
           metadata: {
             type: 'tool_result'
           }
         }
       ], isLastStep);
-      
-      this.workflowStateManager.addToolResult(step.id, {
-        name: toolCall.name,
-        description: toolSelected.function.description,
-        result: JSON.stringify(toolResult)
-      });
-      
+
       this.workflowStateManager.handleStepCompletion(step.id, true, JSON.stringify(toolResult));
-      
+
       return {
         stepId: step.id,
         toolCall: {
-          name: toolCall.name,
-          args: toolCall.args,
+          name: toolCall.function.name,
+          args: JSON.parse(toolCall.function.arguments),
           result: JSON.stringify(toolResult)
         },
         metadata: {
           duration: Date.now() - stepStartTime,
-          rawResult: stepResult,
-          stepType: step.generationTask,
-        }
-      };
-    } else {
-      await this.workflowStateManager.addMessagesToMemory([{
-        role: 'assistant',
-        content: cleanContent,
-        metadata: {
-          type: 'tool_use'
-        }
-      }], isLastStep);
-      
-      return {
-        stepId: step.id,
-        toolCall: {
-          name: toolCall.name,
-          args: toolCall.args,
-        },
-        metadata: {
-          duration: Date.now() - stepStartTime,
-          rawResult: stepResult,
-          stepType: step.generationTask,
+          rawResult: modelResponse.content,
         }
       };
     }
+
+    // This should never be reached due to the toolCalls check above
+    throw new Error('No tool calls processed');
   }
 
+  /**
+   * Handles the content response for a workflow step.
+   * 
+   * @param step - The workflow step to handle the content response for
+   * @param modelResponse - The model response containing content
+   * @param isLastStep - Whether the step is the last step
+   * @param stepStartTime - The start time of the step
+   * @returns A promise that resolves with the workflow iteration response
+   */
   private handleContentResponse(
     step: WorkflowStep,
-    cleanContent: string,
-    stepResult: string,
+    modelResponse: ModelResponse,
     isLastStep: boolean,
     stepStartTime: number
   ): WorkflowIterationResponse {
+    // Type guard to ensure we have a non-streaming response
+    if (modelResponse.type === 'streaming') {
+      throw new Error('Streaming responses are not supported for content response');
+    }
+
+    const cleanContent = modelResponse.content;
+    
     this.workflowStateManager.addMessagesToMemory([{
       role: 'assistant',
       content: cleanContent,
@@ -388,6 +307,7 @@ export class StepExecutor {
       }
     }], isLastStep);
     
+    // Handle step completion
     this.workflowStateManager.handleStepCompletion(step.id, true, cleanContent);
     
     return {
@@ -395,12 +315,20 @@ export class StepExecutor {
       content: cleanContent,
       metadata: {
         duration: Date.now() - stepStartTime,
-        rawResult: stepResult,
-        stepType: step.generationTask,
+        rawResult: modelResponse.content,
       }
     };
   }
 
+  /**
+   * Handles the error for a workflow step.
+   * 
+   * @param error - The error to handle
+   * @param step - The workflow step to handle the error for
+   * @param stepState - The state of the step
+   * @param stepStartTime - The start time of the step
+   * @returns A promise that resolves with the workflow iteration response
+   */
   private handleError(
     error: any,
     step: WorkflowStep,
@@ -430,7 +358,6 @@ export class StepExecutor {
       },
       metadata: {
         duration: Date.now() - stepStartTime,
-        stepType: step.generationTask,
         attempt: stepState.attempts,
         maxAttempts: stepState.maxAttempts,
         willRetry

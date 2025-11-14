@@ -2,33 +2,40 @@ import type {
   MemoryCompressor, 
   MemoryMessage, 
   MemoryMetrics, 
-  MemoryConfig 
+  MemoryConfig,
+  MemoryMessageType
 } from '../../types/memory';
 import type { Session } from '../../types/session';
 import { ContentProcessor } from '../../processing/content/processor';
 import { TokenCounter } from '../../utils/token-counter';
 import { logger } from '../../utils/logger';
+import { MessageContent } from '../../types/worker';
 
-export interface LLMSummarizationConfig {
+export interface SummarizationConfig {
+  name: 'summarization';
+  model: string;
   systemPrompt?: string;
   userPromptTemplate?: string;
   temperature?: number;
   enableThinking?: boolean;
+  preserveTypes?: MemoryMessageType[];
 }
 
 /**
  * Compression strategy that uses LLM summarization to condense message history.
  * Generates concise summaries of conversation history to reduce token usage.
  */
-export class LLMSummarization implements MemoryCompressor {
-  name = 'llm-summarization';
-  
-  private config: LLMSummarizationConfig;
+export class Summarization implements MemoryCompressor {  
+  private config: SummarizationConfig;
   private contentProcessor: ContentProcessor;
   private tokenCounter: TokenCounter;
+  private model: string;
   
-  constructor(config: LLMSummarizationConfig = {}) {
+  constructor(config: SummarizationConfig) {
+    this.model = config.model;
     this.config = {
+      name: 'summarization',
+      model: config.model,
       systemPrompt: config.systemPrompt || 
         `You are summarizing a multi-step AI agent workflow conversation. ` +
         `Your task is to create a concise, data-focused summary that preserves: ` +
@@ -62,33 +69,31 @@ export class LLMSummarization implements MemoryCompressor {
   async compress(
     messages: MemoryMessage[], 
     targetTokens: number,
+    preserveTypes?: string[],
     session?: Session
   ): Promise<MemoryMessage[]> {
-    if (!session) {
-      logger.agent.error('Session required for summarization compression');
-      throw new Error('Session required for summarization compression');
-    }
-    
+    if (!session) throw new Error('Session required for summarization');
     if (messages.length === 0) {
       return messages;
     }
     
     logger.agent.debug('Starting message summarization', {
       messageCount: messages.length,
-      messages,
       targetTokens
     });
+    logger.agent.verbose('Starting message summarization', { messages });
     
     const { preserved, toSummarize } = this.partitionMessages(messages);
     
     logger.agent.debug('Partitioned messages', {
-      preserved,
-      toSummarize
+      preservedCount: preserved.length,
+      toSummarizeCount: toSummarize.length
     });
+    logger.agent.verbose('Partitioned messages', { preserved, toSummarize });
 
     try {
       // 3. Generate summary message
-      const summaryMessage = await this.generateSummaryMessage(messages, toSummarize, targetTokens, session);
+      const summaryMessage = await this.generateSummaryMessage(this.model, messages, toSummarize, targetTokens, session);
       
       // 4. Return preserved messages and summary
       return [...preserved, summaryMessage];
@@ -114,7 +119,7 @@ export class LLMSummarization implements MemoryCompressor {
     const toSummarize: MemoryMessage[] = [];
     
     // Always preserve these message types
-    const alwaysPreserveTypes = ['system_instruction', 'user_prompt', 'summary'];
+    const alwaysPreserveTypes = this.config.preserveTypes || ['system_instruction', 'user_prompt', 'summary'];
     
     messages.forEach((msg) => {
       if (msg.metadata?.type && alwaysPreserveTypes.includes(msg.metadata.type)) {
@@ -131,96 +136,87 @@ export class LLMSummarization implements MemoryCompressor {
    * Generate a summary message using the LLM
    */
   private async generateSummaryMessage(
+    model: string,
     allMessages: MemoryMessage[],
     toSummarize: MemoryMessage[],
     targetTokens: number,
     session: Session
   ): Promise<MemoryMessage> {
-    // Group messages by workflow step for better summarization
-    const stepGroups = this.groupByStep(toSummarize);
-    logger.agent.debug('Step groups for summarization', {
-      stepGroups
-    });
-    
-    // Format for summarization
-    const userPrompt = allMessages.find(m => m.metadata?.type === 'user_prompt')?.content || '';
-    const stepSummaries = stepGroups.map(group => 
-      this.formatStepGroup(group)
-    ).join('\n\n');
-    
-    const summarizationPrompt = this.config.userPromptTemplate!
-      .replace('{userPrompt}', userPrompt)
-      .replace('{stepSummaries}', stepSummaries)
-      // .replace('{maxSummaryTokens}', String(targetTokens));
-    
-    // Generate summary
-    let summary = '';
-    for await (const chunk of session.createResponse({
-      messages: [
-        { role: 'system', content: this.config.systemPrompt! },
-        { role: 'user', content: summarizationPrompt }
-      ],
-      temperature: this.config.temperature!,
-      // max_new_tokens: targetTokens,
-      enable_thinking: this.config.enableThinking!
-    }, 'chat')) {
-      if (!chunk.isLast) {
-        summary += chunk.token;
+    try {
+      // Group messages by workflow step for better summarization
+      const stepGroups = this.groupByStep(toSummarize);
+      logger.agent.debug('Step groups for summarization', {
+        groupCount: stepGroups.length
+      });
+      logger.agent.verbose('Step groups for summarization', { stepGroups });
+      
+      // Format for summarization
+      const userPrompt = allMessages.find(m => m.metadata?.type === 'user_prompt')?.content || '';
+      const stepSummaries = stepGroups.map(group => 
+        this.formatStepGroup(group)
+      ).join('\n\n');
+      
+      const summarizationPrompt = this.config.userPromptTemplate!
+        .replace('{userPrompt}', userPrompt as string)
+        .replace('{stepSummaries}', stepSummaries)
+        // .replace('{maxSummaryTokens}', String(targetTokens));
+      
+      // Generate summary
+      let summary = '';
+      const response = await session.createResponse(model, {
+        messages: [
+          { role: 'system', content: this.config.systemPrompt! },
+          { role: 'user', content: summarizationPrompt }
+        ],
+        temperature: this.config.temperature!,
+        enable_thinking: this.config.enableThinking!
+      });
+      
+      if (response.type === 'streaming') {
+        for await (const chunk of response.stream) {
+          if (!chunk.isLast) {
+            summary += chunk.token;
+          }
+        }
+      } else {
+        summary = response.content;
       }
+      
+      const { cleanContent } = this.contentProcessor.removeThinkTags(summary);
+      
+      // Format summary as context provided to the assistant, not as an assistant response
+      const formattedSummary = `[Context from previous steps]\n${cleanContent}`;
+      
+      const summaryMessage: MemoryMessage = {
+        role: 'user',
+        content: formattedSummary,
+        metadata: {
+          type: 'summary',
+          timestamp: Date.now(),
+          tokenCount: this.tokenCounter.estimateTokens([{
+            role: 'user',
+            content: formattedSummary
+          }])
+        }
+      };
+      
+      logger.agent.info('Message history summarized', {
+        summary: cleanContent,
+        originalMessageCount: allMessages.length,
+        summarizedCount: toSummarize.length,
+        summaryLength: cleanContent.length,
+        summaryTokens: summaryMessage.metadata?.tokenCount
+      });
+      
+      return summaryMessage;
+    } catch (error: any) {
+      logger.agent.error('Failed to generate summary message', {
+        error: error.message,
+        messageCount: allMessages.length
+      });
+      throw error;
     }
-    
-    const { cleanContent } = this.contentProcessor.removeThinkTags(summary);
-    
-    // Format summary as context provided to the assistant, not as an assistant response
-    const formattedSummary = `[Context from previous steps]\n${cleanContent}`;
-    
-    const summaryMessage: MemoryMessage = {
-      role: 'user',
-      content: formattedSummary,
-      metadata: {
-        type: 'summary',
-        timestamp: Date.now(),
-        tokenCount: this.tokenCounter.estimateTokens([{
-          role: 'user',
-          content: formattedSummary
-        }])
-      }
-    };
-    
-    logger.agent.info('Message history summarized', {
-      summary: cleanContent,
-      originalMessageCount: allMessages.length,
-      summarizedCount: toSummarize.length,
-      summaryLength: cleanContent.length,
-      summaryTokens: summaryMessage.metadata?.tokenCount
-    });
-    
-    return summaryMessage;
   }
-  
-  // shouldCompress(metrics: MemoryMetrics, config: MemoryConfig): boolean {
-  //   const threshold = config.compressionThreshold ?? 0.8;
-  //   const maxTokens = config.maxTokens ?? 512;
-  //   const shouldCompress = metrics.estimatedTokens > maxTokens * threshold;
-    
-  //   if (shouldCompress) {
-  //     logger.agent.debug('Compression threshold reached', {
-  //       currentTokens: metrics.estimatedTokens,
-  //       maxTokens,
-  //       threshold,
-  //       utilizationPercent: (metrics.estimatedTokens / maxTokens) * 100
-  //     });
-  //   } else {
-  //     logger.agent.debug('Compression threshold not reached', {
-  //       currentTokens: metrics.estimatedTokens,
-  //       maxTokens,
-  //       threshold,
-  //       utilizationPercent: (metrics.estimatedTokens / maxTokens) * 100
-  //     });
-  //   }
-    
-  //   return shouldCompress;
-  // }
   
   /**
    * Group messages by workflow step for structured summarization
@@ -267,7 +263,9 @@ export class LLMSummarization implements MemoryCompressor {
     }
     
     if (toolUse && toolResult) {
-      const toolName = toolUse.tool_calls?.[0]?.function?.name || 'unknown';
+      // const toolName = toolUse.tool_calls?.[0]?.function?.name || 'unknown';
+      const firstContent = (toolUse.content as MessageContent[])[0];
+      const toolName = firstContent?.type === 'tool_use' ? firstContent.name : 'unknown';
       formatted += `  Tool: ${toolName}\n`;
       formatted += `  Result: ${toolResult.content}\n`;
     }

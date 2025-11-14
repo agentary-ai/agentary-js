@@ -1,34 +1,44 @@
 # Quick Start
 
-This guide will walk you through creating your first Agentary JS application.
+This guide will walk you through creating your first Agentary JS application with both on-device and cloud providers.
 
-## Basic Text Generation
+## Choose Your Provider
 
-Create a simple chat session:
+Agentary JS supports two types of inference providers:
+
+- **Device Provider**: Run models locally in the browser using WebGPU or WebAssembly
+- **Cloud Provider**: Use cloud LLM providers (OpenAI, Anthropic) via a secure proxy
+
+## On-Device Inference
+
+Run models directly in the browser with no server dependencies:
 
 ```javascript
 import { createSession } from 'agentary-js';
 
-// Create a session with a quantized model
+// Create a session with on-device model
 const session = await createSession({
-  models: {
-    chat: {
-      name: 'onnx-community/gemma-3-270m-it-ONNX',
-      quantization: 'q4'
-    }
-  },
-  engine: 'webgpu' // or 'wasm'
+  models: [{
+    type: 'device',
+    model: 'onnx-community/Qwen3-0.6B-ONNX',
+    quantization: 'q4',
+    engine: 'webgpu' // or 'wasm'
+  }]
 });
 
 // Generate text with streaming
-for await (const chunk of session.createResponse({
+const response = await session.createResponse('onnx-community/Qwen3-0.6B-ONNX', {
   messages: [{ role: 'user', content: 'Hello, how are you today?' }]
-})) {
-  if (chunk.isFirst && chunk.ttfbMs) {
-    console.log(`Time to first byte: ${chunk.ttfbMs}ms`);
-  }
-  if (!chunk.isLast) {
-    process.stdout.write(chunk.token);
+});
+
+if (response.type === 'streaming') {
+  for await (const chunk of response.stream) {
+    if (chunk.isFirst && chunk.ttfbMs) {
+      console.log(`Time to first byte: ${chunk.ttfbMs}ms`);
+    }
+    if (!chunk.isLast) {
+      process.stdout.write(chunk.token);
+    }
   }
 }
 
@@ -36,57 +46,158 @@ for await (const chunk of session.createResponse({
 await session.dispose();
 ```
 
-## Understanding the Code
+## Cloud Provider Inference
 
-### 1. Create a Session
+Use cloud LLM providers via a secure proxy (API keys stay on your backend):
 
 ```javascript
+import { createSession } from 'agentary-js';
+
+// Create a session with cloud provider
 const session = await createSession({
-  models: {
-    chat: {
-      name: 'onnx-community/gemma-3-270m-it-ONNX',
-      quantization: 'q4'
-    }
-  },
-  engine: 'webgpu'
+  models: [{
+    type: 'cloud',
+    model: 'claude-3-5-sonnet-20241022',
+    proxyUrl: 'https://your-backend.com/api/anthropic',
+    modelProvider: 'anthropic',
+    timeout: 30000,
+    maxRetries: 3
+  }]
 });
+
+// Generate text (streaming or non-streaming based on proxy)
+const response = await session.createResponse('claude-3-5-sonnet-20241022', {
+  messages: [{ role: 'user', content: 'Hello, how are you today?' }]
+});
+
+if (response.type === 'streaming') {
+  for await (const chunk of response.stream) {
+    process.stdout.write(chunk.token);
+  }
+} else {
+  console.log(response.content);
+}
+
+await session.dispose();
 ```
 
-The session initializes the model and manages the Web Worker for inference.
+**Note**: Cloud providers require a proxy server. See the [Cloud Provider Guide](/guides/cloud-provider) for setup instructions.
 
-**Key options:**
-- `models.chat`: The model to use for chat completions
-- `quantization`: Quantization level (q4, q8, fp16, fp32)
-- `engine`: Inference engine (webgpu, wasm, auto)
+## Understanding Provider Configuration
 
-### 2. Generate Responses
+### Device Provider Options
 
 ```javascript
-for await (const chunk of session.createResponse({
-  messages: [{ role: 'user', content: 'Hello!' }]
-})) {
-  process.stdout.write(chunk.token);
+{
+  type: 'device',
+  model: 'onnx-community/Qwen3-0.6B-ONNX',
+  quantization: 'q4',  // q4, q8, fp16, fp32
+  engine: 'webgpu',    // webgpu, wasm, auto
+  hfToken?: string     // Optional: for private models
 }
 ```
 
-The `createResponse` method returns an async iterable that yields tokens as they're generated.
+**Key options:**
+- `type`: Must be `'device'` for on-device inference
+- `model`: ONNX model identifier from Hugging Face
+- `quantization`: Model quantization level (affects size/speed/quality)
+- `engine`: Inference engine to use
 
-**Chunk properties:**
+### Cloud Provider Options
+
+```javascript
+{
+  type: 'cloud',
+  model: 'claude-3-5-sonnet-20241022',
+  proxyUrl: 'https://your-backend.com/api/anthropic',
+  modelProvider: 'anthropic',  // 'anthropic' or 'openai'
+  timeout: 30000,              // Optional: request timeout in ms
+  maxRetries: 3,               // Optional: max retry attempts
+  headers: {}                  // Optional: custom headers
+}
+```
+
+**Key options:**
+- `type`: Must be `'cloud'` for cloud-based inference
+- `model`: Model identifier for the provider
+- `proxyUrl`: Your backend proxy endpoint
+- `modelProvider`: The cloud provider type
+
+### Generate Responses
+
+```javascript
+const response = await session.createResponse(modelId, {
+  messages: [{ role: 'user', content: 'Hello!' }]
+});
+
+if (response.type === 'streaming') {
+  for await (const chunk of response.stream) {
+    process.stdout.write(chunk.token);
+  }
+} else {
+  console.log(response.content);
+}
+```
+
+The `createResponse` method returns either a streaming or non-streaming response.
+
+**Streaming Response (TokenStreamChunk):**
 - `token`: The generated text token
 - `tokenId`: Numeric token ID
 - `isFirst`: True for the first token
 - `isLast`: True for the final token
 - `ttfbMs`: Time to first byte (only on first chunk)
 
-### 3. Clean Up
+**Non-Streaming Response:**
+- `content`: Complete generated text
+- `usage`: Token usage statistics
+- `toolCalls`: Tool/function calls (if any)
+- `finishReason`: Why generation stopped
+
+### Clean Up
 
 ```javascript
 await session.dispose();
 ```
 
-Always dispose of sessions to free up memory and terminate workers.
+Always dispose of sessions to free up memory and terminate workers/connections.
 
-## Configuration Options
+## Multi-Provider Setup
+
+You can register multiple providers and use them as needed:
+
+```javascript
+const session = await createSession({
+  models: [
+    // On-device model for quick responses
+    {
+      type: 'device',
+      model: 'onnx-community/Qwen3-0.6B-ONNX',
+      quantization: 'q4',
+      engine: 'webgpu'
+    },
+    // Cloud model for complex tasks
+    {
+      type: 'cloud',
+      model: 'claude-3-5-sonnet-20241022',
+      proxyUrl: 'https://your-backend.com/api/anthropic',
+      modelProvider: 'anthropic'
+    }
+  ]
+});
+
+// Use device model for quick response
+const quickResponse = await session.createResponse('onnx-community/Qwen3-0.6B-ONNX', {
+  messages: [{ role: 'user', content: 'Quick question' }]
+});
+
+// Use cloud model for complex reasoning
+const complexResponse = await session.createResponse('claude-3-5-sonnet-20241022', {
+  messages: [{ role: 'user', content: 'Complex analysis task' }]
+});
+```
+
+## Device Provider Configuration
 
 ### Engine Selection
 
@@ -107,25 +218,28 @@ Quantization reduces model size and improves performance:
 | `fp16` | Medium | Moderate | Great |
 | `fp32` | Large | Slow | Best |
 
+### Supported Models
+
+Check the [Model Support](/MODEL-SUPPORT) documentation for a list of validated on-device models.
+
 ## Generation Parameters
 
 Control the output with generation parameters:
 
 ```javascript
-for await (const chunk of session.createResponse({
+const response = await session.createResponse(modelId, {
   messages: [{ role: 'user', content: 'Write a poem' }],
   temperature: 0.7,        // Randomness (0.0-2.0)
   max_new_tokens: 200,     // Maximum tokens to generate
   top_p: 0.9,              // Nucleus sampling
   top_k: 50,               // Top-k sampling
   repetition_penalty: 1.1  // Penalty for repetition
-})) {
-  process.stdout.write(chunk.token);
-}
+});
 ```
 
 ## Next Steps
 
 - Learn about [Core Concepts](/getting-started/concepts)
+- Set up a [Cloud Provider](/guides/cloud-provider)
 - Explore [Tool Calling](/guides/tool-calling)
 - Build [Agentic Workflows](/guides/agentic-workflows)

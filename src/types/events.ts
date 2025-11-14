@@ -33,7 +33,6 @@ export type WorkerDisposedEvent = {
 // Generation events
 export type GenerationStartEvent = {
   type: 'generation:start';
-  requestId: string;
   modelName?: string;
   messageCount: number;
   timestamp: number;
@@ -41,7 +40,6 @@ export type GenerationStartEvent = {
 
 export type GenerationTokenEvent = {
   type: 'generation:token';
-  requestId: string;
   token: string;
   tokenId: number;
   isFirst: boolean;
@@ -53,7 +51,6 @@ export type GenerationTokenEvent = {
 
 export type GenerationCompleteEvent = {
   type: 'generation:complete';
-  requestId: string;
   totalTokens: number;
   duration: number;
   tokensPerSecond?: number;
@@ -62,7 +59,6 @@ export type GenerationCompleteEvent = {
 
 export type GenerationErrorEvent = {
   type: 'generation:error';
-  requestId: string;
   error: string;
   timestamp: number;
 };
@@ -129,7 +125,6 @@ export type ToolCallErrorEvent = {
 export type WorkflowStartEvent = {
   type: 'workflow:start';
   workflowId: string;
-  workflowName?: string;
   stepCount: number;
   timestamp: number;
 };
@@ -138,8 +133,8 @@ export type WorkflowStepStartEvent = {
   type: 'workflow:step:start';
   workflowId: string;
   stepId: string;
-  stepDescription?: string;
   iteration: number;
+  stepPrompt: string;
   timestamp: number;
 };
 
@@ -178,6 +173,14 @@ export type WorkflowTimeoutEvent = {
   workflowId: string;
   stepId?: string;
   duration: number;
+  timestamp: number;
+};
+
+export type WorkflowCancelledEvent = {
+  type: 'workflow:cancelled';
+  workflowId: string;
+  stepId: string;
+  reason: string;
   timestamp: number;
 };
 
@@ -220,6 +223,7 @@ export type SessionEvent =
   | WorkflowStepRetryEvent
   | WorkflowCompleteEvent
   | WorkflowTimeoutEvent
+  | WorkflowCancelledEvent
   | WorkflowErrorEvent
   | ErrorEvent;
 

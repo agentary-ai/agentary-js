@@ -4,16 +4,17 @@ title: Agentary JS Docs
 
 # Agentary JS
 
-Run quantized small language models directly in the browser with WebGPU and WebAssembly, featuring built-in support for agentic workflows.
+Run quantized small language models directly in the browser with WebGPU, featuring built-in support for agentic workflows.
 
 ## Features
 
-- 🚀 **Browser-Native** - Run LLMs directly in the browser without server dependencies
-- ⚡ **WebGPU Acceleration** - Leverage WebGPU for high-performance inference
+- 🚀 **Flexible Inference** - Run models on-device or via cloud providers
+- ⚡ **WebGPU Acceleration** - Leverage WebGPU for high-performance on-device inference
+- ☁️ **Cloud Provider Support** - Integrate with cloud LLMs via secure proxy pattern
 - 🤖 **Agentic Workflows** - Create and execute complex multi-step agent workflows
 - 🧠 **Memory Management** - Smart context compression and pruning for long conversations
 - 🛠️ **Function Calling** - Built-in support for tool/function calling
-- 📊 **Multi-Model Support** - Use different models for chat, tool use, and reasoning
+- 📊 **Multi-Provider Support** - Mix device and cloud models in the same application
 - 📡 **Lifecycle Events** - Built-in event system for monitoring and debugging
 
 ## Quick Start
@@ -24,37 +25,56 @@ Install via npm:
 npm install agentary-js
 ```
 
-Basic example:
+Basic example with on-device inference:
 
 ```javascript
 import { createSession } from 'agentary-js';
 
 const session = await createSession({
-  models: {
-    chat: {
-      name: 'onnx-community/gemma-3-270m-it-ONNX',
-      quantization: 'q4'
-    }
-  },
-  engine: 'webgpu'
+  models: [{
+    type: 'device',
+    model: 'onnx-community/Qwen3-0.6B-ONNX',
+    quantization: 'q4',
+    engine: 'webgpu'
+  }]
 });
 
-for await (const chunk of session.createResponse({
+const response = await session.createResponse('onnx-community/Qwen3-0.6B-ONNX', {
   messages: [{ role: 'user', content: 'Hello!' }]
-})) {
-  process.stdout.write(chunk.token);
+});
+
+if (response.type === 'streaming') {
+  for await (const chunk of response.stream) {
+    process.stdout.write(chunk.token);
+  }
 }
 
 await session.dispose();
 ```
 
+Cloud provider example:
+
+```javascript
+const session = await createSession({
+  models: [{
+    type: 'cloud',
+    model: 'gpt-5-nano',
+    proxyUrl: 'https://your-backend.com/api/openai',
+    modelProvider: 'openai'
+  }]
+});
+```
+
 ## Why Agentary JS?
 
-### Browser-Native AI
-Run powerful language models directly in users' browsers - no server costs, maximum privacy, and instant responses.
+### Flexible Deployment
+Choose between on-device inference (WebGPU/WASM) for privacy and zero server costs, or cloud providers for maximum performance. Mix and match based on your needs.
+
+### Secure Cloud Integration
+Cloud providers use a secure proxy pattern - your API keys stay on your backend, never exposed to the browser.
 
 ### Agentic Workflows
-Build sophisticated multi-step AI agents that can think, plan, use tools, and adapt - all running client-side.
+Build sophisticated multi-step AI agents that can think, plan, use tools, and adapt - with device or cloud models.
 
 ### Production Ready
 Built with observability, error handling, memory management, and performance optimization from the ground up.

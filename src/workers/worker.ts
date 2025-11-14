@@ -1,48 +1,54 @@
-import { pipeline, TextStreamer, env as hfEnv, DataType, TextGenerationPipeline, TextGenerationConfig, ProgressInfo } from '@huggingface/transformers';
+import { pipeline, TextStreamer, env as hfEnv, DataType, TextGenerationPipeline, TextGenerationConfig, ProgressInfo, Message } from '@huggingface/transformers';
 import { InboundMessage, OutboundMessage } from '../types/worker';
 import { logger } from '../utils/logger';
 import { InitArgs, GenerateArgs } from '../types/worker';
-
-// (hfEnv as any).backends = {
-//   onnx: {
-//     wasmPaths: 'https://unpkg.com/onnxruntime-web@1.22.0/dist/',
-//   },
-// };
+import { MessageTransformer, getMessageTransformer } from '../providers/device-model-config';
 
 let generator: TextGenerationPipeline | null = null;
 let disposed = false;
 let isGenerating = false;
+let messageTransformer: MessageTransformer | null = null;
 
 function post(message: OutboundMessage) {
   // eslint-disable-next-line no-restricted-globals
   (self as unknown as DedicatedWorkerGlobalScope).postMessage(message);
 }
 
-function postDebug(requestId: string, message: string, data?: unknown) {
-  const debugMessage: OutboundMessage = {
-    type: 'debug',
-    requestId,
-    args: { message, ...(data !== undefined ? { data } : {}) } as const,
-  };
-  post(debugMessage);
-  logger.worker.debug(message, data, requestId);
-}
+// function postDebug(requestId: string, message: string, data?: unknown) {
+//   const debugMessage: OutboundMessage = {
+//     type: 'debug',
+//     requestId,
+//     args: { message, ...(data !== undefined ? { data } : {}) } as const,
+//   };
+//   post(debugMessage);
+//   logger.worker.debug(message, data, requestId);
+// }
 
 async function handleInit(msg: InboundMessage) {
   if (disposed) throw new Error('Worker disposed');
-  const { model, engine, hfToken } = msg.args as InitArgs;
+  const { config } = msg.args as InitArgs;
 
-  logger.worker.info('Initializing worker', { model:model.name, quantization:model.quantization, engine }, msg.requestId);
+  logger.worker.debug('Initializing worker', { model:config.model, quantization:config.quantization, engine:config.engine }, msg.requestId);
 
-  if (hfToken) {
-    (hfEnv as any).HF_TOKEN = hfToken;
+  // Get the message transformer for this model
+  try {
+    messageTransformer = getMessageTransformer(config.model);
+    logger.worker.debug('Message transformer loaded', { model: config.model }, msg.requestId);
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Failed to load message transformer';
+    logger.worker.error('Message transformer initialization failed', { error: errorMessage }, msg.requestId);
+    throw new Error(`Failed to initialize message transformer: ${errorMessage}`);
   }
 
-  const device = engine && engine !== 'auto' ? engine : 'webgpu';
+  if (config.hfToken) {
+    (hfEnv as any).HF_TOKEN = config.hfToken;
+  }
 
-  const pipelineResult = await pipeline('text-generation', model.name, {
+  const device = config.engine && config.engine !== 'auto' ? config.engine : 'webgpu';
+
+  const pipelineResult = await pipeline('text-generation', config.model, {
     device: device || "auto",
-    dtype: model.quantization || "auto",
+    dtype: config.quantization || "auto",
     progress_callback: (info: ProgressInfo) => {
       // Send progress updates back to main thread
       // ProgressInfo can be InitiateProgressInfo, DownloadProgressInfo, ProgressProgressInfo, DoneProgressInfo, or ReadyProgressInfo
@@ -84,7 +90,7 @@ async function handleInit(msg: InboundMessage) {
         }
       });
 
-      logger.worker.debug('Model loading progress', {
+      logger.worker.verbose('Model loading progress', {
         status: info.status,
         file: file || 'unknown',
         progress: `${Math.round(progressPercent)}%`
@@ -93,14 +99,15 @@ async function handleInit(msg: InboundMessage) {
   });
   generator = pipelineResult as TextGenerationPipeline;
 
-  logger.worker.info('Worker initialized successfully', { model, device }, msg.requestId);
+  logger.worker.info('Worker initialized successfully', { model: config.model, device: config.engine }, msg.requestId);
   post({ type: 'ack', requestId: msg.requestId });
 }
 
 async function handleGenerate(msg: InboundMessage) {
-  postDebug(msg.requestId, 'Generate request received', msg.args);
+  logger.worker.debug('Generate request received', { args: msg.args }, msg.requestId);
 
   if (!generator) throw new Error('Generator not initialized');
+  if (!messageTransformer) throw new Error('Message transformer not initialized');
   if (disposed) throw new Error('Worker disposed');
   if (isGenerating) throw new Error('A generation task is already running');
 
@@ -119,9 +126,14 @@ async function handleGenerate(msg: InboundMessage) {
   if (Array.isArray(tools) && tools.length) {
     applyTemplateOptions.tools = tools;
   }
-  const renderedPrompt: string = generator.tokenizer.apply_chat_template(messages, applyTemplateOptions) as string;
-  // TODO: Add warning if tools aren't supported in rendered prompt
-  postDebug(msg.requestId, 'Rendered chat template', renderedPrompt);
+
+  // Transform messages using model-specific transformer
+  const tokenizerMessages: Message[] = messageTransformer(messages);
+  logger.worker.debug('Messages transformed to tokenizer format', { count: tokenizerMessages.length }, msg.requestId);
+  logger.worker.verbose('Messages transformed to tokenizer format', { messages: tokenizerMessages }, msg.requestId);
+
+  const renderedPrompt: string = generator.tokenizer.apply_chat_template(tokenizerMessages, applyTemplateOptions) as string;
+  logger.worker.verbose('Rendered chat template', { prompt: renderedPrompt }, msg.requestId);
 
   let first = true;
   const ttfbStart = performance.now();
@@ -182,6 +194,7 @@ async function handleDispose(msg: InboundMessage) {
   }
   
   generator = null;
+  messageTransformer = null;
   post({ type: 'ack', requestId: msg.requestId });
   // eslint-disable-next-line no-restricted-globals
   (self as unknown as DedicatedWorkerGlobalScope).close();

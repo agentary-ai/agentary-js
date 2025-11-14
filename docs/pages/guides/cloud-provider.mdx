@@ -1,0 +1,466 @@
+# Cloud Provider Setup
+
+This guide shows you how to integrate cloud LLM providers (OpenAI, Anthropic) with Agentary JS using a secure proxy pattern.
+
+## Overview
+
+The CloudProvider uses a **proxy pattern** where your backend server handles API authentication and forwards requests to cloud LLM providers. This approach:
+
+- ✅ Keeps API keys secure on your backend (never exposed to browser)
+- ✅ Allows custom rate limiting, caching, and monitoring
+- ✅ Enables request/response transformation
+- ✅ Supports multiple LLM providers with a single SDK
+
+## Architecture
+
+```
+┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
+│   Browser App   │ ──────> │  Your Proxy     │ ──────> │  Cloud Provider │
+│  (Agentary JS)  │         │   (Express)     │         │ (OpenAI/Claude) │
+└─────────────────┘         └─────────────────┘         └─────────────────┘
+                                 Secure API Key
+```
+
+## Quick Start
+
+### 1. Set Up a Proxy Server
+
+Choose one of the proxy implementations from the `examples/cloud-proxy` directory:
+
+#### Anthropic Proxy
+
+```javascript
+// server.js
+const express = require('express');
+const Anthropic = require('@anthropic-ai/sdk');
+
+const app = express();
+app.use(express.json());
+
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+app.post('/api/anthropic', async (req, res) => {
+  const { model, messages, max_tokens = 1024, temperature = 0.7 } = req.body;
+
+  try {
+    const stream = await anthropic.messages.create({
+      model,
+      messages,
+      max_tokens,
+      temperature,
+      stream: true,
+    });
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    for await (const messageStreamEvent of stream) {
+      if (messageStreamEvent.type === 'content_block_delta') {
+        const delta = messageStreamEvent.delta;
+        if (delta.type === 'text_delta') {
+          res.write(`data: ${JSON.stringify({ token: delta.text })}\n\n`);
+        }
+      }
+    }
+
+    res.write(`data: ${JSON.stringify({ token: '', isLast: true })}\n\n`);
+    res.end();
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.listen(3001, () => {
+  console.log('Anthropic proxy listening on port 3001');
+});
+```
+
+#### OpenAI Proxy
+
+```javascript
+// server.js
+const express = require('express');
+const OpenAI = require('openai');
+
+const app = express();
+app.use(express.json());
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+app.post('/api/openai', async (req, res) => {
+  const { model, messages, temperature = 0.7, max_tokens = 1024 } = req.body;
+
+  try {
+    const stream = await openai.chat.completions.create({
+      model,
+      messages,
+      temperature,
+      max_tokens,
+      stream: true,
+    });
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) {
+        res.write(`data: ${JSON.stringify({ token: delta })}\n\n`);
+      }
+    }
+
+    res.write(`data: ${JSON.stringify({ token: '', isLast: true })}\n\n`);
+    res.end();
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.listen(3002, () => {
+  console.log('OpenAI proxy listening on port 3002');
+});
+```
+
+### 2. Start Your Proxy
+
+```bash
+# Install dependencies
+npm install express @anthropic-ai/sdk
+# or
+npm install express openai
+
+# Set environment variables
+export ANTHROPIC_API_KEY=sk-ant-xxxxx
+# or
+export OPENAI_API_KEY=sk-xxxxx
+
+# Start the proxy
+node server.js
+```
+
+### 3. Configure Agentary JS
+
+Use the cloud provider in your frontend application:
+
+```javascript
+import { createSession } from 'agentary-js';
+
+// Anthropic Claude
+const session = await createSession({
+  models: [{
+    type: 'cloud',
+    model: 'claude-3-5-sonnet-20241022',
+    proxyUrl: 'http://localhost:3001/api/anthropic',
+    modelProvider: 'anthropic',
+    timeout: 30000,
+    maxRetries: 3
+  }]
+});
+
+// OpenAI GPT
+const session = await createSession({
+  models: [{
+    type: 'cloud',
+    model: 'gpt-4o',
+    proxyUrl: 'http://localhost:3002/api/openai',
+    modelProvider: 'openai',
+    timeout: 30000,
+    maxRetries: 3
+  }]
+});
+```
+
+### 4. Generate Text
+
+```javascript
+const response = await session.createResponse('claude-3-5-sonnet-20241022', {
+  messages: [
+    { role: 'user', content: 'Explain quantum computing in simple terms' }
+  ],
+  temperature: 0.7,
+  max_new_tokens: 500
+});
+
+if (response.type === 'streaming') {
+  for await (const chunk of response.stream) {
+    process.stdout.write(chunk.token);
+  }
+} else {
+  console.log(response.content);
+}
+
+await session.dispose();
+```
+
+## Configuration Options
+
+### Cloud Provider Config
+
+```typescript
+{
+  type: 'cloud',
+  model: string,              // Model identifier
+  proxyUrl: string,           // Your proxy endpoint URL
+  modelProvider: 'anthropic' | 'openai',
+  timeout?: number,           // Request timeout in ms (default: 60000)
+  maxRetries?: number,        // Max retry attempts (default: 3)
+  headers?: Record<string, string>  // Custom headers
+}
+```
+
+### Timeout & Retries
+
+The CloudProvider automatically retries failed requests with exponential backoff:
+
+```javascript
+{
+  type: 'cloud',
+  model: 'claude-3-5-sonnet-20241022',
+  proxyUrl: 'https://api.example.com/anthropic',
+  modelProvider: 'anthropic',
+  timeout: 60000,     // 60 second timeout
+  maxRetries: 3       // Retry up to 3 times
+}
+```
+
+**Retry behavior:**
+- 1st retry: After 1 second
+- 2nd retry: After 2 seconds
+- 3rd retry: After 4 seconds
+- Non-retryable errors: Configuration errors, timeouts, 4xx status codes
+
+### Custom Headers
+
+Add custom headers for authentication or tracking:
+
+```javascript
+{
+  type: 'cloud',
+  model: 'gpt-4o',
+  proxyUrl: 'https://api.example.com/openai',
+  modelProvider: 'openai',
+  headers: {
+    'X-User-ID': 'user123',
+    'X-Request-ID': crypto.randomUUID()
+  }
+}
+```
+
+## Proxy Contract
+
+Your proxy must follow this contract:
+
+### Request Format
+
+**POST to proxyUrl** with JSON body:
+
+```json
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "messages": [
+    { "role": "user", "content": "Hello" }
+  ],
+  "max_new_tokens": 1024,
+  "temperature": 0.7
+}
+```
+
+### Response Format (Streaming)
+
+**Content-Type: text/event-stream**
+
+Server-Sent Events with chunks:
+
+```
+data: {"token": "Hello", "tokenId": 123}\n\n
+data: {"token": " world", "tokenId": 124}\n\n
+data: {"token": "", "isLast": true}\n\n
+```
+
+**Chunk format:**
+- `token` (required): Text content
+- `tokenId` (optional): Token ID
+- `isFirst` (optional): First chunk flag
+- `isLast` (optional): Last chunk flag
+
+### Response Format (Non-Streaming)
+
+**Content-Type: application/json**
+
+OpenAI-style format:
+
+```json
+{
+  "choices": [{
+    "message": {
+      "content": "Hello world"
+    }
+  }]
+}
+```
+
+Or custom format:
+
+```json
+{
+  "token": "Hello world",
+  "tokenId": 123
+}
+```
+
+## Supported Models
+
+### Anthropic Claude
+
+```javascript
+{
+  type: 'cloud',
+  model: 'claude-3-5-sonnet-20241022',  // Recommended
+  // or: 'claude-3-5-haiku-20241022'
+  // or: 'claude-3-opus-20240229'
+  proxyUrl: 'https://your-backend.com/api/anthropic',
+  modelProvider: 'anthropic'
+}
+```
+
+### OpenAI
+
+```javascript
+{
+  type: 'cloud',
+  model: 'gpt-4o',              // Recommended
+  // or: 'gpt-4-turbo'
+  // or: 'gpt-3.5-turbo'
+  proxyUrl: 'https://your-backend.com/api/openai',
+  modelProvider: 'openai'
+}
+```
+
+## Error Handling
+
+Handle provider errors gracefully:
+
+```javascript
+import { 
+  ProviderError, 
+  ProviderNetworkError, 
+  ProviderTimeoutError,
+  ProviderAPIError,
+  ProviderConfigurationError 
+} from 'agentary-js';
+
+try {
+  const response = await session.createResponse(modelId, args);
+} catch (error) {
+  if (error instanceof ProviderConfigurationError) {
+    console.error('Configuration error:', error.message);
+  } else if (error instanceof ProviderTimeoutError) {
+    console.error('Request timeout');
+  } else if (error instanceof ProviderNetworkError) {
+    console.error('Network error:', error.message);
+  } else if (error instanceof ProviderAPIError) {
+    console.error('API error:', error.statusCode, error.message);
+  }
+}
+```
+
+## Production Deployment
+
+### Security Best Practices
+
+1. **Never expose API keys**: Keep them on your backend only
+2. **Use environment variables**: Store keys in `.env` files
+3. **Enable CORS**: Restrict origins to your frontend domains
+4. **Rate limiting**: Implement rate limits on your proxy
+5. **Authentication**: Require auth tokens from your frontend
+6. **Input validation**: Validate all incoming requests
+
+### Example: Secure Proxy
+
+```javascript
+const express = require('express');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
+
+const app = express();
+
+// CORS configuration
+app.use(cors({
+  origin: ['https://your-app.com'],
+  credentials: true
+}));
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per windowMs
+});
+app.use('/api', limiter);
+
+// Authentication middleware
+app.use('/api', (req, res, next) => {
+  const token = req.headers.authorization;
+  if (!token || !validateToken(token)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+});
+
+// Your proxy endpoints...
+```
+
+### Monitoring & Logging
+
+Track usage and performance:
+
+```javascript
+app.post('/api/anthropic', async (req, res) => {
+  const startTime = Date.now();
+  
+  try {
+    // Log request
+    console.log('Request:', {
+      user: req.user.id,
+      model: req.body.model,
+      timestamp: new Date().toISOString()
+    });
+
+    // Process request...
+
+    // Log success
+    console.log('Success:', {
+      user: req.user.id,
+      duration: Date.now() - startTime,
+      tokens: estimateTokens(response)
+    });
+  } catch (error) {
+    // Log error
+    console.error('Error:', {
+      user: req.user.id,
+      error: error.message,
+      duration: Date.now() - startTime
+    });
+  }
+});
+```
+
+## Examples
+
+Complete examples are available in the repository:
+
+- [Anthropic Proxy](https://github.com/agentary-ai/agentary-js/tree/main/examples/cloud-proxy/anthropic-proxy.js)
+- [OpenAI Proxy](https://github.com/agentary-ai/agentary-js/tree/main/examples/cloud-proxy/openai-proxy.js)
+- [Client Example](https://github.com/agentary-ai/agentary-js/tree/main/examples/cloud-proxy/client-example.js)
+- [Architecture Guide](https://github.com/agentary-ai/agentary-js/tree/main/examples/cloud-proxy/ARCHITECTURE.md)
+
+## Next Steps
+
+- Learn about [Tool Calling](/guides/tool-calling) with cloud providers
+- Build [Agentic Workflows](/guides/agentic-workflows) with cloud models
+- Mix cloud and [device providers](/getting-started/quick-start#multi-provider-setup)

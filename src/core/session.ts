@@ -1,169 +1,257 @@
-import { type CreateSessionArgs, type Session, type TokenStreamChunk, type GenerationTask } from '../types/session';
-import { GenerateArgs, WorkerInstance } from '../types/worker';
-import { WorkerManager } from '../workers/manager';
+import { ModelResponse, type Session, type TokenStreamChunk } from '../types/session';
+import { GenerateArgs } from '../types/worker';
+import { InferenceProviderManager } from '../providers/manager';
 import { logger } from '../utils/logger';
 import { EventEmitter } from '../utils/event-emitter';
 import { EventHandler, UnsubscribeFn } from '../types/events';
+import { InferenceProviderConfig } from '../types/provider';
+import { CreateSessionArgs } from '../types/session';
 
 /**
- * Creates a new session with the specified configuration.
- * @param args - The configuration for the session.
- * @returns A new session.
+ * Creates a new session for model inference with support for both on-device
+ * and cloud-based LLM providers.
+ * 
+ * @param args - Configuration for the session
+ * @param args.models - Optional record of models to register at initialization
+ * @returns A Promise resolving to a fully configured Session instance
  */
 export async function createSession(args: CreateSessionArgs = {}): Promise<Session> {
+  logger.session?.info('Creating session', { args });
+
   const eventEmitter = new EventEmitter();
-  const workerManager = new WorkerManager(args, eventEmitter);
+  const inferenceProviderManager = new InferenceProviderManager(eventEmitter);
+
+  // Register any models provided at initialization time
+  if (args.models) await inferenceProviderManager.registerModels(args.models);
+
   let disposed = false;
 
-  function nextId(workerInstance: WorkerInstance): string { 
-    workerInstance.inflightId += 1; 
-    return String(workerInstance.inflightId); 
+  /**
+   * Registers additional models with the session after creation.
+   * 
+   * @param models - Record mapping model names to their provider configurations
+   * @returns Promise that resolves when all models are registered and ready for use
+   */
+  async function registerModels(models: InferenceProviderConfig[]): Promise<void> {
+    await inferenceProviderManager.registerModels(models);
   }
 
-  async function* createResponse(args: GenerateArgs, generationTask?: GenerationTask): AsyncIterable<TokenStreamChunk> {
+  /**
+   * Generates a streaming response from the LLM for the given prompt and configuration.
+   * 
+   * @param args - Generation arguments
+   * @param args.model - Name of the model to use for generation (must be registered)
+   * @param args.messages - Array of conversation messages
+   * @param args.tools - Optional array of tools available for function calling
+   * @param args.maxTokens - Optional maximum number of tokens to generate
+   * @param args.temperature - Optional sampling temperature (0-1)
+   * @param args.topP - Optional nucleus sampling parameter
+   * 
+   * @returns Async iterable yielding token chunks as they are generated
+   * 
+   * @throws {Error} If session is disposed
+   * @throws {Error} If model is undefined
+   * @throws {Error} If messages are undefined
+   * @throws {Error} If model is not registered or initialization fails
+   * 
+   * @example
+   * ```typescript
+   * for await (const chunk of session.createResponse({ prompt: "Hello!" })) {
+   *   console.log(chunk.token);
+   * }
+   * ```
+   */
+  async function createResponse(model: string, args: GenerateArgs): Promise<ModelResponse> {
     if (disposed) throw new Error('Session disposed');
+    if (!model) throw new Error('Model is undefined');
+    if (!args.messages) throw new Error('Messages are undefined');
 
-    // Remove implementation field from tools before passing to worker
-    args = {
-      ...args,
-      ...(args.tools && args.tools.length > 0 ? {
-        tools: args.tools.map(tool => {
-          const { implementation, ...functionWithoutImpl } = tool.function;
-          return {
-            ...tool,
-            function: functionWithoutImpl
-          };
-        })
-      } : {})
-    };
-
-    // Default to tool use if no generation task is specified and tools are provided
-    if (!generationTask && args.tools && args.tools.length > 0) {
-      generationTask = 'tool_use';
-    }
-
-    // Retrieve worker for model generation
-    const workerInstance = await workerManager.getWorker(args, generationTask);
-    const requestId = nextId(workerInstance);
-
-    const queue: TokenStreamChunk[] = [];
-    let done = false;
     const startTime = Date.now();
+  
+    try {
+      // Get provider for generation
+      const provider = await inferenceProviderManager.getProvider(model);
+
+      // Disable streaming for tool use
+      if (args.tools) args.stream = false;
+      
+      logger.session?.debug('Creating response', { args });
+      const generateResponse = await provider.generate(args);
+      
+      // TODO: Throw error if tool calling not supported by model
+      
+      if (generateResponse.type === 'streaming') {
+        return {
+          type: 'streaming',
+          stream: wrapStreamWithEvents(
+            generateResponse.stream, 
+            provider.getModelName(), 
+            startTime,
+            args.messages.length
+          )
+        }
+      } else {
+        if (args.tools && !generateResponse.toolCalls) {
+          const errorMessage = 'Tool calls not found in response';
+          logger.session?.error(errorMessage, {
+            model,
+            args,
+            generateResponse,
+            timestamp: Date.now()
+          });
+          throw new Error(errorMessage);
+        }
+          
+        // Validate that all tools in response were in the original request
+        if (args.tools && generateResponse.toolCalls) {
+          const requestedToolNames = new Set(args.tools.map(tool => tool.name));
+          const invalidTools = generateResponse.toolCalls.filter(
+            toolCall => !requestedToolNames.has(toolCall.function.name)
+          );
+          
+          if (invalidTools.length > 0) {
+            const invalidToolNames = invalidTools.map(t => t.function.name).join(', ');
+            const errorMessage = `Response contains tool(s) not in request: ${invalidToolNames}`;
+            logger.session?.error(errorMessage, {
+              model,
+              requestedTools: Array.from(requestedToolNames),
+              invalidTools: invalidTools.map(t => t.function.name),
+              timestamp: Date.now()
+            });
+            throw new Error(errorMessage);
+          }
+        }
+        
+        return generateResponse;
+      }
+    } catch (error: any) {
+      logger.session?.error('Generation error', { error: error.message });
+  
+      // Emit error event
+      eventEmitter.emit({
+        type: 'generation:error',
+        error: error.message,
+        timestamp: Date.now()
+      });
+  
+      throw error;
+    }
+  }
+
+  /**
+   * Wraps a stream with event emission for streaming responses.
+   * 
+   * @param stream - The stream to wrap
+   * @param modelName - The name of the model
+   * @param startTime - The start time of the generation
+   * @returns An async iterable yielding token chunks with event emission
+   */
+  async function* wrapStreamWithEvents(
+    stream: AsyncIterable<TokenStreamChunk>,
+    modelName: string,
+    startTime: number,
+    messageCount: number
+  ): AsyncIterable<TokenStreamChunk> {
     let tokenCount = 0;
-
-    // Emit generation start event
-    eventEmitter.emit({
-      type: 'generation:start',
-      requestId,
-      modelName: workerInstance.model.name,
-      messageCount: args.messages.length,
-      timestamp: startTime
-    });
-
-    const onMessage = (ev: MessageEvent<any>) => {
-      const msg = ev.data;
-      if (!msg || msg.requestId !== requestId) return;
-
-      if (msg.type === 'chunk') {
-        const { token, tokenId, isFirst, isLast, ttfbMs } = msg.args;
-        const chunk = { token, tokenId, isFirst, isLast, ...(ttfbMs !== undefined ? { ttfbMs } : {}) };
-        queue.push(chunk);
-
-        if (!isLast) {
+    
+    try {
+      eventEmitter.emit({
+        type: 'generation:start',
+        modelName,
+        messageCount,
+        timestamp: startTime
+      });
+      
+      for await (const chunk of stream) {
+        if (!chunk.isLast) {
           tokenCount++;
         }
-
+        
         // Emit token event
         eventEmitter.emit({
           type: 'generation:token',
-          requestId,
-          token,
-          tokenId,
-          isFirst,
-          isLast,
-          ttfbMs,
+          token: chunk.token,
+          tokenId: chunk.tokenId,
+          isFirst: chunk.isFirst,
+          isLast: chunk.isLast,
+          ...(chunk.ttfbMs !== undefined && { ttfbMs: chunk.ttfbMs }),
           timestamp: Date.now()
         });
-
-      } else if (msg.type === 'done') {
-        done = true;
-        queue.push({ token: '', tokenId: -1, isFirst: false, isLast: true });
-
-        // Emit completion event
-        const duration = Date.now() - startTime;
-        eventEmitter.emit({
-          type: 'generation:complete',
-          requestId,
-          totalTokens: tokenCount,
-          duration,
-          tokensPerSecond: tokenCount / (duration / 1000),
-          timestamp: Date.now()
-        });
-
-      } else if (msg.type === 'error') {
-        done = true;
-        queue.push({ token: '', tokenId: -1, isFirst: false, isLast: true });
-        logger.session.error('Generation error', msg.error, requestId);
-
-        // Emit error event
-        eventEmitter.emit({
-          type: 'generation:error',
-          requestId,
-          error: msg.error,
-          timestamp: Date.now()
-        });
-
-      } else if (msg.type === 'debug') {
-        // logger.session.debug('Worker debug message', msg.args, requestId);
-      }
-    };
-    workerInstance.worker.addEventListener('message', onMessage as any);
-
-    workerInstance.worker.postMessage({
-      type: 'generate',
-      requestId,
-      args,
-    });
-
-    try {
-      while (!done || queue.length) {
-        if (queue.length) {
-          const next = queue.shift()!;
-          yield next;
-        } else {
-          await new Promise((r) => setTimeout(r, 1));
+        
+        yield chunk;
+        
+        // If this is the last chunk, emit complete event
+        if (chunk.isLast) {
+          const duration = Date.now() - startTime;
+          eventEmitter.emit({
+            type: 'generation:complete',
+            totalTokens: tokenCount,
+            duration,
+            tokensPerSecond: tokenCount / (duration / 1000),
+            timestamp: Date.now()
+          });
         }
       }
-    } finally {
-      workerInstance.worker.removeEventListener('message', onMessage as any);
+    } catch (error: any) {
+      eventEmitter.emit({
+        type: 'generation:error',
+        error: error.message,
+        timestamp: Date.now()
+      });
+      throw error;
     }
   }
 
+  /**
+   * Disposes the session and releases all allocated resources.
+   * 
+   * @returns Promise that resolves when all cleanup is complete
+   */
   async function dispose(): Promise<void> {
     if (disposed) return;
     disposed = true;
-    await workerManager.disposeAll();
+    await inferenceProviderManager.disposeAll();
     eventEmitter.removeAllListeners();
   }
 
+  /**
+   * Subscribes to session events for monitoring generation lifecycle.
+   * 
+   * Available event types:
+   * - `generation:start` - Fired when generation begins
+   * - `generation:token` - Fired for each generated token
+   * - `generation:complete` - Fired when generation completes successfully
+   * - `generation:error` - Fired when an error occurs during generation
+   * - `*` - Wildcard to listen to all events
+   * 
+   * @param eventType - The specific event type to listen for, or '*' for all events
+   * @param handler - Callback function invoked when the event occurs
+   * @returns Unsubscribe function to remove this listener
+   */
   function on(eventType: string | '*', handler: EventHandler): UnsubscribeFn {
     return eventEmitter.on(eventType, handler);
   }
 
+  /**
+   * Removes a previously registered event handler.
+   * 
+   * @param eventType - The event type the handler was registered for
+   * @param handler - The exact handler function to remove (must be same reference)
+   */
   function off(eventType: string | '*', handler: EventHandler): void {
     eventEmitter.off(eventType, handler);
   }
 
+  // Assemble the session object with all public methods and internal properties
   const session: Session = {
+    registerModels,
     createResponse,
     dispose,
-    workerManager,
     on,
     off,
-    // Internal access to event emitter for workflow components
-    _eventEmitter: eventEmitter
-  } as Session & { _eventEmitter: EventEmitter };
+    _eventEmitter: eventEmitter,
+    _providerManager: inferenceProviderManager,
+  };
+
   return session;
 }
-
-

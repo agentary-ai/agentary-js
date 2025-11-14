@@ -30,21 +30,17 @@ export class DefaultMemoryFormatter implements MemoryFormatter {
   
   formatMessages(messages: MemoryMessage[]): Message[] {
     return messages.map(m => {
-      const message: Message = {
-        role: m.role,
-        content: m.content
-      };
-      if (m.tool_calls) {
-        message.tool_calls = m.tool_calls;
-      }
-      if (m.tool_call_id) {
-        message.tool_call_id = m.tool_call_id;
+      let content = m.content;
+      
+      // Optionally include metadata in content for debugging
+      if (this.config.includeMetadata && m.metadata?.type) {
+        content = `[${m.metadata.type}] ${m.content}`;
       }
       
-      // Optionally include metadata in content
-      if (this.config.includeMetadata && m.metadata?.type) {
-        message.content = `[${m.metadata.type}] ${m.content}`;
-      }
+      const message: Message = {
+        role: m.role,
+        content: content
+      };
       
       return message;
     });
