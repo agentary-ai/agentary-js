@@ -183,12 +183,15 @@ export function transformArgs(
         ...tool
       }));
 
+      // Destructure to exclude fields we don't want in the OpenAI payload
+      const { max_new_tokens, messages: _, ...restArgs } = generateArgs;
+
       // Return full OpenAI request payload
       return {
-        ...generateArgs,
+        ...restArgs,
         input: inputItems,
-        messages: undefined, // Remove native messages field
-        tools // Override with transformed tools (or undefined if no tools)
+        tools, // Override with transformed tools (or undefined if no tools)
+        max_output_tokens: max_new_tokens // Transform max_new_tokens to max_output_tokens
       };
     }
     

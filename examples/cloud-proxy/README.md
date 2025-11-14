@@ -18,20 +18,24 @@ The CloudProvider uses a **proxy pattern** where your backend server handles API
 Forwards requests to Anthropic's Claude API.
 
 **Supported Models:**
-- `claude-3-5-sonnet-20241022`
-- `claude-3-5-haiku-20241022`
-- `claude-3-opus-20240229`
-- And more...
+- `claude-haiku-4-5`
+- `claude-sonnet-4-5`
+- `claude-opus-4-1`
+- etc...
+
+You can view the available models at the following (link)[https://docs.claude.com/en/docs/about-claude/models/overview]
 
 ### 2. OpenAI Proxy ([openai-proxy.js](openai-proxy.js))
 
 Forwards requests to OpenAI's Chat Completions API.
 
 **Supported Models:**
-- `gpt-4o`
-- `gpt-4-turbo`
-- `gpt-3.5-turbo`
-- And more...
+- `gpt-5`
+- `gpt-5-mini`
+- `gpt-5-nano`
+- etc...
+
+You can view the available models at the following (link)[https://platform.openai.com/docs/models]
 
 ## Quick Start
 

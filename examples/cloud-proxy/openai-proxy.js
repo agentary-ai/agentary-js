@@ -39,49 +39,6 @@ app.use((req, res, next) => {
 });
 
 /**
- * Transform messages to OpenAI format (system -> developer role)
- */
-// function transformMessages(messages) {
-//   return messages.map(msg => {
-//     if (msg.role === 'system') {
-//       return { ...msg, role: 'developer' };
-//     }
-//     return msg;
-//   });
-// }
-
-/**
- * Transform tools to OpenAI format
- */
-function transformTools(tools) {
-  if (!tools) return null;
-  
-  return tools.map(tool => ({
-    type: 'function',
-    ...tool,
-  }));
-}
-
-/**
- * Build OpenAI API request object
- */
-function buildOpenAIRequest({ model, input, max_tokens, temperature, top_p, tools, tool_choice, stream = true }) {
-  // const transformedMessages = transformMessages(messages);
-  const transformedTools = transformTools(tools);
-
-  return {
-    model,
-    input,
-    stream,
-    ...(max_tokens && { max_tokens }),
-    // ...(temperature !== undefined && { temperature }),
-    ...(top_p !== undefined && { top_p }),
-    ...(transformedTools && transformedTools.length > 0 && { tools: transformedTools }),
-    ...(tool_choice && { tool_choice }),
-  };
-}
-
-/**
  * Handle streaming response from OpenAI
  */
 async function handleStreamingResponse(response, res) {
@@ -93,12 +50,8 @@ async function handleStreamingResponse(response, res) {
   let tokenCount = 0;
   const startTime = Date.now();
 
-  console.log('streaming response', response);
-
   // Stream tokens back to client
   for await (const chunk of response) {
-    console.log('chunk', chunk);
-
     if (chunk.type === 'response.output_text.delta') {
       const isFirst = tokenCount === 0;
 
@@ -113,20 +66,6 @@ async function handleStreamingResponse(response, res) {
       res.write(`data: ${JSON.stringify(responseChunk)}\n\n`);
       tokenCount++;
     }
-
-    // Handle function/tool calls
-    // if (chunk.type === 'response.output_item.done' && chunk.item.type === 'function_call') {
-    //   const toolCallChunk = {
-    //     token: JSON.stringify(chunk.item),
-    //     tokenId: tokenCount,
-    //     isFirst: tokenCount === 0,
-    //     isLast: false,
-    //     toolCall: true,
-    //   };
-
-    //   res.write(`data: ${JSON.stringify(toolCallChunk)}\n\n`);
-    //   tokenCount++;
-    // }
 
     if (chunk.type === 'response.completed') {
       // Send final done signal
@@ -187,22 +126,23 @@ app.post('/api/openai', async (req, res) => {
       });
     }
 
-    // Build OpenAI request
-    const openaiRequest = buildOpenAIRequest(req.body);
-    console.log('openaiRequest', openaiRequest);
+    const body ={
+      model,
+      input,
+      stream,
+      ...(req.body.max_tokens && { max_tokens: req.body.max_tokens }),
+      ...(req.body.top_p && { top_p: req.body.top_p }),
+      ...(req.body.tools && { tools: req.body.tools }),
+      ...(req.body.tool_choice && { tool_choice: req.body.tool_choice }),
+    }
 
     // Create request to OpenAI
-    const response = await openai.responses.create(openaiRequest);
+    const response = await openai.responses.create(body);
 
     // Route to appropriate handler based on streaming mode
     if (stream) {
       await handleStreamingResponse(response, res);
     } else {
-      // res.json({
-      //   messages: response.output.filter(
-      //     message => message.type === 'message' || message.type === 'function_call'
-      //   ),
-      // })
       res.json(response);
     }
 
