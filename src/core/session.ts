@@ -242,14 +242,16 @@ export async function createSession(args: CreateSessionArgs = {}): Promise<Sessi
     eventEmitter.off(eventType, handler);
   }
 
-  // Assemble the session object with all public methods
+  // Assemble the session object with all public methods and internal properties
   const session: Session = {
     registerModels,
     createResponse,
     dispose,
     on,
     off,
-  } as Session;
+    _eventEmitter: eventEmitter,
+    _providerManager: inferenceProviderManager,
+  };
 
   return session;
 }
