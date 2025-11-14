@@ -15,7 +15,7 @@ import { CreateSessionArgs } from '../types/session';
  * @param args.models - Optional record of models to register at initialization
  * @returns A Promise resolving to a fully configured Session instance
  */
-export async function createSession(args: CreateSessionArgs): Promise<Session> {
+export async function createSession(args: CreateSessionArgs = {}): Promise<Session> {
   logger.session?.info('Creating session', { args });
 
   const eventEmitter = new EventEmitter();

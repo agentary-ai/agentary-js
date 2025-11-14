@@ -50,9 +50,17 @@ describe('Session Management', () => {
   })
 
   describe('createSession', () => {
+    it('should create session without arguments (backward compatibility)', async () => {
+      const session = await createSession()
+
+      expect(session).toBeDefined()
+      expect(session.createResponse).toBeTypeOf('function')
+      expect(session.dispose).toBeTypeOf('function')
+    })
+
     it('should create session with default configuration', async () => {
       const session = await createSession({})
-      
+
       expect(session).toBeDefined()
       expect(session.createResponse).toBeTypeOf('function')
       expect(session.dispose).toBeTypeOf('function')
