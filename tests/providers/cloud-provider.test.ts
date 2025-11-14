@@ -119,11 +119,19 @@ describe('CloudProvider', () => {
 
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
+        headers: {
+          get: (name: string) => name === 'Content-Type' ? 'text/event-stream' : null,
+        },
         body: mockBody,
       });
 
+      const response = await provider.generate(mockGenerateArgs);
+      expect(response.type).toBe('streaming');
+      
+      if (response.type !== 'streaming') throw new Error('Expected streaming response');
+
       const chunks: any[] = [];
-      for await (const chunk of provider.generate(mockGenerateArgs)) {
+      for await (const chunk of response.stream) {
         chunks.push(chunk);
       }
 
@@ -162,11 +170,19 @@ describe('CloudProvider', () => {
 
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
+        headers: {
+          get: (name: string) => name === 'Content-Type' ? 'text/event-stream' : null,
+        },
         body: mockBody,
       });
 
+      const response = await provider.generate(mockGenerateArgs);
+      expect(response.type).toBe('streaming');
+      
+      if (response.type !== 'streaming') throw new Error('Expected streaming response');
+
       const chunks: any[] = [];
-      for await (const chunk of provider.generate(mockGenerateArgs)) {
+      for await (const chunk of response.stream) {
         chunks.push(chunk);
       }
 
@@ -190,11 +206,19 @@ describe('CloudProvider', () => {
 
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
+        headers: {
+          get: (name: string) => name === 'Content-Type' ? 'text/event-stream' : null,
+        },
         body: mockBody,
       });
 
+      const response = await provider.generate(mockGenerateArgs);
+      expect(response.type).toBe('streaming');
+      
+      if (response.type !== 'streaming') throw new Error('Expected streaming response');
+
       const chunks: any[] = [];
-      for await (const chunk of provider.generate(mockGenerateArgs)) {
+      for await (const chunk of response.stream) {
         chunks.push(chunk);
       }
 
@@ -203,9 +227,7 @@ describe('CloudProvider', () => {
 
     it('should throw error if not initialized', async () => {
       await expect(async () => {
-        for await (const chunk of provider.generate(mockGenerateArgs)) {
-          // Should not reach here
-        }
+        await provider.generate(mockGenerateArgs);
       }).rejects.toThrow(ProviderError);
     });
 
@@ -220,12 +242,18 @@ describe('CloudProvider', () => {
 
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
+        headers: {
+          get: (name: string) => name === 'Content-Type' ? 'text/event-stream' : null,
+        },
         body: mockBody,
       });
 
       await expect(async () => {
-        for await (const chunk of provider.generate(mockGenerateArgs)) {
-          // Should not reach here
+        const response = await provider.generate(mockGenerateArgs);
+        if (response.type === 'streaming') {
+          for await (const chunk of response.stream) {
+            // Should not reach here
+          }
         }
       }).rejects.toThrow(ProviderError);
     });
@@ -243,9 +271,7 @@ describe('CloudProvider', () => {
       });
 
       await expect(async () => {
-        for await (const chunk of provider.generate(mockGenerateArgs)) {
-          // Should not reach here
-        }
+        await provider.generate(mockGenerateArgs);
       }).rejects.toThrow(ProviderAPIError);
     });
 
@@ -257,9 +283,7 @@ describe('CloudProvider', () => {
       );
 
       await expect(async () => {
-        for await (const chunk of provider.generate(mockGenerateArgs)) {
-          // Should not reach here
-        }
+        await provider.generate(mockGenerateArgs);
       }).rejects.toThrow(ProviderNetworkError);
     });
 
@@ -278,12 +302,19 @@ describe('CloudProvider', () => {
 
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
+        headers: {
+          get: (name: string) => name === 'Content-Type' ? 'text/event-stream' : null,
+        },
         body: null,
       });
 
       await expect(async () => {
-        for await (const chunk of provider.generate(mockGenerateArgs)) {
-          // Should not reach here
+        const response = await provider.generate(mockGenerateArgs);
+        if (response.type === 'streaming') {
+          // Need to iterate the stream to trigger the error check
+          for await (const chunk of response.stream) {
+            // Should not reach here
+          }
         }
       }).rejects.toThrow(ProviderError);
     });
@@ -309,6 +340,9 @@ describe('CloudProvider', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
+          headers: {
+            get: (name: string) => name === 'Content-Type' ? 'text/event-stream' : null,
+          },
           body: new ReadableStream({
             start(controller) {
               controller.enqueue(
@@ -319,8 +353,13 @@ describe('CloudProvider', () => {
           }),
         });
 
+      const response = await provider.generate(mockGenerateArgs);
+      expect(response.type).toBe('streaming');
+      
+      if (response.type !== 'streaming') throw new Error('Expected streaming response');
+
       const chunks: any[] = [];
-      for await (const chunk of provider.generate(mockGenerateArgs)) {
+      for await (const chunk of response.stream) {
         chunks.push(chunk);
       }
 
@@ -340,9 +379,7 @@ describe('CloudProvider', () => {
       });
 
       await expect(async () => {
-        for await (const chunk of provider.generate(mockGenerateArgs)) {
-          // Should not reach here
-        }
+        await provider.generate(mockGenerateArgs);
       }).rejects.toThrow(ProviderAPIError);
 
       expect(global.fetch).toHaveBeenCalledTimes(1);
@@ -359,9 +396,7 @@ describe('CloudProvider', () => {
       });
 
       await expect(async () => {
-        for await (const chunk of provider.generate(mockGenerateArgs)) {
-          // Should not reach here
-        }
+        await provider.generate(mockGenerateArgs);
       }).rejects.toThrow();
 
       expect(global.fetch).toHaveBeenCalledTimes(3);
@@ -394,11 +429,19 @@ describe('CloudProvider', () => {
 
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
+        headers: {
+          get: (name: string) => name === 'Content-Type' ? 'text/event-stream' : null,
+        },
         body: mockBody,
       });
 
+      const response = await providerWithHeaders.generate(mockGenerateArgs);
+      expect(response.type).toBe('streaming');
+      
+      if (response.type !== 'streaming') throw new Error('Expected streaming response');
+
       const chunks: any[] = [];
-      for await (const chunk of providerWithHeaders.generate(mockGenerateArgs)) {
+      for await (const chunk of response.stream) {
         chunks.push(chunk);
       }
 
@@ -451,14 +494,20 @@ describe('CloudProvider', () => {
 
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
+        headers: {
+          get: (name: string) => name === 'Content-Type' ? 'text/event-stream' : null,
+        },
         body: neverEndingStream,
       });
 
       // Start generation
       const generatorPromise = (async () => {
         const chunks: any[] = [];
-        for await (const chunk of provider.generate(mockGenerateArgs)) {
-          chunks.push(chunk);
+        const response = await provider.generate(mockGenerateArgs);
+        if (response.type === 'streaming') {
+          for await (const chunk of response.stream) {
+            chunks.push(chunk);
+          }
         }
         return chunks;
       })();
@@ -521,11 +570,19 @@ describe('CloudProvider', () => {
 
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
+        headers: {
+          get: (name: string) => name === 'Content-Type' ? 'text/event-stream' : null,
+        },
         body: mockBody,
       });
 
+      const response = await providerWithoutModelProvider.generate(messagesWithToolUse);
+      expect(response.type).toBe('streaming');
+      
+      if (response.type !== 'streaming') throw new Error('Expected streaming response');
+
       const chunks: any[] = [];
-      for await (const chunk of providerWithoutModelProvider.generate(messagesWithToolUse)) {
+      for await (const chunk of response.stream) {
         chunks.push(chunk);
       }
 
@@ -575,11 +632,19 @@ describe('CloudProvider', () => {
 
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
+        headers: {
+          get: (name: string) => name === 'Content-Type' ? 'text/event-stream' : null,
+        },
         body: mockBody,
       });
 
+      const response = await providerWithAnthropic.generate(messagesWithToolUse);
+      expect(response.type).toBe('streaming');
+      
+      if (response.type !== 'streaming') throw new Error('Expected streaming response');
+
       const chunks: any[] = [];
-      for await (const chunk of providerWithAnthropic.generate(messagesWithToolUse)) {
+      for await (const chunk of response.stream) {
         chunks.push(chunk);
       }
 
@@ -628,25 +693,34 @@ describe('CloudProvider', () => {
 
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
+        headers: {
+          get: (name: string) => name === 'Content-Type' ? 'text/event-stream' : null,
+        },
         body: mockBody,
       });
 
+      const response = await providerWithOpenAI.generate(messagesWithToolUse);
+      expect(response.type).toBe('streaming');
+      
+      if (response.type !== 'streaming') throw new Error('Expected streaming response');
+
       const chunks: any[] = [];
-      for await (const chunk of providerWithOpenAI.generate(messagesWithToolUse)) {
+      for await (const chunk of response.stream) {
         chunks.push(chunk);
       }
 
       const fetchCall = (global.fetch as any).mock.calls[0];
       const requestBody = JSON.parse(fetchCall[1].body);
       
-      // Check transformation to OpenAI format
-      expect(requestBody.messages[0].content[0].type).toBe('function_call');
-      expect(requestBody.messages[0].content[0].call_id).toBe('tool_789');
-      expect(requestBody.messages[0].content[0].name).toBe('calculate');
-      expect(requestBody.messages[0].content[0].arguments).toEqual({ x: 5, y: 10 });
+      // Check transformation to OpenAI Response API format (input items)
+      expect(requestBody.input).toBeDefined();
+      expect(requestBody.input[0].type).toBe('function_call');
+      expect(requestBody.input[0].call_id).toBe('tool_789');
+      expect(requestBody.input[0].name).toBe('calculate');
+      expect(requestBody.input[0].arguments).toBe(JSON.stringify({ x: 5, y: 10 }));
     });
 
-    it('should transform tool_result to tool type when modelProvider is openai', async () => {
+    it('should transform tool_result to function_call_output when modelProvider is openai', async () => {
       const providerWithOpenAI = new CloudProvider(
         {
           ...mockConfig,
@@ -683,21 +757,30 @@ describe('CloudProvider', () => {
 
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
+        headers: {
+          get: (name: string) => name === 'Content-Type' ? 'text/event-stream' : null,
+        },
         body: mockBody,
       });
 
+      const response = await providerWithOpenAI.generate(messagesWithToolResult);
+      expect(response.type).toBe('streaming');
+      
+      if (response.type !== 'streaming') throw new Error('Expected streaming response');
+
       const chunks: any[] = [];
-      for await (const chunk of providerWithOpenAI.generate(messagesWithToolResult)) {
+      for await (const chunk of response.stream) {
         chunks.push(chunk);
       }
 
       const fetchCall = (global.fetch as any).mock.calls[0];
       const requestBody = JSON.parse(fetchCall[1].body);
       
-      // Check transformation to OpenAI format
-      expect(requestBody.messages[0].content[0].type).toBe('tool');
-      expect(requestBody.messages[0].content[0].tool_call_id).toBe('tool_123');
-      expect(requestBody.messages[0].content[0].content).toBe('Sunny, 72°F');
+      // Check transformation to OpenAI Response API format
+      expect(requestBody.input).toBeDefined();
+      expect(requestBody.input[0].type).toBe('function_call_output');
+      expect(requestBody.input[0].call_id).toBe('tool_123');
+      expect(requestBody.input[0].output).toBe('Sunny, 72°F');
     });
 
     it('should handle mixed content with text and tool_use for openai', async () => {
@@ -742,27 +825,37 @@ describe('CloudProvider', () => {
 
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
+        headers: {
+          get: (name: string) => name === 'Content-Type' ? 'text/event-stream' : null,
+        },
         body: mockBody,
       });
 
+      const response = await providerWithOpenAI.generate(messagesWithMixedContent);
+      expect(response.type).toBe('streaming');
+      
+      if (response.type !== 'streaming') throw new Error('Expected streaming response');
+
       const chunks: any[] = [];
-      for await (const chunk of providerWithOpenAI.generate(messagesWithMixedContent)) {
+      for await (const chunk of response.stream) {
         chunks.push(chunk);
       }
 
       const fetchCall = (global.fetch as any).mock.calls[0];
       const requestBody = JSON.parse(fetchCall[1].body);
       
-      // Check that text content is preserved
-      expect(requestBody.messages[0].content[0].type).toBe('text');
-      expect(requestBody.messages[0].content[0].text).toBe('Let me check that for you.');
+      // Check transformation to OpenAI Response API format (separate input items)
+      expect(requestBody.input).toBeDefined();
+      expect(requestBody.input[0].type).toBe('message');
+      expect(requestBody.input[0].content[0].type).toBe('input_text');
+      expect(requestBody.input[0].content[0].text).toBe('Let me check that for you.');
       
-      // Check that tool_use is transformed
-      expect(requestBody.messages[0].content[1].type).toBe('function_call');
-      expect(requestBody.messages[0].content[1].call_id).toBe('tool_001');
+      // Tool use becomes separate function_call item
+      expect(requestBody.input[1].type).toBe('function_call');
+      expect(requestBody.input[1].call_id).toBe('tool_001');
     });
 
-    it('should handle string content without transformation for openai', async () => {
+    it('should handle string content with transformation for openai', async () => {
       const providerWithOpenAI = new CloudProvider(
         {
           ...mockConfig,
@@ -793,19 +886,29 @@ describe('CloudProvider', () => {
 
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
+        headers: {
+          get: (name: string) => name === 'Content-Type' ? 'text/event-stream' : null,
+        },
         body: mockBody,
       });
 
+      const response = await providerWithOpenAI.generate(messagesWithStringContent);
+      expect(response.type).toBe('streaming');
+      
+      if (response.type !== 'streaming') throw new Error('Expected streaming response');
+
       const chunks: any[] = [];
-      for await (const chunk of providerWithOpenAI.generate(messagesWithStringContent)) {
+      for await (const chunk of response.stream) {
         chunks.push(chunk);
       }
 
       const fetchCall = (global.fetch as any).mock.calls[0];
       const requestBody = JSON.parse(fetchCall[1].body);
       
-      // String content should remain unchanged
-      expect(requestBody.messages[0].content).toBe('What is the weather like?');
+      // String content should be transformed to input message
+      expect(requestBody.input).toBeDefined();
+      expect(requestBody.input[0].type).toBe('message');
+      expect(requestBody.input[0].content).toBe('What is the weather like?');
     });
   });
 });
