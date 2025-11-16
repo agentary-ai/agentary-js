@@ -5,6 +5,9 @@ export default defineConfig({
     environment: 'happy-dom', // Lightweight DOM for browser APIs
     globals: true,
     setupFiles: ['./tests/setup/vitest.setup.ts'],
+    // Note: Transformers.js is now a peer dependency
+    // Tests will use the real package if installed, or skip device provider tests if not
+    // To test without transformers installed, use the mock in tests/mocks/transformers.ts
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

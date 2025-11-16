@@ -15,8 +15,8 @@ export default defineConfig({
   target: 'es2022',
   platform: 'browser',
   outDir: 'dist',
-  external: [],
-  noExternal: ['@huggingface/transformers'],
+  external: ['@huggingface/transformers'],
+  noExternal: [],
   async onSuccess() {
     // Copy ONNX Runtime runtime assets used by the worker into dist/runtime
     const { spawn } = await import('node:child_process');

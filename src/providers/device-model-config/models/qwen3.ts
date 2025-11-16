@@ -1,4 +1,4 @@
-import { Message as HFMessage } from '@huggingface/transformers';
+import { Message as HFMessage } from '../../../types/vendor';
 import { Message } from '../../../types/worker';
 import { NonStreamingResponse } from '../../../types/session';
 import { ModelConfig } from '../types';

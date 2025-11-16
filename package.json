@@ -19,6 +19,7 @@
     "build": "tsup --config tsup.config.ts",
     "dev": "tsup --config tsup.config.ts --watch",
     "clean": "rimraf dist",
+    "postinstall": "node scripts/check-runtimes.js",
     "prepublishOnly": "npm run clean && npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -34,8 +35,15 @@
     "docs:start": "cd docs && npm run start"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.0.0",
     "js-tiktoken": "^1.0.21"
+  },
+  "peerDependencies": {
+    "@huggingface/transformers": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@huggingface/transformers": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "^24.8.1",

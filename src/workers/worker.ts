@@ -1,8 +1,9 @@
-import { pipeline, TextStreamer, env as hfEnv, DataType, TextGenerationPipeline, TextGenerationConfig, ProgressInfo, Message } from '@huggingface/transformers';
+import type { TextGenerationPipeline, ProgressInfo, Message } from '../types/vendor';
 import { InboundMessage, OutboundMessage } from '../types/worker';
 import { logger } from '../utils/logger';
 import { InitArgs, GenerateArgs } from '../types/worker';
 import { MessageTransformer, getMessageTransformer } from '../providers/device-model-config';
+import { getRuntimeErrorMessage } from '../providers/runtime/detector';
 
 let generator: TextGenerationPipeline | null = null;
 let disposed = false;
@@ -30,6 +31,19 @@ async function handleInit(msg: InboundMessage) {
 
   logger.worker.debug('Initializing worker', { model:config.model, quantization:config.quantization, engine:config.engine }, msg.requestId);
 
+  // Dynamically import Transformers.js
+  let transformers: typeof import('@huggingface/transformers');
+  try {
+    transformers = await import('@huggingface/transformers');
+    logger.worker.debug('Transformers.js loaded successfully', undefined, msg.requestId);
+  } catch (error: any) {
+    const errorMessage = error?.code === 'MODULE_NOT_FOUND' 
+      ? getRuntimeErrorMessage('transformers-js')
+      : `Failed to load Transformers.js: ${error.message}`;
+    logger.worker.error('Transformers.js import failed', { error: errorMessage }, msg.requestId);
+    throw new Error(errorMessage);
+  }
+
   // Get the message transformer for this model
   try {
     messageTransformer = getMessageTransformer(config.model);
@@ -41,12 +55,12 @@ async function handleInit(msg: InboundMessage) {
   }
 
   if (config.hfToken) {
-    (hfEnv as any).HF_TOKEN = config.hfToken;
+    (transformers.env as any).HF_TOKEN = config.hfToken;
   }
 
   const device = config.engine && config.engine !== 'auto' ? config.engine : 'webgpu';
 
-  const pipelineResult = await pipeline('text-generation', config.model, {
+  const pipelineResult = await transformers.pipeline('text-generation', config.model, {
     device: device || "auto",
     dtype: config.quantization || "auto",
     progress_callback: (info: ProgressInfo) => {
@@ -113,6 +127,18 @@ async function handleGenerate(msg: InboundMessage) {
 
   isGenerating = true;
 
+  // Dynamically import Transformers.js for TextStreamer
+  let transformers: typeof import('@huggingface/transformers');
+  try {
+    transformers = await import('@huggingface/transformers');
+  } catch (error: any) {
+    const errorMessage = error?.code === 'MODULE_NOT_FOUND' 
+      ? getRuntimeErrorMessage('transformers-js')
+      : `Failed to load Transformers.js: ${error.message}`;
+    logger.worker.error('Transformers.js import failed', { error: errorMessage }, msg.requestId);
+    throw new Error(errorMessage);
+  }
+
   const { messages, max_new_tokens, temperature, top_p, top_k, stop, tools, repetition_penalty, enable_thinking } = msg.args as GenerateArgs;
   if (!messages) throw new Error('Messages are required');
 
@@ -138,7 +164,7 @@ async function handleGenerate(msg: InboundMessage) {
   let first = true;
   const ttfbStart = performance.now();
 
-  const streamer = new TextStreamer(generator.tokenizer, {
+  const streamer = new transformers.TextStreamer(generator.tokenizer, {
     skip_prompt: true,
     callback_function: (text: string) => {
       const args = {

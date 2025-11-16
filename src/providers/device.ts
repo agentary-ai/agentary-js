@@ -4,6 +4,7 @@ import { DeviceProviderConfig, ProviderError, InferenceProvider, ProviderConfigu
 import { EventEmitter } from '../utils/event-emitter';
 import { logger } from '../utils/logger';
 import { isSupportedModel, getSupportedModelIds, getResponseParser } from './device-model-config';
+import { isRuntimeAvailable, getRuntimeErrorMessage } from './runtime/detector';
 
 /**
  * WebGPU-based inference provider using Web Workers
@@ -39,6 +40,14 @@ export class DeviceProvider implements InferenceProvider {
   async initialize(): Promise<void> {
     if (this.workerInstance?.initialized) {
       return;
+    }
+
+    // Check if Transformers.js runtime is available
+    const runtimeAvailable = await isRuntimeAvailable('transformers-js');
+    if (!runtimeAvailable) {
+      const errorMessage = getRuntimeErrorMessage('transformers-js');
+      logger.deviceProvider?.error('Transformers.js runtime not available', { model: this.config.model });
+      throw new ProviderConfigurationError(errorMessage);
     }
 
     // Create worker instance if it doesn't exist

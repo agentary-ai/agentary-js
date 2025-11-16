@@ -1,4 +1,4 @@
-import { DataType } from "@huggingface/transformers";
+import { DataType } from "./vendor";
 import { InferenceProviderConfig } from "./provider";
 import { DeviceProviderConfig } from "./provider";
 export type EngineKind = 'auto' | 'webgpu' | 'wasm' | 'webnn';

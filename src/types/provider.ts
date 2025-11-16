@@ -1,6 +1,6 @@
 import type { GenerateArgs } from './worker';
 import type { ModelResponse } from './session';
-import { DataType, DeviceType } from '@huggingface/transformers';
+import { DataType, DeviceType } from './vendor';
 
 /**
  * Base interface for all inference providers (WebGPU, Cloud, etc.)
