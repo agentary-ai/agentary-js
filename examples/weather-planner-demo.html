@@ -384,6 +384,12 @@
       const clearBtn = document.getElementById('clear-btn');
       const output = document.getElementById('output');
       const status = document.getElementById('status');
+      
+      // Track available models
+      let availableModels = {
+        cloud: true,  // Cloud models always available
+        device: false // Device models require @huggingface/transformers
+      };
 
       // Set default date to today
       const today = new Date().toISOString().split('T')[0];
@@ -914,12 +920,17 @@
         updateStatus('Starting weather planner...', 'running');
 
         try {
-          const agent = await createAgentSession({
-            models: [
-              { runtime: "transformers-js", model: "onnx-community/Qwen3-0.6B-ONNX", quantization: "q4f16" },
-              { runtime: 'openai',  model: 'gpt-5-nano', proxyUrl: 'http://localhost:3002/api/openai', modelProvider: 'openai' }
-            ]
-          });
+          // Configure models based on availability
+          const models = [
+            { runtime: 'openai', model: 'gpt-5-nano', proxyUrl: 'http://localhost:3002/api/openai', modelProvider: 'openai' }
+          ];
+          
+          // Try to add device model if transformers.js is available
+          if (availableModels.device) {
+            models.push({ runtime: "transformers-js", model: "onnx-community/Qwen3-0.6B-ONNX", quantization: "q4f16" });
+          }
+          
+          const agent = await createAgentSession({ models });
 
           updateStatus('Agent running...', 'running');
 
@@ -961,6 +972,35 @@
         }
       }
 
+      // Check for device model availability on load
+      async function checkDeviceSupport() {
+        try {
+          // Try to create a minimal session with device model to test availability
+          const testSession = await createAgentSession({
+            models: [
+              { runtime: "transformers-js", model: "onnx-community/Qwen3-0.6B-ONNX", quantization: "q4f16" }
+            ]
+          });
+          await testSession.dispose();
+          availableModels.device = true;
+          console.log('✅ Device models available (transformers.js installed)');
+        } catch (error) {
+          availableModels.device = false;
+          console.log('ℹ️ Device models not available. Install @huggingface/transformers for on-device inference.');
+          console.log('Run: npm install @huggingface/transformers');
+          
+          // Add info message to UI
+          const infoDiv = document.createElement('div');
+          infoDiv.style.cssText = 'background: #f0f9ff; border: 1px solid #0284c7; padding: 12px; margin-bottom: 16px; font-size: 13px; color: #0369a1;';
+          infoDiv.innerHTML = `
+            <strong>ℹ️ Cloud-only mode</strong><br/>
+            Install <code>@huggingface/transformers</code> for on-device model support.<br/>
+            <code style="background: #e0f2fe; padding: 2px 6px; border-radius: 2px;">npm install @huggingface/transformers</code>
+          `;
+          document.querySelector('.input-section').insertBefore(infoDiv, document.querySelector('.input-grid'));
+        }
+      }
+      
       // Event listeners
       runBtn.addEventListener('click', runAgent);
       clearBtn.addEventListener('click', clearOutput);
@@ -973,6 +1013,9 @@
           }
         });
       });
+      
+      // Check device support on load
+      window.addEventListener('load', checkDeviceSupport);
     </script>
   </body>
 </html>

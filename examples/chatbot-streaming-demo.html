@@ -474,25 +474,65 @@
       let isStreaming = false;
       let messageCount = 0;
       let loadingSpinner = null;
+      let availableModels = {
+        cloud: true,
+        device: false
+      };
 
+      // Check device support
+      async function checkDeviceSupport() {
+        try {
+          const testSession = await createAgentSession({
+            models: [
+              { runtime: "transformers-js", model: "onnx-community/Qwen3-0.6B-ONNX", quantization: "q4f16" }
+            ]
+          });
+          await testSession.dispose();
+          availableModels.device = true;
+          console.log('✅ Device models available');
+        } catch (error) {
+          availableModels.device = false;
+          console.log('ℹ️ Device models not available. Install @huggingface/transformers for on-device inference.');
+          
+          // Disable device model option in dropdown
+          const deviceOption = modelSelect.querySelector('option[value="onnx-community/Qwen3-0.6B-ONNX"]');
+          if (deviceOption) {
+            deviceOption.disabled = true;
+            deviceOption.textContent = 'Qwen3 0.6B (Requires @huggingface/transformers)';
+          }
+          
+          // Show info message
+          const infoDiv = document.createElement('div');
+          infoDiv.style.cssText = 'background: #f0f9ff; border: 1px solid #0284c7; padding: 12px; margin: 12px 24px; font-size: 13px; color: #0369a1; border-radius: 2px;';
+          infoDiv.innerHTML = `
+            <strong>ℹ️ Cloud-only mode</strong> - Install <code style="background: #e0f2fe; padding: 2px 6px;">npm install @huggingface/transformers</code> for device models
+          `;
+          document.querySelector('.chat-header').insertAdjacentElement('afterend', infoDiv);
+        }
+      }
+      
       // Initialize session
       async function initSession() {
         try {
-          session = await createAgentSession({
-            models: [
-              { 
-                runtime: "transformers-js", 
-                model: "onnx-community/Qwen3-0.6B-ONNX", 
-                quantization: "q4f16" 
-              },
-              { 
-                runtime: 'openai',  
-                model: 'gpt-5-nano', 
-                proxyUrl: 'http://localhost:3002/api/openai', 
-                modelProvider: 'openai' 
-              }
-            ]
-          });
+          const models = [
+            { 
+              runtime: 'openai',  
+              model: 'gpt-5-nano', 
+              proxyUrl: 'http://localhost:3002/api/openai', 
+              modelProvider: 'openai' 
+            }
+          ];
+          
+          // Add device model if available
+          if (availableModels.device) {
+            models.push({ 
+              runtime: "transformers-js", 
+              model: "onnx-community/Qwen3-0.6B-ONNX", 
+              quantization: "q4f16" 
+            });
+          }
+          
+          session = await createAgentSession({ models });
           console.log('Session initialized successfully');
         } catch (error) {
           console.error('Failed to initialize session:', error);
@@ -611,6 +651,14 @@
           if (!session) return;
         }
 
+        // Check if selected model is available
+        const selectedModel = modelSelect.value;
+        const isDeviceModel = selectedModel.includes('onnx-community');
+        if (isDeviceModel && !availableModels.device) {
+          addSystemMessage('Device models require @huggingface/transformers. Please select a cloud model or install the dependency.');
+          return;
+        }
+
         // Add user message
         addMessage(message, 'user');
         conversationHistory.push({ role: 'user', content: message });
@@ -632,7 +680,6 @@
         loadingSpinner = addLoadingSpinner();
         
         try {
-          const selectedModel = modelSelect.value;
           let fullResponse = '';
           let tokenCount = 0;
           let startTime = Date.now();
@@ -777,8 +824,9 @@
       });
 
       // Initialize on load
-      window.addEventListener('load', () => {
-        initSession();
+      window.addEventListener('load', async () => {
+        await checkDeviceSupport();
+        await initSession();
       });
 
       // Cleanup on unload
