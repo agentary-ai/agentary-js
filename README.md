@@ -53,7 +53,7 @@ import { createAgentSession } from 'agentary-js';
 
 const agent = await createAgentSession({
   models: [{
-    type: 'cloud',
+    runtime: 'anthropic',
     model: 'claude-sonnet-4-5',
     proxyUrl: '/api/anthropic',
     modelProvider: 'anthropic'
@@ -108,7 +108,7 @@ import { createSession } from 'agentary-js';
 
 const session = await createSession({
   models: [{
-    type: 'cloud',
+    runtime: 'anthropic',
     model: 'claude-sonnet-4-5',
     proxyUrl: '/api/anthropic',
     modelProvider: 'anthropic'
@@ -133,7 +133,7 @@ import { createSession } from 'agentary-js';
 
 const session = await createSession({
   models: [{
-    type: 'device',
+    runtime: 'transformers-js',
     model: 'onnx-community/Qwen3-0.6B-ONNX',
     quantization: 'q4',
     engine: 'webgpu'

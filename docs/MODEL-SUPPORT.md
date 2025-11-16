@@ -51,7 +51,7 @@ import { createSession } from 'agentary-js';
 // This will work - supported model
 const session = await createSession({
   models: [{
-    type: 'device',
+    runtime: 'transformers-js',
     model: 'onnx-community/Qwen3-0.6B-ONNX',
     quantization: 'q4',
     engine: 'webgpu'
@@ -62,7 +62,7 @@ const session = await createSession({
 try {
   const session = await createSession({
     models: [{
-      type: 'device',
+      runtime: 'transformers-js',
       model: 'unsupported-model',
       quantization: 'q4',
       engine: 'webgpu'
@@ -269,7 +269,7 @@ Thrown when attempting to create a device provider with an unsupported model:
 try {
   const session = await createSession({
     models: [{
-      type: 'device',
+      runtime: 'transformers-js',
       model: 'unsupported-model',
       quantization: 'q4',
       engine: 'webgpu'

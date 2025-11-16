@@ -916,8 +916,8 @@
         try {
           const agent = await createAgentSession({
             models: [
-              { type: "device", model: "onnx-community/Qwen3-0.6B-ONNX", quantization: "q4f16" },
-              { type: 'cloud',  model: 'gpt-5-nano', proxyUrl: 'http://localhost:3002/api/openai', modelProvider: 'openai' }
+              { runtime: "transformers-js", model: "onnx-community/Qwen3-0.6B-ONNX", quantization: "q4f16" },
+              { runtime: 'openai',  model: 'gpt-5-nano', proxyUrl: 'http://localhost:3002/api/openai', modelProvider: 'openai' }
             ]
           });
 

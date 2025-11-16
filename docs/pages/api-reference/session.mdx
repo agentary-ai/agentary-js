@@ -22,7 +22,7 @@ interface CreateSessionArgs {
 type InferenceProviderConfig = DeviceProviderConfig | CloudProviderConfig;
 
 interface DeviceProviderConfig {
-  type: 'device';
+  runtime: 'transformers-js';
   model: string;
   quantization: DataType;  // 'q4' | 'q8' | 'fp16' | 'fp32' | 'int8' | 'uint8' | 'bnb4' | 'q4f16'
   engine?: DeviceType;     // 'webgpu' | 'wasm' | 'auto'
@@ -30,7 +30,7 @@ interface DeviceProviderConfig {
 }
 
 interface CloudProviderConfig {
-  type: 'cloud';
+  runtime: 'openai' | 'anthropic' | 'custom';
   model: string;
   proxyUrl: string;
   modelProvider?: 'anthropic' | 'openai';  // Optional: enables message format transformation
@@ -49,7 +49,7 @@ import { createSession } from 'agentary-js';
 
 const session = await createSession({
   models: [{
-    type: 'device',
+    runtime: 'transformers-js',
     model: 'onnx-community/Qwen3-0.6B-ONNX',
     quantization: 'q4',  // DataType value
     engine: 'webgpu'     // DeviceType value
@@ -62,7 +62,7 @@ const session = await createSession({
 ```javascript
 const session = await createSession({
   models: [{
-    type: 'cloud',
+    runtime: 'anthropic',
     model: 'claude-3-5-sonnet-20241022',
     proxyUrl: 'https://your-backend.com/api/anthropic',
     modelProvider: 'anthropic',
@@ -77,7 +77,7 @@ const session = await createSession({
 ```javascript
 const session = await createSession({
   models: [{
-    type: 'cloud',
+    runtime: 'anthropic',
     model: 'gpt-4o',
     proxyUrl: 'https://your-backend.com/api/openai',
     modelProvider: 'openai'
@@ -92,14 +92,14 @@ const session = await createSession({
   models: [
     // On-device model
     {
-      type: 'device',
+      runtime: 'transformers-js',
       model: 'onnx-community/Qwen3-0.6B-ONNX',
       quantization: 'q4',
       engine: 'webgpu'
     },
     // Cloud model
     {
-      type: 'cloud',
+      runtime: 'anthropic',
       model: 'claude-3-5-sonnet-20241022',
       proxyUrl: 'https://your-backend.com/api/anthropic',
       modelProvider: 'anthropic'

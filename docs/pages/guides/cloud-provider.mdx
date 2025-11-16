@@ -154,7 +154,7 @@ import { createSession } from 'agentary-js';
 // Anthropic Claude
 const session = await createSession({
   models: [{
-    type: 'cloud',
+    runtime: 'anthropic',
     model: 'claude-3-5-sonnet-20241022',
     proxyUrl: 'http://localhost:3001/api/anthropic',
     modelProvider: 'anthropic',
@@ -166,7 +166,7 @@ const session = await createSession({
 // OpenAI GPT
 const session = await createSession({
   models: [{
-    type: 'cloud',
+    runtime: 'anthropic',
     model: 'gpt-4o',
     proxyUrl: 'http://localhost:3002/api/openai',
     modelProvider: 'openai',

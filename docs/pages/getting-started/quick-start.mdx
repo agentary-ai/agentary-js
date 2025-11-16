@@ -19,7 +19,7 @@ import { createSession } from 'agentary-js';
 // Create a session with on-device model
 const session = await createSession({
   models: [{
-    type: 'device',
+    runtime: 'transformers-js',
     model: 'onnx-community/Qwen3-0.6B-ONNX',
     quantization: 'q4',
     engine: 'webgpu' // or 'wasm'
@@ -56,7 +56,7 @@ import { createSession } from 'agentary-js';
 // Create a session with cloud provider
 const session = await createSession({
   models: [{
-    type: 'cloud',
+    runtime: 'anthropic',
     model: 'claude-3-5-sonnet-20241022',
     proxyUrl: 'https://your-backend.com/api/anthropic',
     modelProvider: 'anthropic',
@@ -98,7 +98,7 @@ await session.dispose();
 ```
 
 **Key options:**
-- `type`: Must be `'device'` for on-device inference
+- `runtime`: Must be `'transformers-js'` for on-device inference
 - `model`: ONNX model identifier from Hugging Face
 - `quantization`: Model quantization level (affects size/speed/quality)
 - `engine`: Inference engine to use
@@ -118,7 +118,7 @@ await session.dispose();
 ```
 
 **Key options:**
-- `type`: Must be `'cloud'` for cloud-based inference
+- `runtime`: Must be `'openai'`, `'anthropic'`, or `'custom'` for cloud-based inference
 - `model`: Model identifier for the provider
 - `proxyUrl`: Your backend proxy endpoint
 - `modelProvider`: The cloud provider type
@@ -171,14 +171,14 @@ const session = await createSession({
   models: [
     // On-device model for quick responses
     {
-      type: 'device',
+      runtime: 'transformers-js',
       model: 'onnx-community/Qwen3-0.6B-ONNX',
       quantization: 'q4',
       engine: 'webgpu'
     },
     // Cloud model for complex tasks
     {
-      type: 'cloud',
+      runtime: 'anthropic',
       model: 'claude-3-5-sonnet-20241022',
       proxyUrl: 'https://your-backend.com/api/anthropic',
       modelProvider: 'anthropic'

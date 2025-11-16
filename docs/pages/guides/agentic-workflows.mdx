@@ -19,13 +19,13 @@ import { createAgentSession } from 'agentary-js';
 const agent = await createAgentSession({
   models: [
     {
-      type: 'device',
+      runtime: 'transformers-js',
       model: 'onnx-community/gemma-3-270m-it-ONNX',
       quantization: 'q4',
       engine: 'webgpu'
     },
     {
-      type: 'device',
+      runtime: 'transformers-js',
       model: 'onnx-community/Qwen2.5-0.5B-Instruct',
       quantization: 'q4',
       engine: 'webgpu'
@@ -293,13 +293,13 @@ import { createAgentSession } from 'agentary-js';
 const agent = await createAgentSession({
   models: [
     {
-      type: 'device',
+      runtime: 'transformers-js',
       model: 'onnx-community/gemma-3-270m-it-ONNX',
       quantization: 'q4',
       engine: 'webgpu'
     },
     {
-      type: 'device',
+      runtime: 'transformers-js',
       model: 'onnx-community/Qwen2.5-0.5B-Instruct',
       quantization: 'q4',
       engine: 'webgpu'

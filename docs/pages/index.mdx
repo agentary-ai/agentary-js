@@ -32,7 +32,7 @@ import { createSession } from 'agentary-js';
 
 const session = await createSession({
   models: [{
-    type: 'device',
+    runtime: 'transformers-js',
     model: 'onnx-community/Qwen3-0.6B-ONNX',
     quantization: 'q4',
     engine: 'webgpu'
@@ -57,7 +57,7 @@ Cloud provider example:
 ```javascript
 const session = await createSession({
   models: [{
-    type: 'cloud',
+    runtime: 'anthropic',
     model: 'gpt-5-nano',
     proxyUrl: 'https://your-backend.com/api/openai',
     modelProvider: 'openai'

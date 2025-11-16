@@ -18,7 +18,7 @@ describe('CloudProvider', () => {
   let eventEmitter: EventEmitter;
 
   const mockConfig = {
-    type: 'cloud' as const,
+    runtime: 'openai' as const,
     proxyUrl: 'https://api.example.com/proxy',
     model: 'test-model',
     timeout: 5000,
@@ -41,7 +41,7 @@ describe('CloudProvider', () => {
     it('should throw error if proxyUrl is missing', () => {
       expect(() => {
         new CloudProvider(
-          { type: 'cloud', proxyUrl: '', model: 'test' },
+          { runtime: 'openai', proxyUrl: '', model: 'test' },
           eventEmitter
         );
       }).toThrow(ProviderConfigurationError);
@@ -50,7 +50,7 @@ describe('CloudProvider', () => {
     it('should throw error if model is missing', () => {
       expect(() => {
         new CloudProvider(
-          { type: 'cloud', proxyUrl: 'https://api.example.com', model: '' },
+          { runtime: 'openai', proxyUrl: 'https://api.example.com', model: '' },
           eventEmitter
         );
       }).toThrow(ProviderConfigurationError);

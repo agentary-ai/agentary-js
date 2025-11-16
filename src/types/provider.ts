@@ -41,10 +41,10 @@ export interface InferenceProvider {
 export type InferenceProviderConfig = CloudProviderConfig | DeviceProviderConfig;
 
 /**
- * Configuration for device providers
+ * Configuration for device providers using Transformers.js runtime
  */
 export interface DeviceProviderConfig {
-  type: 'device';
+  runtime: 'transformers-js';
   model: string;
   quantization: DataType;
   engine?: DeviceType;
@@ -55,7 +55,7 @@ export interface DeviceProviderConfig {
  * Configuration for cloud providers
  */
 export interface CloudProviderConfig {
-  type: 'cloud';
+  runtime: 'openai' | 'anthropic' | 'custom';
 
   /**
    * URL of the user's backend proxy endpoint

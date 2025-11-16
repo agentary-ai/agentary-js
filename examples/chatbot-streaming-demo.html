@@ -481,12 +481,12 @@
           session = await createAgentSession({
             models: [
               { 
-                type: "device", 
+                runtime: "transformers-js", 
                 model: "onnx-community/Qwen3-0.6B-ONNX", 
                 quantization: "q4f16" 
               },
               { 
-                type: 'cloud',  
+                runtime: 'openai',  
                 model: 'gpt-5-nano', 
                 proxyUrl: 'http://localhost:3002/api/openai', 
                 modelProvider: 'openai' 
