@@ -19,10 +19,10 @@ Typed function calling with automatic execution, supported on cloud and device.
 Sliding window, LLM summarization, or checkpoint-based memory for long-running agents.
 
 ### ☁️ **Cloud + 🖥️ Device Runtime (Flexible Execution)**
-Use Claude/OpenAI for advanced reasoning, or run models locally using Transformers.js — all via a unified interface.
+Use Claude/OpenAI for advanced reasoning, or run models locally, all via a unified interface.
 
 ### 📡 **Unified API**
-Same function calls for device and cloud models. No vendor lock-in, no rewriting code.
+Same function calls for device and cloud models.
 
 ### 📊 **Observable Runtime**
 Lifecycle events for streaming tokens, workflow steps, tool calls, and model routing.
@@ -128,6 +128,8 @@ await session.dispose();
 
 # 3. On-Device Inference (Transformers.js Runtime)
 
+> **Note:** WebLLM runtime support coming soon for additional on-device execution options.
+
 ```javascript
 import { createSession } from 'agentary-js';
 
@@ -217,10 +219,17 @@ It is a **workflow framework** built on best-in-class runtimes.
 
 # 🌐 Runtime Support
 
-## On-Device (Transformers.js)
+## On-Device Runtimes
+
+### Transformers.js (Available Now)
 - WebGPU: Chrome 113+, Edge 113+, Safari 26+, Firefox (flag)
 - WASM fallback
 - 4GB RAM recommended for small models
+
+### WebLLM (Coming Soon)
+- Additional on-device execution runtime
+- WebGPU-accelerated inference
+- Support for more model architectures
 
 ## Cloud Providers
 Works in:
