@@ -14,6 +14,9 @@ export type WorkerInitProgressEvent = {
   modelName: string;
   progress: number; // 0-100
   stage: string;
+  file?: string;
+  loaded?: number;
+  total?: number;
   timestamp: number;
 };
 

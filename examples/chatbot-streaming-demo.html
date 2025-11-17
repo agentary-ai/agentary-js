@@ -9,7 +9,7 @@
     <script type="importmap">
       {
         "imports": {
-          "@huggingface/transformers": "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.1/dist/transformers.min.js"
+          "@huggingface/transformers": "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6/dist/transformers.min.js"
         }
       }
     </script>
@@ -372,6 +372,93 @@
         display: none;
       }
       
+      /* Model Loading Progress Modal */
+      .loading-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+      }
+      
+      .loading-modal.active {
+        display: flex;
+      }
+      
+      .loading-content {
+        background: white;
+        padding: 32px;
+        border-radius: 2px;
+        min-width: 400px;
+        max-width: 500px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      
+      .loading-header {
+        margin-bottom: 24px;
+      }
+      
+      .loading-title {
+        font-size: 18px;
+        font-weight: 500;
+        color: #1a1a1a;
+        margin-bottom: 8px;
+      }
+      
+      .loading-subtitle {
+        font-size: 14px;
+        color: #666;
+      }
+      
+      .loading-progress {
+        margin-bottom: 16px;
+      }
+      
+      .loading-status {
+        font-size: 13px;
+        color: #999;
+        margin-bottom: 8px;
+        text-transform: capitalize;
+      }
+      
+      .progress-bar-container {
+        width: 100%;
+        height: 8px;
+        background: #f5f5f5;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 8px;
+      }
+      
+      .progress-bar {
+        height: 100%;
+        background: #1a1a1a;
+        transition: width 0.3s ease;
+        border-radius: 4px;
+      }
+      
+      .loading-details {
+        font-size: 12px;
+        color: #999;
+        display: flex;
+        justify-content: space-between;
+      }
+      
+      .loading-file {
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        font-size: 11px;
+        color: #666;
+        margin-top: 8px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      
       @media (max-width: 768px) {
         .chat-container {
           height: 100vh;
@@ -387,10 +474,36 @@
           align-items: flex-end;
           gap: 4px;
         }
+        
+        .loading-content {
+          min-width: 300px;
+          margin: 0 20px;
+        }
       }
     </style>
   </head>
   <body>
+    <!-- Model Loading Progress Modal -->
+    <div class="loading-modal" id="loading-modal">
+      <div class="loading-content">
+        <div class="loading-header">
+          <div class="loading-title">Loading Model</div>
+          <div class="loading-subtitle" id="loading-model-name">Initializing...</div>
+        </div>
+        <div class="loading-progress">
+          <div class="loading-status" id="loading-status">Starting...</div>
+          <div class="progress-bar-container">
+            <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+          </div>
+          <div class="loading-details">
+            <span id="loading-percent">0%</span>
+            <span id="loading-size"></span>
+          </div>
+          <div class="loading-file" id="loading-file"></div>
+        </div>
+      </div>
+    </div>
+    
     <div class="chat-container">
       <div class="chat-header">
         <h1>
@@ -477,6 +590,15 @@
       const messageCountEl = document.getElementById('message-count');
       const tokensPerSecEl = document.getElementById('tokens-per-sec');
       const examplePromptsContainer = document.getElementById('example-prompts');
+      
+      // Progress modal elements
+      const loadingModal = document.getElementById('loading-modal');
+      const loadingModelName = document.getElementById('loading-model-name');
+      const loadingStatus = document.getElementById('loading-status');
+      const progressBar = document.getElementById('progress-bar');
+      const loadingPercent = document.getElementById('loading-percent');
+      const loadingSize = document.getElementById('loading-size');
+      const loadingFile = document.getElementById('loading-file');
 
       // State
       let session = null;
@@ -488,18 +610,36 @@
         cloud: true,
         device: false
       };
+      let modelLoadingActive = false;
 
       // Check device support
       async function checkDeviceSupport() {
         try {
-          const testSession = await createAgentSession({
-            models: [
-              { runtime: "transformers-js", model: "onnx-community/Qwen3-0.6B-ONNX", quantization: "q4f16" }
-            ]
-          });
-          await testSession.dispose();
-          availableModels.device = true;
-          console.log('✅ Device models available');
+          // Note: We're not pre-initializing the model here anymore
+          // to let users see the progress indicator when they first use it
+          const { isRuntimeAvailable } = await import('../dist/index.js');
+          availableModels.device = await isRuntimeAvailable('transformers-js');
+          
+          if (availableModels.device) {
+            console.log('✅ Device models available');
+          } else {
+            console.log('ℹ️ Device models not available. Install @huggingface/transformers for on-device inference.');
+            
+            // Disable device model option in dropdown
+            const deviceOption = modelSelect.querySelector('option[value="onnx-community/Qwen3-0.6B-ONNX"]');
+            if (deviceOption) {
+              deviceOption.disabled = true;
+              deviceOption.textContent = 'Qwen3 0.6B (Requires @huggingface/transformers)';
+            }
+            
+            // Show info message
+            const infoDiv = document.createElement('div');
+            infoDiv.style.cssText = 'background: #f0f9ff; border: 1px solid #0284c7; padding: 12px; margin: 12px 24px; font-size: 13px; color: #0369a1; border-radius: 2px;';
+            infoDiv.innerHTML = `
+              <strong>ℹ️ Cloud-only mode</strong> - Install <code style="background: #e0f2fe; padding: 2px 6px;">npm install @huggingface/transformers</code> for device models
+            `;
+            document.querySelector('.chat-header').insertAdjacentElement('afterend', infoDiv);
+          }
         } catch (error) {
           availableModels.device = false;
           console.log('ℹ️ Device models not available. Install @huggingface/transformers for on-device inference.');
@@ -521,6 +661,49 @@
         }
       }
       
+      // Progress modal functions
+      function showLoadingModal(modelName) {
+        loadingModal.classList.add('active');
+        loadingModelName.textContent = modelName || 'Initializing...';
+        loadingStatus.textContent = 'Starting...';
+        progressBar.style.width = '0%';
+        loadingPercent.textContent = '0%';
+        loadingSize.textContent = '';
+        loadingFile.textContent = '';
+        modelLoadingActive = true;
+      }
+      
+      function hideLoadingModal() {
+        loadingModal.classList.remove('active');
+        modelLoadingActive = false;
+      }
+      
+      function updateLoadingProgress(progress, status, file, loaded, total) {
+        if (!modelLoadingActive) return;
+        
+        // Update progress bar
+        progressBar.style.width = `${progress}%`;
+        loadingPercent.textContent = `${progress}%`;
+        
+        // Update status
+        if (status) {
+          loadingStatus.textContent = status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        }
+        
+        // Update file info
+        if (file) {
+          const fileName = file.split('/').pop() || file;
+          loadingFile.textContent = fileName;
+        }
+        
+        // Update size info if available
+        if (loaded !== undefined && total !== undefined && total > 0) {
+          const loadedMB = (loaded / (1024 * 1024)).toFixed(1);
+          const totalMB = (total / (1024 * 1024)).toFixed(1);
+          loadingSize.textContent = `${loadedMB} MB / ${totalMB} MB`;
+        }
+      }
+      
       // Initialize session
       async function initSession() {
         try {
@@ -538,15 +721,40 @@
             models.push({ 
               runtime: "transformers-js", 
               model: "onnx-community/Qwen3-0.6B-ONNX", 
-              quantization: "q4f16" 
+              quantization: "q4f16",
+              transformersUrl: "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6/dist/transformers.min.js"
             });
           }
           
           session = await createAgentSession({ models });
+          
+          // Subscribe to worker initialization events
+          session.on('worker:init:start', (event) => {
+            console.log('Worker init started:', event.modelName);
+            showLoadingModal(event.modelName);
+          });
+          
+          session.on('worker:init:progress', (event) => {
+            console.log('Worker init progress:', event);
+            updateLoadingProgress(
+              event.progress || 0,
+              event.stage || 'Loading...',
+              event.file,
+              event.loaded,
+              event.total
+            );
+          });
+          
+          session.on('worker:init:complete', (event) => {
+            console.log('Worker init complete:', event.modelName);
+            hideLoadingModal();
+          });
+          
           console.log('Session initialized successfully');
         } catch (error) {
           console.error('Failed to initialize session:', error);
           addSystemMessage('Failed to initialize AI session. Please check console for details.');
+          hideLoadingModal();
         }
       }
 
@@ -667,6 +875,12 @@
         if (isDeviceModel && !availableModels.device) {
           addSystemMessage('Device models require @huggingface/transformers. Please select a cloud model or install the dependency.');
           return;
+        }
+        
+        // Show loading modal if this is a device model that needs to be loaded
+        // The first time a device model is used, it will need to download
+        if (isDeviceModel && !loadingSpinner) {
+          // Progress events will be triggered automatically if model needs downloading
         }
 
         // Add user message

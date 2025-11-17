@@ -3,6 +3,7 @@ export { createAgentSession } from './core/agent-session.js';
 
 export { logger, createLogger, setGlobalLogLevel, LogLevel } from './utils/logger';
 export { LogConfigs, getEnvironmentConfig, setLogLevel, getLogLevel } from './utils/logger-config';
+export { detectAvailableRuntimes, isRuntimeAvailable } from './providers/runtime/detector';
 
 // Event system exports
 export type {

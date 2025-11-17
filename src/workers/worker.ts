@@ -34,7 +34,14 @@ async function handleInit(msg: InboundMessage) {
   // Dynamically import Transformers.js
   let transformers: typeof import('@huggingface/transformers');
   try {
-    transformers = await import('@huggingface/transformers');
+    // If a CDN URL is provided (for browser environments with import maps), use it
+    if (config.transformersUrl) {
+      logger.worker.debug('Loading Transformers.js from CDN', { url: config.transformersUrl }, msg.requestId);
+      transformers = await import(/* @vite-ignore */ config.transformersUrl);
+    } else {
+      // Otherwise use the standard module specifier (for Node.js or bundled environments)
+      transformers = await import('@huggingface/transformers');
+    }
     logger.worker.debug('Transformers.js loaded successfully', undefined, msg.requestId);
   } catch (error: any) {
     const errorMessage = error?.code === 'MODULE_NOT_FOUND' 

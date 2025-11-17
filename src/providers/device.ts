@@ -49,6 +49,16 @@ export class DeviceProvider implements InferenceProvider {
       logger.deviceProvider?.error('Transformers.js runtime not available', { model: this.config.model });
       throw new ProviderConfigurationError(errorMessage);
     }
+    
+    // If we're in a browser environment and no transformersUrl is provided, try to detect it
+    if (typeof window !== 'undefined' && !this.config.transformersUrl) {
+      const { detectAvailableRuntimes } = await import('./runtime/detector');
+      const runtimes = await detectAvailableRuntimes();
+      if (runtimes.transformersUrl) {
+        this.config.transformersUrl = runtimes.transformersUrl;
+        logger.deviceProvider?.debug('Detected Transformers.js CDN URL', { url: runtimes.transformersUrl });
+      }
+    }
 
     // Create worker instance if it doesn't exist
     if (!this.workerInstance) {
@@ -106,6 +116,9 @@ export class DeviceProvider implements InferenceProvider {
                 modelName: this.config.model,
                 progress: msg.args.progress,
                 stage: msg.args.status || msg.args.file || 'loading',
+                file: msg.args.file,
+                loaded: msg.args.loaded,
+                total: msg.args.total,
                 timestamp: Date.now()
               });
             }

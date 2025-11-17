@@ -49,6 +49,7 @@ export interface DeviceProviderConfig {
   quantization: DataType;
   engine?: DeviceType;
   hfToken?: string;
+  transformersUrl?: string; // Optional CDN URL for Transformers.js in browser environments
 }
 
 /**
