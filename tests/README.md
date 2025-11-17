@@ -6,24 +6,30 @@ This directory contains the test suite for Agentary JS, covering core functional
 
 ```
 tests/
-├── basic.test.ts              # Basic functionality tests
+├── basic.test.ts                          # Basic functionality tests
 ├── types/
-│   └── api-types.test.ts      # TypeScript type validation tests
+│   └── api-types.test.ts                  # TypeScript type validation tests
 ├── integration/
-│   └── exports.test.ts        # Library export tests
+│   ├── exports.test.ts                    # Library export tests
+│   └── provider-switching.test.ts         # Provider switching integration tests ✨ NEW
+├── providers/
+│   ├── device-provider.test.ts            # Device provider unit tests
+│   ├── cloud-provider.test.ts             # Cloud provider unit tests
+│   └── message-transformer.test.ts        # Message transformation tests
 ├── core/
-│   └── session.test.ts        # Core session tests (WIP)
-├── workers/
-│   └── worker-manager.test.ts # Worker management tests (WIP) 
+│   ├── session.test.ts                    # Core session tests (WIP)
+│   └── agent-session.test.ts              # Agent session tests (WIP)
+├── config/
+│   └── model-registry.test.ts             # Model registry tests
 ├── processing/
 │   └── tools/
-│       └── parser.test.ts     # Tool parsing tests (WIP)
+│       └── parser.test.ts                 # Tool parsing tests (WIP)
 ├── workflow/
-│   └── executor.test.ts       # Workflow execution tests (WIP)
+│   └── executor.test.ts                   # Workflow execution tests (WIP)
 ├── utils/
-│   └── logger.test.ts         # Logger tests (WIP)
+│   └── logger.test.ts                     # Logger tests (WIP)
 └── setup/
-    └── vitest.setup.ts        # Test environment setup
+    └── vitest.setup.ts                    # Test environment setup
 ```
 
 ## Running Tests
@@ -48,11 +54,19 @@ npm test tests/types/api-types.test.ts
 
 ## Current Status
 
-### ✅ Working Tests (16 tests passing)
+### ✅ Working Tests (50+ tests passing)
 
 - **Basic Tests**: Core TypeScript and async functionality
 - **Type Tests**: API type definitions and validation  
 - **Export Tests**: Library module exports and imports
+- **Provider Switching Tests**: Device/cloud provider integration and switching
+  - Single provider scenarios (device only, cloud only)
+  - Multi-provider registration and management
+  - Provider switching during active session
+  - Mixed workflows (tools, streaming, parameters)
+  - Error handling and edge cases
+  - Resource management and cleanup
+  - Event system integration across providers
 
 ### 🚧 Work in Progress
 
@@ -83,6 +97,43 @@ The test suite uses:
 2. **Progressive Complexity**: Build up to integration tests
 3. **Mock External Dependencies**: Focus on unit logic
 4. **Real Integration Tests**: Validate actual exports and types
+5. **Test Core Value Props**: Provider switching validates the multi-model architecture
+
+## Provider Switching Tests
+
+The provider switching integration tests (`tests/integration/provider-switching.test.ts`) validate the core multi-provider architecture that allows users to mix on-device and cloud models in the same session. These tests cover:
+
+### Test Coverage
+
+**Single Provider Scenarios (Baseline)**
+- Device provider initialization and generation
+- Cloud provider initialization and generation
+
+**Multi-Provider Registration**
+- Simultaneous registration of device and cloud providers
+- Multiple providers with different model names
+- Independent state maintenance per provider
+
+**Provider Switching During Session**
+- Seamless switching between device and cloud providers
+- Multiple alternations between providers
+- State preservation across switches
+
+**Mixed Provider Workflows**
+- Tool calling with both provider types
+- Different generation parameters per provider
+- Streaming responses from different providers
+
+**Error Handling & Edge Cases**
+- Clear error messages for non-existent models
+- Helpful error messages listing available models
+- Graceful handling of initialization failures
+
+**Resource Management**
+- Complete cleanup when disposing session
+- Concurrent requests to different providers
+- Proper event listener cleanup
+- Event system integration with correct model tagging
 
 ## Contributing Tests
 
