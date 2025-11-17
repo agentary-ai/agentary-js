@@ -12,7 +12,7 @@ import { createSession } from 'agentary-js';
 // Device provider example
 const session = await createSession({
   models: [{
-    type: 'device',
+    runtime: 'transformers-js',
     model: 'onnx-community/Qwen3-0.6B-ONNX',
     quantization: 'q4',
     engine: 'webgpu'
@@ -66,7 +66,7 @@ Cloud providers like Claude and GPT-4 have excellent tool calling support:
 ```javascript
 const session = await createSession({
   models: [{
-    type: 'cloud',
+    runtime: 'anthropic',
     model: 'claude-3-5-sonnet-20241022',
     proxyUrl: 'https://your-backend.com/api/anthropic',
     modelProvider: 'anthropic'
@@ -227,7 +227,7 @@ import { createAgentSession } from 'agentary-js';
 
 const agent = await createAgentSession({
   models: [{
-    type: 'device',
+    runtime: 'transformers-js',
     model: 'onnx-community/Qwen3-0.6B-ONNX',
     quantization: 'q4',
     engine: 'webgpu'
@@ -372,7 +372,7 @@ See the [Model Support](/MODEL-SUPPORT) documentation for the latest supported m
 ```javascript
 const session = await createSession({
   models: [{
-    type: 'device',
+    runtime: 'transformers-js',
     model: 'onnx-community/Qwen3-0.6B-ONNX',
     quantization: 'q4',
     engine: 'webgpu'
@@ -392,7 +392,7 @@ Cloud providers offer excellent tool calling support:
 ```javascript
 const session = await createSession({
   models: [{
-    type: 'cloud',
+    runtime: 'anthropic',
     model: 'claude-3-5-sonnet-20241022',
     proxyUrl: 'https://your-backend.com/api/anthropic',
     modelProvider: 'anthropic'
@@ -421,14 +421,14 @@ const session = await createSession({
   models: [
     // Device model for simple, frequent tool calls
     {
-      type: 'device',
+      runtime: 'transformers-js',
       model: 'onnx-community/Qwen3-0.6B-ONNX',
       quantization: 'q4',
       engine: 'webgpu'
     },
     // Cloud model for complex reasoning
     {
-      type: 'cloud',
+      runtime: 'anthropic',
       model: 'claude-3-5-sonnet-20241022',
       proxyUrl: 'https://your-backend.com/api/anthropic',
       modelProvider: 'anthropic'

@@ -17,11 +17,11 @@ export class DeviceProvider implements InferenceProvider {
     config: DeviceProviderConfig,
     eventEmitter: EventEmitter
   ) {
-    // Validate that the model is supported for device inference
+    // Validate that the model is supported for Transformers.js runtime
     if (!isSupportedModel(config.model)) {
       const supportedModels = getSupportedModelIds().join(', ');
       throw new ProviderConfigurationError(
-        `Model "${config.model}" is not supported for device inference. ` +
+        `Model "${config.model}" is not supported for Transformers.js runtime. ` +
         `Supported models: ${supportedModels}`
       );
     }

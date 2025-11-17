@@ -13,7 +13,7 @@ describe('DeviceProvider', () => {
   describe('constructor', () => {
     it('should accept supported model configuration', () => {
       const config: DeviceProviderConfig = {
-        type: 'device',
+        runtime: 'transformers-js',
         model: 'onnx-community/Qwen3-0.6B-ONNX',
         quantization: 'q4',
         engine: 'webgpu',
@@ -24,7 +24,7 @@ describe('DeviceProvider', () => {
 
     it('should throw ProviderConfigurationError for unsupported models', () => {
       const config: DeviceProviderConfig = {
-        type: 'device',
+        runtime: 'transformers-js',
         model: 'unsupported-model',
         quantization: 'q4',
         engine: 'webgpu',
@@ -32,13 +32,13 @@ describe('DeviceProvider', () => {
 
       expect(() => new DeviceProvider(config, eventEmitter)).toThrow(ProviderConfigurationError);
       expect(() => new DeviceProvider(config, eventEmitter)).toThrow(
-        'Model "unsupported-model" is not supported for device inference'
+        'Model "unsupported-model" is not supported for Transformers.js runtime'
       );
     });
 
     it('should include list of supported models in error message', () => {
       const config: DeviceProviderConfig = {
-        type: 'device',
+        runtime: 'transformers-js',
         model: 'gpt-4',
         quantization: 'q4',
         engine: 'webgpu',
@@ -58,7 +58,7 @@ describe('DeviceProvider', () => {
   describe('getModelName', () => {
     it('should return the configured model name', () => {
       const config: DeviceProviderConfig = {
-        type: 'device',
+        runtime: 'transformers-js',
         model: 'onnx-community/Qwen3-0.6B-ONNX',
         quantization: 'q4',
         engine: 'webgpu',
@@ -72,7 +72,7 @@ describe('DeviceProvider', () => {
   describe('isInitialized', () => {
     it('should return false before initialization', () => {
       const config: DeviceProviderConfig = {
-        type: 'device',
+        runtime: 'transformers-js',
         model: 'onnx-community/Qwen3-0.6B-ONNX',
         quantization: 'q4',
         engine: 'webgpu',
@@ -83,4 +83,3 @@ describe('DeviceProvider', () => {
     });
   });
 });
-
