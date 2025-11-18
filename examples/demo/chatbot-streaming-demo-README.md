@@ -11,15 +11,40 @@ A simple, interactive chatbot that demonstrates real-time streaming responses us
 - ⚡ **Performance Metrics**: Shows tokens per second and Time to First Byte (TTFB)
 - 📝 **Example Prompts**: Quick-start buttons with common queries
 
+## Quick Start (TL;DR)
+
+```bash
+# From project root
+npm install
+npm install @huggingface/transformers
+npm run build
+
+# From examples directory
+cd examples
+npm install -D vite
+npx vite
+
+# Open browser to http://localhost:5173/chatbot-streaming-demo.html
+```
+
 ## Prerequisites
 
-1. **Built Agentary Library**: Run from the project root:
+1. **Install Dependencies**: Run from the project root:
    ```bash
    npm install
+   ```
+
+   **Important**: For device-based inference, Transformers.js is required as a peer dependency:
+   ```bash
+   npm install @huggingface/transformers
+   ```
+
+2. **Build Agentary Library**: Run from the project root:
+   ```bash
    npm run build
    ```
 
-2. **Cloud Proxy Server** (optional, for cloud models): Start the OpenAI proxy:
+3. **Cloud Proxy Server** (optional, for cloud models): Start the OpenAI proxy:
    ```bash
    cd examples/cloud-proxy
    npm install
@@ -42,9 +67,33 @@ Simply open `chatbot-streaming-demo.html` in a modern browser that supports:
 
 **Note**: Some browsers require a local server for ES module imports to work properly.
 
-### Option 2: Local Web Server (Recommended)
+### Option 2: Local Web Server with Bundler (Recommended)
 
-Use any static file server. For example, with Python:
+**Important**: This example uses ES modules with bare import specifiers (like `@huggingface/transformers`), which require a bundler to resolve properly in Web Workers.
+
+**Recommended: Use Vite for development:**
+
+```bash
+# From the examples directory
+cd examples
+
+# Install Vite locally (or globally with -g)
+npm install -D vite
+
+# Run Vite dev server
+npx vite
+```
+
+Then navigate to: `http://localhost:5173/chatbot-streaming-demo.html`
+
+A `vite.config.js` file is already configured in the examples directory to handle:
+- ES module resolution for workers
+- Transformers.js dependency bundling
+- WebGPU headers (Cross-Origin isolation)
+
+**Alternative: Python/Node HTTP Server (Cloud Models Only)**
+
+If you want to test without a bundler, use only cloud models (GPT-5 Nano). Device models require a bundler to resolve module imports in workers.
 
 ```bash
 # From the project root
@@ -53,12 +102,7 @@ python3 -m http.server 8000
 
 Then navigate to: `http://localhost:8000/examples/chatbot-streaming-demo.html`
 
-Or with Node.js http-server:
-
-```bash
-npm install -g http-server
-http-server -p 8000
-```
+**Note**: You'll need to comment out or avoid selecting the device model option.
 
 ### Option 3: VS Code Live Server
 
@@ -133,6 +177,7 @@ The demo tracks:
 
 ### "Failed to initialize AI session"
 - Make sure the library is built: `npm run build` from project root
+- For device models, ensure `@huggingface/transformers` is installed: `npm install @huggingface/transformers`
 - Check browser console for detailed error messages
 
 ### Cloud model not working
@@ -141,9 +186,18 @@ The demo tracks:
 - Look at proxy server logs for errors
 
 ### Device model not loading
-- Ensure your browser supports WebGPU (Chrome 113+, Edge 113+)
+- Ensure `@huggingface/transformers` is installed (peer dependency required)
+- Verify your browser supports WebGPU (Chrome 113+, Edge 113+)
 - Check browser console for WebGPU-related errors
+- Make sure your bundler is configured correctly (see Vite configuration guide in docs)
 - Try switching to cloud model as fallback
+
+### "Failed to resolve module specifier '@huggingface/transformers'" in worker
+This error occurs when running the example with a simple HTTP server (Python, http-server, etc.) because Web Workers cannot resolve bare module specifiers without a bundler.
+
+**Solution:**
+1. Use Vite dev server instead (recommended - see setup above)
+2. OR only use cloud models (avoid device models when using simple HTTP server)
 
 ### Streaming appears slow
 - Device models require initial download and compilation (~1-2 min first time)

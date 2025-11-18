@@ -1,6 +1,6 @@
 {
   "name": "agentary-js",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "JS SDK for running quantized small language models in the browser",
   "type": "module",
   "private": false,
@@ -34,8 +34,13 @@
     "docs:start": "cd docs && npm run start"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.0.0",
     "js-tiktoken": "^1.0.21"
+  },
+  "peerDependencies": {
+    "@huggingface/transformers": "^3.0.0"
+  },
+  "optionalDependencies": {
+    "@huggingface/transformers": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.8.1",
@@ -51,6 +56,7 @@
     "rimraf": "^5.0.5",
     "tsup": "^8.1.0",
     "typescript": "^5.5.4",
+    "vite": "^7.2.2",
     "vitest": "^3.2.4"
   },
   "engines": {

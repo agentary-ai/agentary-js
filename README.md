@@ -34,9 +34,21 @@ Tree-shakeable, minimal abstraction, full TypeScript IntelliSense.
 
 ## 📦 Installation
 
+### For Cloud-Only Usage
+
 ```bash
 npm install agentary-js
 ```
+
+### For Device (Local) Inference
+
+If you plan to run models locally using Transformers.js, install the peer dependency:
+
+```bash
+npm install agentary-js @huggingface/transformers
+```
+
+> **Note:** `@huggingface/transformers` is only required for on-device inference. Cloud-only users can skip this dependency.
 
 ---
 

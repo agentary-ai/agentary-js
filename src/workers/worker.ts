@@ -1,8 +1,43 @@
-import { pipeline, TextStreamer, env as hfEnv, DataType, TextGenerationPipeline, TextGenerationConfig, ProgressInfo, Message } from '@huggingface/transformers';
+import type {
+  TextGenerationPipeline,
+  ProgressInfo,
+  Message
+} from '@huggingface/transformers';
 import { InboundMessage, OutboundMessage } from '../types/worker';
 import { logger } from '../utils/logger';
 import { InitArgs, GenerateArgs } from '../types/worker';
 import { MessageTransformer, getMessageTransformer } from '../providers/device-model-config';
+
+// Dynamic import with error handling for missing peer dependency
+let pipeline: any;
+let TextStreamer: any;
+let hfEnv: any;
+let transformersLoaded = false;
+
+async function loadTransformers() {
+  if (transformersLoaded) return;
+
+  try {
+    const transformers = await import('@huggingface/transformers');
+    pipeline = transformers.pipeline;
+    TextStreamer = transformers.TextStreamer;
+    hfEnv = transformers.env;
+    transformersLoaded = true;
+  } catch (error: any) {
+    // Post error message back to main thread
+    self.postMessage({
+      type: 'error',
+      requestId: 'init',
+      args: {
+        error: 'Missing peer dependency: @huggingface/transformers is required for device-based inference.\n' +
+               'Install it with: npm install @huggingface/transformers\n' +
+               'Note: This dependency is only required if you are using device (local) models. ' +
+               'Cloud-only users can skip this installation.'
+      }
+    });
+    throw error;
+  }
+}
 
 let generator: TextGenerationPipeline | null = null;
 let disposed = false;
@@ -29,6 +64,9 @@ async function handleInit(msg: InboundMessage) {
   const { config } = msg.args as InitArgs;
 
   logger.worker.debug('Initializing worker', { model:config.model, quantization:config.quantization, engine:config.engine }, msg.requestId);
+
+  // Load Transformers.js dynamically
+  await loadTransformers();
 
   // Get the message transformer for this model
   try {

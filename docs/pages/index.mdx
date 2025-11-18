@@ -19,13 +19,23 @@ title: Agentary JS Docs
 
 ## Quick Start
 
-Install via npm:
+### Installation
+
+For cloud-only usage:
 
 ```bash
 npm install agentary-js
 ```
 
-Basic example with on-device inference:
+For on-device inference, install the peer dependency:
+
+```bash
+npm install agentary-js @huggingface/transformers
+```
+
+> **Note:** `@huggingface/transformers` is only required for on-device inference. Cloud-only users can skip this dependency.
+
+### Basic Example with On-Device Inference
 
 ```javascript
 import { createSession } from 'agentary-js';
@@ -52,7 +62,7 @@ if (response.type === 'streaming') {
 await session.dispose();
 ```
 
-Cloud provider example:
+### Cloud Provider Example
 
 ```javascript
 const session = await createSession({

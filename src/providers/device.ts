@@ -17,6 +17,9 @@ export class DeviceProvider implements InferenceProvider {
     config: DeviceProviderConfig,
     eventEmitter: EventEmitter
   ) {
+    // Check if @huggingface/transformers is available
+    this.checkTransformersAvailability();
+
     // Validate that the model is supported for Transformers.js runtime
     if (!isSupportedModel(config.model)) {
       const supportedModels = getSupportedModelIds().join(', ');
@@ -28,6 +31,38 @@ export class DeviceProvider implements InferenceProvider {
 
     this.config = config;
     this.eventEmitter = eventEmitter;
+  }
+
+  /**
+   * Check if @huggingface/transformers is available
+   * Throws an error with installation instructions if not found
+   */
+  private checkTransformersAvailability(): void {
+    try {
+      // This will throw if the module is not available
+      // We're not actually importing it, just checking if it exists
+      const hasTransformers = typeof window !== 'undefined' ||
+        // In Node.js environments during build/test
+        (() => {
+          try {
+            require.resolve('@huggingface/transformers');
+            return true;
+          } catch {
+            return false;
+          }
+        })();
+
+      if (!hasTransformers && typeof window === 'undefined') {
+        throw new Error('Module not found');
+      }
+    } catch {
+      throw new ProviderConfigurationError(
+        'Missing peer dependency: @huggingface/transformers is required for device-based inference.\n' +
+        'Install it with: npm install @huggingface/transformers\n' +
+        'Note: This dependency is only required if you are using device (local) models. ' +
+        'Cloud-only users can skip this installation.'
+      );
+    }
   }
 
   /**

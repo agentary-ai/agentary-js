@@ -445,8 +445,10 @@
 
     <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
     <script type="module">
-      import { createAgentSession, setLogLevel, LogLevel } from '../dist/index.js';
-      
+      // This example requires a bundler (Vite) for device models to work
+      // See the README for setup instructions
+      import { createAgentSession, setLogLevel, LogLevel } from '../../dist/index.js';
+
       // Set log level for debugging
       setLogLevel(LogLevel.INFO);
       
