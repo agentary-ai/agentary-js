@@ -208,9 +208,6 @@ Agentary handles:
 | Only calling OpenAI/Anthropic APIs | Agentary **or** Vercel AI SDK |
 | Large enterprise-style orchestration | Agentary **or** LangChain.js |
 
-Agentary is **not** an inference library.  
-It is a **workflow framework** built on best-in-class runtimes.
-
 ---
 
 # 📚 Documentation
