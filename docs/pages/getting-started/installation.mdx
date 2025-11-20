@@ -1,9 +1,48 @@
 # Installation
 
+## Basic Installation
+
 Install Agentary JS via npm:
 
 ```bash
 npm install agentary-js
+```
+
+## Device Inference Setup
+
+If you plan to use **on-device inference** (local models running in the browser), you need to install the peer dependency and configure your bundler:
+
+### 1. Install Transformers.js
+
+```bash
+npm install @huggingface/transformers
+```
+
+### 2. Configure Your Bundler
+
+Agentary JS requires your bundler to be configured to handle Web Workers and copy ONNX Runtime assets.
+
+**For Vite users** (recommended):
+
+See the detailed [Vite Configuration Guide](/guides/vite-configuration) for complete setup instructions.
+
+Quick configuration:
+
+```javascript
+// vite.config.js
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  worker: {
+    format: 'es',
+  },
+  optimizeDeps: {
+    include: ['@huggingface/transformers'],
+  },
+  build: {
+    target: 'es2022',
+  },
+});
 ```
 
 ## Requirements
@@ -12,6 +51,8 @@ npm install agentary-js
 
 - Node.js 18 or higher
 - Modern browser with WebGPU or WebAssembly support
+- `@huggingface/transformers` peer dependency installed
+- Bundler configured (see above)
 
 #### Browser Support
 

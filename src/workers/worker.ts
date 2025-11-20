@@ -31,6 +31,8 @@ async function loadTransformers() {
       args: {
         error: 'Missing peer dependency: @huggingface/transformers is required for device-based inference.\n' +
                'Install it with: npm install @huggingface/transformers\n' +
+               'You also need to configure your bundler to copy ONNX Runtime assets.\n' +
+               'See: https://docs.agentary.ai/guides/vite-configuration for setup instructions.\n' +
                'Note: This dependency is only required if you are using device (local) models. ' +
                'Cloud-only users can skip this installation.'
       }
