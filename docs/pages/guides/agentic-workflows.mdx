@@ -1,432 +1,107 @@
-# Agentic Workflows
+# Installation
 
-Build sophisticated multi-step AI agents that can reason, plan, use tools, and adapt - all running in the browser.
+Install Agentary JS via npm:
 
-## What are Agentic Workflows?
-
-Agentic workflows enable your AI to:
-- Break down complex tasks into steps
-- Use tools to gather information
-- Make decisions based on intermediate results
-- Maintain context across multiple steps
-- Retry failed operations
-
-## Basic Workflow
-
-```javascript
-import { createAgentSession } from 'agentary-js';
-
-const agent = await createAgentSession({
-  models: [
-    {
-      type: 'device',
-      model: 'onnx-community/gemma-3-270m-it-ONNX',
-      quantization: 'q4',
-      engine: 'webgpu'
-    },
-    {
-      type: 'device',
-      model: 'onnx-community/Qwen2.5-0.5B-Instruct',
-      quantization: 'q4',
-      engine: 'webgpu'
-    }
-  ]
-});
-
-const workflow = {
-  id: 'research-assistant',
-  systemPrompt: 'You are a helpful research assistant.',
-  maxIterations: 5,
-  steps: [
-    {
-      id: 'understand',
-      prompt: 'Break down the research topic into key questions',
-      model: 'onnx-community/Qwen2.5-0.5B-Instruct',
-      maxTokens: 200,
-      enableThinking: true,
-    },
-    {
-      id: 'research',
-      prompt: 'Search for information about each question',
-      model: 'onnx-community/Qwen2.5-0.5B-Instruct',
-      toolChoice: ['web_search'],
-    },
-    {
-      id: 'synthesize',
-      prompt: 'Analyze findings and create a summary',
-      model: 'onnx-community/gemma-3-270m-it-ONNX',
-      maxTokens: 400,
-    }
-  ],
-  tools: [
-    {
-      definition: {
-        name: 'web_search',
-        description: 'Search the web for information',
-        parameters: {
-          type: 'object',
-          properties: {
-            query: { 
-              type: 'string',
-              description: 'The search query'
-            }
-          },
-          required: ['query']
-        },
-      },
-      implementation: async ({ query }) => {
-        // Your search implementation
-        return `Results for: ${query}`;
-      }
-    }
-  ]
-};
-
-const memoryConfig = {
-  maxTokens: 2048,
-  compressionThreshold: 0.8,
-  memoryCompressorConfig: {
-    name: 'sliding-window'
-  }
-};
-
-for await (const iteration of agent.runWorkflow(
-  'Research the benefits of renewable energy',
-  workflow,
-  memoryConfig
-)) {
-  if (iteration?.content) {
-    console.log(`[Step ${iteration.stepId}]: ${iteration.content}`);
-  }
-  if (iteration?.toolCall) {
-    console.log(`  🔧 Tool: ${iteration.toolCall.name}`);
-    console.log(`  📄 Result: ${iteration.toolCall.result}`);
-  }
-}
-
-await agent.dispose();
+```bash
+npm install agentary-js
 ```
 
-## Workflow Configuration
+## Requirements
 
-### Core Properties
+### For Device Provider (On-Device Inference)
 
-```javascript
-const workflow = {
-  id: 'unique-workflow-id',
-  systemPrompt: 'System instructions for the workflow',
-  steps: [ /* ... */ ],
-  context: {                // Initial context data
-    userId: '123',
-    preferences: {}
-  },
-  tools: [ /* ... */ ],
-  timeout: 30000,           // Timeout in milliseconds
-  maxIterations: 10,        // Maximum iterations before stopping
-};
+- Node.js 18 or higher
+- Modern browser with WebGPU or WebAssembly support
 
-const memoryConfig = {
-  maxTokens: 2048,          // Maximum context size
-  compressionThreshold: 0.8, // Compress at 80% capacity
-  memoryCompressorConfig: {
-    name: 'sliding-window'  // or 'summarization'
-  }
-};
+#### Browser Support
+
+##### WebGPU Support
+
+| Browser / Platform | Version (Shipped/Enabled by Default) | Notes |
+|-------------------|--------------------------------------|-------|
+| Chromium (Chrome / Edge / other) on Windows/macOS/ChromeOS | Chrome 113 / Edge 113 and above for desktop | Initial release: Chrome 113 on Windows, macOS, ChromeOS |
+| Chromium on Android | Chrome 121 and up | Android support came later |
+| Firefox (desktop) | Firefox 141 (Windows) and later | On Windows; Mac/Linux coming. Android not yet enabled by default |
+| Safari / WebKit (macOS/iOS/iPadOS) | Safari 26 (macOS Tahoe) / iOS/iPadOS 26 etc. | Enabled by default in Safari 26 |
+
+##### WebAssembly Support
+
+| Browser / Platform | Version (Full Support for Wasm 1.0 MVP) | Notes |
+|-------------------|----------------------------------------|-------|
+| Chrome (desktop) | Chrome 57 and later | Widely supported early |
+| Edge (desktop) | Edge 16 and later | Edge legacy / Edge HTML era |
+| Firefox (desktop) | Firefox 52 and later | Full support has been long present |
+| Safari (desktop) | Safari 11 and later | On macOS; note that on iOS Safari engine is the same WebKit so behaviour aligns |
+| Chrome for Android | All Chrome for Android versions (post-support) | Mobile support good |
+| Firefox for Android | Fully supported in the mobile version | - |
+
+WebAssembly is used as a fallback when WebGPU is not available, providing broad compatibility across devices.
+
+#### Minimum Hardware
+
+- **RAM**: 4GB recommended for small models (270M-500M parameters)
+- **GPU**: Optional but recommended for WebGPU acceleration
+- **Storage**: Varies by model (typically 100MB-500MB per quantized model)
+
+### For Cloud Provider (Cloud Inference)
+
+- A backend server to proxy API requests
+- API keys from cloud providers:
+  - [Anthropic API Key](https://console.anthropic.com/) for Claude models
+  - [OpenAI API Key](https://platform.openai.com/) for GPT models
+
+**Cloud Provider Setup:**
+
+1. Set up a proxy server (see [Cloud Provider Guide](/guides/cloud-provider))
+2. Store API keys securely on your backend
+3. Configure Agentary JS to use your proxy endpoint
+
+```bash
+# Example: Install proxy dependencies
+npm install express @anthropic-ai/sdk
+# or
+npm install express openai
 ```
 
-## Workflow Steps
+## Verifying Installation
 
-Each step defines a discrete action:
+### Test Device Provider
+
+Create a simple test file to verify device provider installation:
 
 ```javascript
-{
-  id: 'analyze',
-  prompt: 'Examine the input and identify key topics',
-  maxTokens: 300,
-  temperature: 0.7,
-  model: 'onnx-community/Qwen2.5-0.5B-Instruct',
-  enableThinking: true,
-  toolChoice: ['search', 'calculate'],
-  maxAttempts: 3
-}
+import { createSession, isSupportedModel, getSupportedModelIds } from 'agentary-js';
+
+console.log('Agentary JS installed successfully!');
+console.log('Supported models:', getSupportedModelIds());
+console.log('Qwen3 supported:', isSupportedModel('onnx-community/Qwen3-0.6B-ONNX'));
 ```
 
-### Step Properties
+### Test Cloud Provider
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `id` | string | Unique step identifier |
-| `prompt` | string | Instructions for this step |
-| `maxTokens` | number | Token limit for generation (optional) |
-| `temperature` | number | Sampling temperature (optional) |
-| `model` | string | Registered model to handle generation |
-| `enableThinking` | boolean | Enable thinking mode where supported (optional) |
-| `toolChoice` | string[] | Available tools for this step (optional) |
-| `maxAttempts` | number | Retry attempts on failure (optional) |
-
-## Memory Management
-
-Workflows automatically manage conversation history. Configure memory settings when calling `runWorkflow()`:
+Verify cloud provider connectivity:
 
 ```javascript
-const memoryConfig = {
-  maxTokens: 2048,              // Maximum overall context size
-  compressionThreshold: 0.8,    // Compress at 80% capacity
-  memoryCompressorConfig: {
-    name: 'sliding-window'      // Compression strategy
-  }
-};
+import { createSession } from 'agentary-js';
 
-for await (const iteration of agent.runWorkflow(prompt, workflow, memoryConfig)) {
-  // ...
-}
-```
-
-### Memory Strategies
-
-**Sliding Window** (default):
-```javascript
-const memoryConfig = {
-  maxTokens: 2048,
-  compressionThreshold: 0.8,
-  memoryCompressorConfig: {
-    name: 'sliding-window'
-  }
-};
-```
-
-**LLM Summarization**:
-```javascript
-const memoryConfig = {
-  maxTokens: 4096,
-  compressionThreshold: 0.75,
-  memoryCompressorConfig: {
-    name: 'summarization',
-    model: 'onnx-community/Qwen2.5-0.5B-Instruct',
-    temperature: 0.1,
-    enableThinking: false
-  }
-};
-```
-
-## Error Handling and Retries
-
-Steps can automatically retry on failure:
-
-```javascript
-{
-  id: 'api-call',
-  prompt: 'Fetch user data from the API',
-  model: 'onnx-community/Qwen2.5-0.5B-Instruct',
-  maxAttempts: 3,  // Retry up to 3 times
-  toolChoice: ['fetch_user_data']
-}
-```
-
-Monitor errors with events:
-
-```javascript
-agent.on('workflow:step:retry', (event) => {
-  console.log(`Retrying step ${event.stepId}`);
-  console.log(`Attempt ${event.attempt}/${event.maxAttempts}`);
-});
-
-agent.on('workflow:error', (event) => {
-  console.error(`Workflow failed: ${event.error}`);
-});
-```
-
-## Context Passing
-
-Pass data between steps using context:
-
-```javascript
-const workflow = {
-  context: {
-    initialData: 'some value'
-  },
-  steps: [
-    {
-      id: 'step1',
-      prompt: 'Process the initial data'
-      // Can access context.initialData
-    },
-    {
-      id: 'step2',
-      prompt: 'Use results from step 1'
-      // Can access previous step results
-    }
-  ]
-};
-```
-
-## Workflow Events
-
-Monitor workflow execution in real-time:
-
-```javascript
-agent.on('workflow:start', (event) => {
-  console.log(`Starting workflow: ${event.workflowName}`);
-});
-
-agent.on('workflow:step:start', (event) => {
-  console.log(`[Step ${event.stepId}] Starting...`);
-});
-
-agent.on('workflow:step:complete', (event) => {
-  console.log(`[Step ${event.stepId}] Completed in ${event.duration}ms`);
-  if (event.hasToolCall) {
-    console.log('  - Tool was called');
-  }
-});
-
-agent.on('workflow:complete', (event) => {
-  console.log(`Workflow complete! ${event.totalSteps} steps in ${event.duration}ms`);
-});
-```
-
-## Complete Example: Math Problem Solver
-
-```javascript
-import { createAgentSession } from 'agentary-js';
-
-const agent = await createAgentSession({
-  models: [
-    {
-      type: 'device',
-      model: 'onnx-community/gemma-3-270m-it-ONNX',
-      quantization: 'q4',
-      engine: 'webgpu'
-    },
-    {
-      type: 'device',
-      model: 'onnx-community/Qwen2.5-0.5B-Instruct',
-      quantization: 'q4',
-      engine: 'webgpu'
-    }
-  ]
-});
-
-const mathWorkflow = {
-  id: 'math-solver',
-  systemPrompt: 'You are a math tutor that helps solve problems step-by-step.',
-  maxIterations: 5,
-  steps: [
-    {
-      id: 'understand',
-      prompt: 'Identify what mathematical operation is needed',
-      model: 'onnx-community/Qwen2.5-0.5B-Instruct',
-      maxTokens: 150
-    },
-    {
-      id: 'calculate',
-      prompt: 'Use the calculator to compute the result',
-      model: 'onnx-community/Qwen2.5-0.5B-Instruct',
-      toolChoice: ['calculator']
-    },
-    {
-      id: 'explain',
-      prompt: 'Explain the solution in simple terms',
-      model: 'onnx-community/gemma-3-270m-it-ONNX',
-      maxTokens: 200
-    }
-  ],
-  tools: [{
-    definition: {
-      name: 'calculator',
-      description: 'Evaluate mathematical expressions',
-      parameters: {
-        type: 'object',
-        properties: {
-          expression: { 
-            type: 'string', 
-            description: 'Math expression to evaluate' 
-          }
-        },
-        required: ['expression']
-      }
-    },
-    implementation: async ({ expression }) => {
-      try {
-        // Safe evaluation (use a proper math parser in production)
-        const result = eval(expression);
-        return String(result);
-      } catch (error) {
-        return 'Invalid expression';
-      }
-    }
+const session = await createSession({
+  models: [{
+    runtime: 'anthropic',
+    model: 'claude-3-5-sonnet-20241022',
+    proxyUrl: 'http://localhost:3001/api/anthropic',
+    modelProvider: 'anthropic'
   }]
-};
-
-for await (const iteration of agent.runWorkflow(
-  'What is 15% of 250?',
-  mathWorkflow
-)) {
-  if (iteration?.content) {
-    console.log(`\n[${iteration.stepId}]:`);
-    console.log(iteration.content);
-  }
-}
-```
-
-## Best Practices
-
-### 1. Keep Steps Focused
-
-Each step should have a single, clear purpose:
-
-```javascript
-// ❌ Bad: Too many responsibilities
-{
-  id: 'do-everything',
-  prompt: 'Research, analyze, and respond'
-}
-
-// ✅ Good: Focused steps
-{
-  id: 'research',
-  prompt: 'Search for relevant information'
-},
-{
-  id: 'analyze',
-  prompt: 'Analyze the gathered information'
-},
-{
-  id: 'respond',
-  prompt: 'Provide a comprehensive answer'
-}
-```
-
-### 2. Limit Workflow Complexity
-
-Keep workflows to 3-7 steps for best performance:
-
-```javascript
-maxIterations: 7  // Reasonable limit
-```
-
-### 3. Set Appropriate Timeouts
-
-Prevent workflows from running too long:
-
-```javascript
-timeout: 30000  // 30 seconds
-```
-
-### 4. Monitor Performance
-
-Use events to track execution:
-
-```javascript
-agent.on('workflow:step:complete', (event) => {
-  if (event.duration > 5000) {
-    console.warn(`Step ${event.stepId} took ${event.duration}ms`);
-  }
 });
+
+console.log('Cloud provider configured successfully!');
+await session.dispose();
 ```
 
 ## Next Steps
 
-- Learn about [Memory Management](/guides/memory-management) in detail
-- Explore [Lifecycle Events](/guides/lifecycle-events) for monitoring
-- Check out [API Reference](/api) for all options
+Now that you have Agentary JS installed:
+
+1. Choose between [on-device or cloud inference](/getting-started/quick-start)
+2. Set up a [Cloud Provider](/guides/cloud-provider) (if using cloud models)
+3. Review [Core Concepts](/getting-started/concepts) to understand the architecture
+4. Build your first application with the [Quick Start](/getting-started/quick-start) guide

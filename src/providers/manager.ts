@@ -46,23 +46,25 @@ export class InferenceProviderManager {
   }
 
   /**
-   * Create a provider instance based on type
+   * Create a provider instance based on runtime
    */
   private async createProvider(
     model: string,
     config: InferenceProviderConfig,
   ): Promise<InferenceProvider> {
-    logger.inferenceProviderManager?.debug('Creating inference provider', { model, type: config.type });
+    logger.inferenceProviderManager?.debug('Creating inference provider', { model, runtime: config.runtime });
 
     let provider: InferenceProvider;
 
-    switch (config.type) {
-      case 'device': {
+    switch (config.runtime) {
+      case 'transformers-js': {
         const { DeviceProvider } = await import('./device');
         provider = new DeviceProvider(config as DeviceProviderConfig, this.eventEmitter);
         break;
       }
-      case 'cloud': {
+      case 'openai':
+      case 'anthropic':
+      case 'custom': {
         const { CloudProvider } = await import('./cloud');
         provider = new CloudProvider(config as CloudProviderConfig, this.eventEmitter);
         break;
@@ -70,7 +72,7 @@ export class InferenceProviderManager {
 
       default:
         throw new ProviderConfigurationError(
-          `Unknown provider type: ${(config as InferenceProviderConfig).type}`
+          `Unknown runtime: ${(config as InferenceProviderConfig).runtime}`
         );
     }
 

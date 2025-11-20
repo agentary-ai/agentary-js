@@ -69,7 +69,7 @@ import { createSession } from 'agentary-js';
 
 const session = await createSession({
   models: [{
-    type: 'cloud',
+    runtime: 'anthropic',
     proxyUrl: 'http://localhost:3001/api/anthropic',
     model: 'claude-3-5-sonnet-20241022'
   }]

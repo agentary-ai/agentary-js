@@ -79,7 +79,7 @@ The CloudProvider uses a proxy pattern to keep API keys secure while enabling br
 // Browser: Your Application
 const session = await createSession({
   models: [{
-    type: 'cloud',
+    runtime: 'anthropic',
     proxyUrl: 'https://your-backend.com/api/anthropic',
     model: 'claude-3-5-sonnet-20241022'
   }]

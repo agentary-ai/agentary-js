@@ -18,7 +18,7 @@ import { createAgentSession } from 'agentary-js';
 const agent = await createAgentSession({
   models: [
     {
-      type: 'device',
+      runtime: 'transformers-js',
       model: 'onnx-community/Qwen3-0.6B-ONNX',
       quantization: 'q4',
       engine: 'webgpu'

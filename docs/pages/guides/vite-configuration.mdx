@@ -1,0 +1,190 @@
+---
+title: Vite Configuration for Device Inference
+---
+
+# Vite Configuration for Device Inference
+
+When using Agentary JS with on-device inference (Transformers.js), you need to configure your bundler to properly handle Web Workers and external dependencies.
+
+## Prerequisites
+
+Make sure you have installed the required peer dependency:
+
+```bash
+npm install @huggingface/transformers
+```
+
+## Basic Vite Configuration
+
+Create or update your `vite.config.js` (or `vite.config.ts`) file:
+
+```javascript
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  // Configure worker to use ES module format
+  worker: {
+    format: 'es',
+  },
+
+  // Optimize dependency pre-bundling
+  optimizeDeps: {
+    include: ['@huggingface/transformers'],
+    esbuildOptions: {
+      target: 'es2022',
+    },
+  },
+
+  // Set build target to support modern features
+  build: {
+    target: 'es2022',
+    // Increase chunk size warning limit for ML models
+    chunkSizeWarningLimit: 2000,
+  },
+});
+```
+
+## Configuration Explanation
+
+### Worker Format
+
+```javascript
+worker: {
+  format: 'es',
+}
+```
+
+This ensures Web Workers are built as ES modules, which is required for dynamic imports of `@huggingface/transformers`.
+
+### Dependency Optimization
+
+```javascript
+optimizeDeps: {
+  include: ['@huggingface/transformers'],
+  esbuildOptions: {
+    target: 'es2022',
+  },
+}
+```
+
+- `include`: Tells Vite to pre-bundle Transformers.js during development
+- `target`: Sets the JavaScript target to ES2022 for modern feature support
+
+### Build Target
+
+```javascript
+build: {
+  target: 'es2022',
+  chunkSizeWarningLimit: 2000,
+}
+```
+
+- `target`: Ensures production builds use ES2022
+- `chunkSizeWarningLimit`: Increases the warning threshold since ML libraries are large
+
+## TypeScript Configuration (Optional)
+
+If using TypeScript, ensure your `tsconfig.json` supports ES2022:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "lib": ["ES2022", "DOM", "WebWorker"],
+    "moduleResolution": "bundler"
+  }
+}
+```
+
+## Troubleshooting
+
+### Worker Import Errors
+
+If you see errors like "Cannot find module '@huggingface/transformers'":
+
+1. Verify the package is installed: `npm list @huggingface/transformers`
+2. Clear Vite cache: `rm -rf node_modules/.vite`
+3. Restart dev server: `npm run dev`
+
+### Memory Issues
+
+For large models, you may need to increase Node.js memory:
+
+```json
+{
+  "scripts": {
+    "dev": "NODE_OPTIONS=--max-old-space-size=4096 vite",
+    "build": "NODE_OPTIONS=--max-old-space-size=4096 vite build"
+  }
+}
+```
+
+### CORS Issues with Model Files
+
+If loading ONNX models from HuggingFace fails due to CORS, you can configure a proxy:
+
+```javascript
+export default defineConfig({
+  server: {
+    proxy: {
+      '/models': {
+        target: 'https://huggingface.co',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/models/, '')
+      }
+    }
+  }
+});
+```
+
+## Complete Example
+
+Here's a full `vite.config.ts` with all recommended settings:
+
+```typescript
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  worker: {
+    format: 'es',
+  },
+  optimizeDeps: {
+    include: ['@huggingface/transformers'],
+    esbuildOptions: {
+      target: 'es2022',
+    },
+  },
+  build: {
+    target: 'es2022',
+    chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Separate Transformers.js into its own chunk
+          'transformers': ['@huggingface/transformers'],
+        },
+      },
+    },
+  },
+  server: {
+    headers: {
+      // Enable SharedArrayBuffer for WebGPU
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
+  },
+});
+```
+
+## Next Steps
+
+- [Getting Started with Device Inference](/getting-started/device-inference)
+- [Supported Models](/guides/model-support)
+- [Performance Optimization](/guides/performance)
+
+## Resources
+
+- [Vite Documentation](https://vitejs.dev/config/)
+- [Transformers.js Documentation](https://huggingface.co/docs/transformers.js)
+- [WebGPU Browser Support](https://caniuse.com/webgpu)

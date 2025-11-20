@@ -4,12 +4,12 @@ title: Agentary JS Docs
 
 # Agentary JS
 
-Run quantized small language models directly in the browser with WebGPU, featuring built-in support for agentic workflows.
+**A lightweight JavaScript SDK for building agentic workflows with tool calling, memory and multi-step reasoning.**
 
 ## Features
 
 - 🚀 **Flexible Inference** - Run models on-device or via cloud providers
-- ⚡ **WebGPU Acceleration** - Leverage WebGPU for high-performance on-device inference
+- ⚡ **WebGPU Acceleration** - Leverage WebGPU for high-performance on-device inference (supported by [transformers.js](https://github.com/huggingface/transformers.js)) 
 - ☁️ **Cloud Provider Support** - Integrate with cloud LLMs via secure proxy pattern
 - 🤖 **Agentic Workflows** - Create and execute complex multi-step agent workflows
 - 🧠 **Memory Management** - Smart context compression and pruning for long conversations
@@ -19,20 +19,30 @@ Run quantized small language models directly in the browser with WebGPU, featuri
 
 ## Quick Start
 
-Install via npm:
+### Installation
+
+For cloud-only usage:
 
 ```bash
 npm install agentary-js
 ```
 
-Basic example with on-device inference:
+For on-device inference, install the peer dependency:
+
+```bash
+npm install agentary-js @huggingface/transformers
+```
+
+> **Note:** `@huggingface/transformers` is only required for on-device inference. Cloud-only users can skip this dependency.
+
+### Basic Example with On-Device Inference
 
 ```javascript
 import { createSession } from 'agentary-js';
 
 const session = await createSession({
   models: [{
-    type: 'device',
+    runtime: 'transformers-js',
     model: 'onnx-community/Qwen3-0.6B-ONNX',
     quantization: 'q4',
     engine: 'webgpu'
@@ -52,12 +62,12 @@ if (response.type === 'streaming') {
 await session.dispose();
 ```
 
-Cloud provider example:
+### Cloud Provider Example
 
 ```javascript
 const session = await createSession({
   models: [{
-    type: 'cloud',
+    runtime: 'anthropic',
     model: 'gpt-5-nano',
     proxyUrl: 'https://your-backend.com/api/openai',
     modelProvider: 'openai'

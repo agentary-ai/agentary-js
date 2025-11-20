@@ -303,16 +303,37 @@
         cursor: pointer;
         transition: background 0.2s;
         white-space: nowrap;
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
-      
+
       .send-button:hover:not(:disabled) {
         background: #000;
       }
-      
+
       .send-button:disabled {
         background: #e0e0e0;
         color: #999;
         cursor: not-allowed;
+      }
+
+      .send-button .button-spinner {
+        display: none;
+        width: 12px;
+        height: 12px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+
+      .send-button.loading .button-spinner {
+        display: block;
+      }
+
+      .send-button.loading .button-text {
+        display: none;
       }
       
       .clear-button {
@@ -357,9 +378,69 @@
       .empty-state ul {
         display: none;
       }
-      
+
       .stats {
         display: none;
+      }
+
+      .model-loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.95);
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+
+      .model-loading-overlay.visible {
+        display: flex;
+      }
+
+      .model-loading-content {
+        width: 100%;
+        max-width: 400px;
+        padding: 32px;
+        text-align: center;
+      }
+
+      .model-loading-title {
+        font-size: 15px;
+        font-weight: 500;
+        color: #1a1a1a;
+        margin-bottom: 8px;
+      }
+
+      .model-loading-subtitle {
+        font-size: 13px;
+        color: #666;
+        margin-bottom: 24px;
+      }
+
+      .model-loading-bar-container {
+        width: 100%;
+        height: 4px;
+        background: #f5f5f5;
+        border-radius: 2px;
+        overflow: hidden;
+        margin-bottom: 12px;
+      }
+
+      .model-loading-bar {
+        height: 100%;
+        background: #1a1a1a;
+        transition: width 0.3s ease;
+        width: 0%;
+      }
+
+      .model-loading-details {
+        font-size: 12px;
+        color: #999;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
       }
       
       @media (max-width: 768px) {
@@ -382,6 +463,17 @@
   </head>
   <body>
     <div class="chat-container">
+      <div class="model-loading-overlay" id="model-loading-overlay">
+        <div class="model-loading-content">
+          <div class="model-loading-title">Loading Model</div>
+          <div class="model-loading-subtitle" id="model-loading-subtitle">Initializing...</div>
+          <div class="model-loading-bar-container">
+            <div class="model-loading-bar" id="model-loading-bar"></div>
+          </div>
+          <div class="model-loading-details" id="model-loading-details"></div>
+        </div>
+      </div>
+
       <div class="chat-header">
         <h1>
           <span class="status-indicator" id="status-indicator"></span>
@@ -437,7 +529,8 @@
             rows="1"
           ></textarea>
           <button type="submit" class="send-button" id="send-button">
-            Send
+            <div class="button-spinner"></div>
+            <span class="button-text">Send</span>
           </button>
         </form>
       </div>
@@ -445,10 +538,12 @@
 
     <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
     <script type="module">
-      import { createAgentSession, setLogLevel, LogLevel } from '../dist/index.js';
-      
+      // This example requires a bundler (Vite) for device models to work
+      // See the README for setup instructions
+      import { createSession, setLogLevel, LogLevel } from '../../dist/index.js';
+
       // Set log level for debugging
-      setLogLevel(LogLevel.INFO);
+      setLogLevel(LogLevel.VERBOSE);
       
       // Configure marked for security
       marked.setOptions({
@@ -467,6 +562,10 @@
       const messageCountEl = document.getElementById('message-count');
       const tokensPerSecEl = document.getElementById('tokens-per-sec');
       const examplePromptsContainer = document.getElementById('example-prompts');
+      const modelLoadingOverlay = document.getElementById('model-loading-overlay');
+      const modelLoadingBar = document.getElementById('model-loading-bar');
+      const modelLoadingSubtitle = document.getElementById('model-loading-subtitle');
+      const modelLoadingDetails = document.getElementById('model-loading-details');
 
       // State
       let session = null;
@@ -475,27 +574,85 @@
       let messageCount = 0;
       let loadingSpinner = null;
 
+      // Show/hide model loading overlay
+      function showModelLoading() {
+        modelLoadingOverlay.classList.add('visible');
+        modelLoadingBar.style.width = '0%';
+        modelLoadingSubtitle.textContent = 'Initializing...';
+        modelLoadingDetails.textContent = '';
+      }
+
+      function hideModelLoading() {
+        modelLoadingOverlay.classList.remove('visible');
+      }
+
+      function updateModelLoadingProgress(progress, status, file) {
+        modelLoadingBar.style.width = `${progress}%`;
+
+        // Update subtitle based on status
+        if (status === 'initiate') {
+          modelLoadingSubtitle.textContent = 'Starting download...';
+        } else if (status === 'download') {
+          modelLoadingSubtitle.textContent = 'Downloading model...';
+        } else if (status === 'progress') {
+          modelLoadingSubtitle.textContent = 'Loading...';
+        } else if (status === 'done') {
+          modelLoadingSubtitle.textContent = 'Processing...';
+        } else if (status === 'ready') {
+          modelLoadingSubtitle.textContent = 'Ready!';
+        }
+
+        // Update details with file name and progress
+        if (file) {
+          const fileName = file.split('/').pop();
+          modelLoadingDetails.textContent = `${fileName} (${Math.round(progress)}%)`;
+        } else {
+          modelLoadingDetails.textContent = `${Math.round(progress)}%`;
+        }
+      }
+
       // Initialize session
       async function initSession() {
         try {
-          session = await createAgentSession({
-            models: [
-              { 
-                type: "device", 
-                model: "onnx-community/Qwen3-0.6B-ONNX", 
-                quantization: "q4f16" 
-              },
-              { 
-                type: 'cloud',  
-                model: 'gpt-5-nano', 
-                proxyUrl: 'http://localhost:3002/api/openai', 
-                modelProvider: 'openai' 
-              }
-            ]
+          // Create session WITHOUT models first
+          session = await createSession();
+
+          // Subscribe to worker initialization progress events BEFORE registering models
+          session.on('worker:init:progress', (event) => {
+            showModelLoading();
+            updateModelLoadingProgress(event.progress, event.stage, event.modelName);
           });
+
+          // Subscribe to worker initialization complete events
+          session.on('worker:init:complete', (event) => {
+            hideModelLoading();
+          });
+
+          // Subscribe to generation error events
+          session.on('generation:error', (event) => {
+            console.error('Generation error:', event.error);
+            addSystemMessage(`Error: ${event.error}`);
+          });
+
+          // NOW register models - this will trigger the worker:init events
+          await session.registerModels([
+            {
+              runtime: "transformers-js",
+              model: "onnx-community/Qwen3-0.6B-ONNX",
+              quantization: "q4f16"
+            },
+            {
+              runtime: 'openai',
+              model: 'gpt-5-nano',
+              proxyUrl: 'http://localhost:3002/api/openai',
+              modelProvider: 'openai'
+            }
+          ]);
+
           console.log('Session initialized successfully');
         } catch (error) {
           console.error('Failed to initialize session:', error);
+          hideModelLoading();
           addSystemMessage('Failed to initialize AI session. Please check console for details.');
         }
       }
@@ -604,7 +761,7 @@
       // Send message
       async function sendMessage(message) {
         if (!message.trim() || isStreaming) return;
-        
+
         if (!session) {
           addSystemMessage('Session not initialized. Initializing now...');
           await initSession();
@@ -618,67 +775,101 @@
         updateMessageCount();
 
         console.log('Conversation history:', conversationHistory);
-        
+
         // Clear input
         chatInput.value = '';
         chatInput.style.height = 'auto';
-        
+
         // Update UI state
         isStreaming = true;
         sendButton.disabled = true;
+        sendButton.classList.add('loading');
         statusIndicator.classList.add('streaming');
-        
+
         // Show loading spinner while waiting for first token
         loadingSpinner = addLoadingSpinner();
-        
+
+        // Track generation state
+        let fullResponse = '';
+        let assistantBubble = null;
+        let generationStartTime = null;
+        let unsubscribeStart = null;
+        let unsubscribeToken = null;
+        let unsubscribeComplete = null;
+
         try {
+          // Subscribe to events BEFORE creating response
+          unsubscribeStart = session.on('generation:start', (event) => {
+            console.log('Generation started:', event);
+            generationStartTime = event.timestamp;
+          });
+
+          unsubscribeToken = session.on('generation:token', (event) => {
+            // Remove spinner on first token
+            if (event.isFirst && loadingSpinner) {
+              loadingSpinner.remove();
+              loadingSpinner = null;
+              assistantBubble = addMessage('', 'assistant');
+            }
+
+            fullResponse += event.token;
+
+            if (assistantBubble) {
+              updateStreamingMessage(assistantBubble, fullResponse, false);
+            }
+
+            // Update tokens per second display - calculate from time elapsed
+            if (generationStartTime) {
+              const elapsed = (Date.now() - generationStartTime) / 1000;
+              const tokensSoFar = fullResponse.split(/\s+/).length; // rough token count
+              const tps = tokensSoFar / elapsed;
+              tokensPerSecEl.textContent = `${Math.round(tps)} tok/s`;
+            }
+          });
+
+          unsubscribeComplete = session.on('generation:complete', (event) => {
+            console.log(`Generation complete: ${event.totalTokens} tokens in ${event.duration}ms`);
+
+            // Render final markdown
+            if (assistantBubble) {
+              updateStreamingMessage(assistantBubble, fullResponse, true);
+            }
+
+            // Add to conversation history
+            conversationHistory.push({ role: 'assistant', content: fullResponse });
+            messageCount++;
+            updateMessageCount();
+
+            // Display final tokens per second
+            if (event.tokensPerSecond) {
+              tokensPerSecEl.textContent = `${Math.round(event.tokensPerSecond)} tok/s`;
+            }
+
+            // Cleanup
+            if (unsubscribeStart) unsubscribeStart();
+            if (unsubscribeToken) unsubscribeToken();
+            if (unsubscribeComplete) unsubscribeComplete();
+          });
+
           const selectedModel = modelSelect.value;
-          let fullResponse = '';
-          let tokenCount = 0;
-          let startTime = Date.now();
-          let firstTokenTime = null;
-          let assistantBubble = null;
-          
-          // Stream the response
+
+          // Create the response AFTER subscribing to events
           const response = await session.createResponse(selectedModel, {
             messages: conversationHistory,
             temperature: 0.7,
             max_new_tokens: 500
           });
 
-          // Check if response is streaming
+          // For streaming responses, we consume the stream to trigger events.
+          // The wrapStreamWithEvents generator emits events as chunks are yielded.
+          // Our event handlers (registered above) will update the UI automatically.
           if (response.type === 'streaming') {
             for await (const chunk of response.stream) {
-              if (chunk.isFirst && !firstTokenTime) {
-                firstTokenTime = Date.now();
-                console.log(`TTFB: ${chunk.ttfbMs}ms`);
-                
-                // Remove spinner and add message bubble on first token
-                if (loadingSpinner) {
-                  loadingSpinner.remove();
-                  loadingSpinner = null;
-                }
-                assistantBubble = addMessage('', 'assistant');
-              }
-              
-              fullResponse += chunk.token;
-              tokenCount++;
-              
-              if (assistantBubble) {
-                updateStreamingMessage(assistantBubble, fullResponse, false);
-              }
-              
-              // Update tokens per second
-              if (chunk.tokensPerSecond) {
-                tokensPerSecEl.textContent = `${Math.round(chunk.tokensPerSecond)} tok/s`;
-              }
-            }
-            // Render markdown after streaming completes
-            if (assistantBubble) {
-              updateStreamingMessage(assistantBubble, fullResponse, true);
+              // The stream consumption drives event emission
+              // All UI updates happen in the event handlers
             }
           } else {
-            // Non-streaming response
+            // Non-streaming response - handle directly
             if (loadingSpinner) {
               loadingSpinner.remove();
               loadingSpinner = null;
@@ -686,18 +877,26 @@
             fullResponse = response.content;
             assistantBubble = addMessage('', 'assistant');
             updateStreamingMessage(assistantBubble, fullResponse, true);
+
+            // Add to conversation history
+            conversationHistory.push({ role: 'assistant', content: fullResponse });
+            messageCount++;
+            updateMessageCount();
+
+            // Cleanup event listeners
+            if (unsubscribeStart) unsubscribeStart();
+            if (unsubscribeToken) unsubscribeToken();
+            if (unsubscribeComplete) unsubscribeComplete();
           }
-          
-          // Add to conversation history
-          conversationHistory.push({ role: 'assistant', content: fullResponse });
-          messageCount++;
-          updateMessageCount();
-          
-          const totalTime = Date.now() - startTime;
-          console.log(`Response completed: ${tokenCount} tokens in ${totalTime}ms`);
-          
+
         } catch (error) {
           console.error('Error generating response:', error);
+
+          // Cleanup event listeners
+          if (unsubscribeStart) unsubscribeStart();
+          if (unsubscribeToken) unsubscribeToken();
+          if (unsubscribeComplete) unsubscribeComplete();
+
           if (loadingSpinner) {
             loadingSpinner.remove();
             loadingSpinner = null;
@@ -707,6 +906,7 @@
         } finally {
           isStreaming = false;
           sendButton.disabled = false;
+          sendButton.classList.remove('loading');
           statusIndicator.classList.remove('streaming');
           tokensPerSecEl.textContent = '0 tok/s';
           if (loadingSpinner) {

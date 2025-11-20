@@ -43,8 +43,8 @@ A **Session** is the main interface for interacting with language models. It man
 import { createSession } from 'agentary-js';
 const session = await createSession({
   models: [
-    { type: 'device', model: 'onnx-community/Qwen3-0.6B-ONNX', quantization: 'q4', engine: 'webgpu' },
-    { type: 'cloud', model: 'claude-3-5-sonnet-20241022', proxyUrl: 'https://api.example.com/anthropic', modelProvider: 'anthropic' }
+    { runtime: 'transformers-js', model: 'onnx-community/Qwen3-0.6B-ONNX', quantization: 'q4', engine: 'webgpu' },
+    { runtime: 'anthropic', model: 'claude-3-5-sonnet-20241022', proxyUrl: 'https://api.example.com/anthropic', modelProvider: 'anthropic' }
   ]
 });
 ```
@@ -69,7 +69,7 @@ Runs models locally in the browser using WebGPU or WebAssembly:
 
 ```javascript
 {
-  type: 'device',
+  runtime: 'transformers-js',
   model: 'onnx-community/Qwen3-0.6B-ONNX',
   quantization: 'q4',  // q4, q8, fp16, fp32
   engine: 'webgpu',    // webgpu, wasm, auto
@@ -94,7 +94,7 @@ Uses cloud LLM APIs via a secure proxy:
 
 ```javascript
 {
-  type: 'cloud',
+  runtime: 'anthropic',
   model: 'claude-3-5-sonnet-20241022',
   proxyUrl: 'https://your-backend.com/api/anthropic',
   modelProvider: 'anthropic',  // 'anthropic' or 'openai'
@@ -124,14 +124,14 @@ const session = await createSession({
   models: [
     // Fast on-device model for quick tasks
     {
-      type: 'device',
+      runtime: 'transformers-js',
       model: 'onnx-community/Qwen3-0.6B-ONNX',
       quantization: 'q4',
       engine: 'webgpu'
     },
     // Powerful cloud model for complex tasks
     {
-      type: 'cloud',
+      runtime: 'anthropic',
       model: 'claude-3-5-sonnet-20241022',
       proxyUrl: 'https://api.example.com/anthropic',
       modelProvider: 'anthropic'
@@ -238,7 +238,7 @@ Device providers handle model loading and initialization automatically:
 // Models are validated and loaded during session creation
 const session = await createSession({
   models: [{
-    type: 'device',
+    runtime: 'transformers-js',
     model: 'onnx-community/Qwen3-0.6B-ONNX',
     quantization: 'q4',
     engine: 'webgpu'
@@ -265,7 +265,7 @@ Agentary JS provides built-in memory management for long conversations. Configur
 const agent = await createAgentSession({
   models: [
     { 
-      type: 'device',
+      runtime: 'transformers-js',
       model: 'onnx-community/Qwen3-0.6B-ONNX',
       quantization: 'q4',
       engine: 'webgpu'
