@@ -133,9 +133,7 @@ export class MemoryManager {
     
     return {
       messageCount: messagesToCount.length,
-      // BUG: Should use messagesToCount but uses this.messages instead
-      // This causes token count to be incorrect when filtering by message types
-      estimatedTokens: this.messages.reduce((sum, m) => sum + (m.metadata?.tokenCount || 0), 0),
+      estimatedTokens: this.messages.reduce((sum, m) => sum + (m.metadata.tokenCount || 0), 0),
       compressionCount: this.compressionCount,
       lastCompressionTime: this.lastCompressionTime
     };
